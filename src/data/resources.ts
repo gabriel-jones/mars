@@ -1,21 +1,30 @@
 // Define resource IDs as a string literal union type
-export type ResourceType = "iron" | "oxygen" | "water" | "energy" | "food";
-
-// Or as an enum
-// export enum ResourceId {
-//   Iron = 'iron',
-//   Oxygen = 'oxygen',
-//   Water = 'water',
-//   Energy = 'energy',
-//   Food = 'food'
-// }
+export type ResourceCategory = "food" | "metals" | "elements" | "life-support";
+export type ResourceType =
+  // Food
+  | "carrots"
+  | "tomatoes"
+  | "potatoes"
+  | "beans"
+  // Elements
+  | "silicon"
+  | "sulphur"
+  // Metals
+  | "iron"
+  | "aluminium"
+  | "magnesium"
+  | "calcium"
+  | "titanium"
+  | "potassium"
+  | "sodium"
+  // Life Support
+  | "oxygen"
+  | "water";
 
 export interface Resource {
   type: ResourceType;
+  category?: ResourceCategory;
   name: string;
-  displayName: string;
-  description: string;
-  icon: string; // Image key for the resource icon
 }
 
 export interface ResourceCount {
@@ -28,31 +37,90 @@ export interface InventoryItem {
   amount: number;
 }
 
-export class ResourceManager {
-  private static resources: Resource[] = [
-    {
-      type: "iron",
-      name: "iron",
-      displayName: "Iron",
-      description: "Basic building material",
-      icon: "iron-icon",
-    },
-    {
-      type: "water",
-      name: "water",
-      displayName: "Water",
-      description: "Essential for life support",
-      icon: "water-icon",
-    },
-    {
-      type: "oxygen",
-      name: "oxygen",
-      displayName: "Oxygen",
-      description: "Required for breathing",
-      icon: "oxygen-icon",
-    },
-  ];
+export const RESOURCE_DEFINITIONS: Resource[] = [
+  // Food
+  {
+    type: "carrots",
+    category: "food",
+    name: "Carrots",
+  },
+  {
+    type: "tomatoes",
+    category: "food",
+    name: "Tomatoes",
+  },
+  {
+    type: "potatoes",
+    category: "food",
+    name: "Potatoes",
+  },
+  {
+    type: "beans",
+    category: "food",
+    name: "Beans",
+  },
+  // Elements
+  {
+    type: "silicon",
+    category: "elements",
+    name: "Silicon",
+  },
+  {
+    type: "sulphur",
+    category: "elements",
+    name: "Sulphur",
+  },
 
+  // Metals
+  {
+    type: "iron",
+    category: "metals",
+    name: "Iron",
+  },
+  {
+    type: "aluminium",
+    category: "metals",
+    name: "Aluminium",
+  },
+  {
+    type: "magnesium",
+    category: "metals",
+    name: "Magnesium",
+  },
+  {
+    type: "calcium",
+    category: "metals",
+    name: "Calcium",
+  },
+  {
+    type: "titanium",
+    category: "metals",
+    name: "Titanium",
+  },
+  {
+    type: "potassium",
+    category: "metals",
+    name: "Potassium",
+  },
+  {
+    type: "sodium",
+    category: "metals",
+    name: "Sodium",
+  },
+  // Life Support
+  {
+    type: "water",
+    category: "life-support",
+    name: "Water",
+  },
+  {
+    type: "oxygen",
+    category: "life-support",
+    name: "Oxygen",
+  },
+];
+
+export class ResourceManager {
   private static inventory: ResourceCount[] = [
     { type: "iron", amount: 50 },
     { type: "water", amount: 100 },
@@ -60,11 +128,11 @@ export class ResourceManager {
   ];
 
   static getResources(): Resource[] {
-    return this.resources;
+    return RESOURCE_DEFINITIONS;
   }
 
   static getResource(type: ResourceType): Resource | undefined {
-    return this.resources.find((resource) => resource.type === type);
+    return RESOURCE_DEFINITIONS.find((resource) => resource.type === type);
   }
 
   static getInventory(): ResourceCount[] {
@@ -101,3 +169,24 @@ export class ResourceManager {
     });
   }
 }
+
+// Remove ice from resources if it exists
+export const resources = {
+  wood: {
+    name: "Wood",
+    icon: "🪵",
+    color: "#8B4513",
+  },
+  stone: {
+    name: "Stone",
+    icon: "🪨",
+    color: "#808080",
+  },
+  water: {
+    name: "Water",
+    icon: "💧",
+    color: "#1E90FF",
+  },
+  // ... other resources except ice
+  // ... existing code ...
+};

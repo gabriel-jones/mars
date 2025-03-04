@@ -35,8 +35,4 @@ export const config: Phaser.Types.Core.GameConfig = {
   },
 };
 
-// Game constants
-export const TILE_SIZE = 64;
-export const PLAYER_VELOCITY = 250;
-
 export default new Phaser.Game(config);

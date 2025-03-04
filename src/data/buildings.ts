@@ -1,11 +1,12 @@
 // Define building IDs as a string literal union type
 export type BuildingType =
+  | "habitat"
   | "solar-panel"
-  | "oxygen-generator"
-  | "water-extractor"
-  | "habitat";
+  | "miner-drone"
+  | "ice-drill";
 
 import { ResourceType } from "./resources";
+import { ResourceNodeType } from "../entities/resourceNode";
 
 // Define a type-safe structure for building definitions
 export interface BuildMenuItem {
@@ -15,39 +16,44 @@ export interface BuildMenuItem {
     type: ResourceType;
     amount: number;
   }[];
+  placementRequirements?: {
+    onlyOn?: ResourceNodeType[];
+  };
 }
 
 // Define the building definitions
 export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
   {
-    buildingType: "solar-panel",
-    name: "Solar Panel",
-    cost: [
-      { type: "iron", amount: 20 },
-      { type: "water", amount: 5 },
-    ],
-  },
-  {
-    buildingType: "oxygen-generator",
-    name: "Oxygen Generator",
-    cost: [
-      { type: "iron", amount: 15 },
-      { type: "water", amount: 10 },
-    ],
-  },
-  {
-    buildingType: "water-extractor",
-    name: "Water Extractor",
-    cost: [{ type: "iron", amount: 25 }],
-  },
-  {
     buildingType: "habitat",
     name: "Habitat",
     cost: [
-      { type: "iron", amount: 30 },
-      { type: "oxygen", amount: 15 },
-      { type: "water", amount: 15 },
+      { type: "silicon", amount: 100 },
+      { type: "iron", amount: 25 },
     ],
+  },
+  {
+    buildingType: "solar-panel",
+    name: "Solar Panel",
+    cost: [
+      { type: "silicon", amount: 50 },
+      { type: "aluminium", amount: 15 },
+    ],
+  },
+  {
+    buildingType: "miner-drone",
+    name: "Miner Drone",
+    cost: [{ type: "iron", amount: 50 }],
+  },
+  {
+    buildingType: "ice-drill",
+    name: "Ice Drill",
+    cost: [
+      { type: "iron", amount: 50 },
+      { type: "titanium", amount: 10 },
+    ],
+    placementRequirements: {
+      onlyOn: [ResourceNodeType.IceDeposit],
+    },
   },
 ];
 
@@ -67,6 +73,10 @@ export interface Building {
     y: number;
   };
   placedAt: number; // timestamp
+  size?: { width: number; height: number };
+  placementRequirements?: {
+    onlyOn?: ResourceNodeType[];
+  };
 }
 
 // Store for all placed buildings

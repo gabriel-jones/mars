@@ -14,6 +14,12 @@ interface GameState {
   groundLayer: Phaser.Tilemaps.TilemapLayer;
   highlightRect: Phaser.GameObjects.Rectangle;
   currentTilePos: { x: number; y: number };
+  tileData?: {
+    [key: string]: {
+      hasIceDeposit?: boolean;
+      // Add other tile data as needed
+    };
+  };
 }
 
 // Initialize empty game state

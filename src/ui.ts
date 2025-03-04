@@ -56,3 +56,42 @@ export function updateTileHighlight(
 
   return currentTilePos;
 }
+
+export class UI {
+  private messageText: Phaser.GameObjects.Text | null = null;
+  private messageTimer: Phaser.Time.TimerEvent | null = null;
+
+  constructor(private scene: Phaser.Scene) {}
+
+  showMessage(message: string, duration: number = 2000) {
+    if (this.messageText) {
+      this.messageText.destroy();
+    }
+
+    if (this.messageTimer) {
+      this.messageTimer.remove();
+    }
+
+    this.messageText = this.scene.add.text(
+      this.scene.cameras.main.width / 2,
+      this.scene.cameras.main.height - 100,
+      message,
+      {
+        fontSize: "24px",
+        color: "#ffffff",
+        backgroundColor: "#000000",
+        padding: { x: 10, y: 5 },
+      }
+    );
+    this.messageText.setOrigin(0.5);
+    this.messageText.setScrollFactor(0);
+    this.messageText.setDepth(100);
+
+    this.messageTimer = this.scene.time.delayedCall(duration, () => {
+      if (this.messageText) {
+        this.messageText.destroy();
+        this.messageText = null;
+      }
+    });
+  }
+}

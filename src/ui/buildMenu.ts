@@ -5,14 +5,20 @@ import {
   BuildingType,
   BUILDING_DEFINITIONS,
 } from "../data/buildings";
-import { TILE_SIZE } from "../main";
-import { ResourceManager, ResourceType } from "../data/resources";
+import { ResourceManager } from "../data/resources";
+import { ResourceNodeType } from "../entities/resourceNode";
+import { gameState } from "../state";
+import { TILE_SIZE } from "../config";
 
 interface ButtonConfig {
   text: string;
   x: number;
   y: number;
   onClick: () => void;
+}
+
+interface PlacementPreview extends Phaser.GameObjects.Rectangle {
+  iconText?: Phaser.GameObjects.Text;
 }
 
 export class BuildMenu {
@@ -151,8 +157,9 @@ export class BuildMenu {
       buttonBorder.setStrokeStyle(2, 0xffffff);
     });
 
-    // Add click handler
-    button.on("pointerdown", config.onClick);
+    // Add click handler using pointerup instead of pointerdown
+    // This ensures the click is only registered when the button is released
+    button.on("pointerup", config.onClick);
 
     // Store references to background and border if this is the build button
     if (config.text === "BUILD") {
@@ -174,8 +181,8 @@ export class BuildMenu {
       .setVisible(false);
 
     // Calculate dynamic panel size based on number of items
-    const maxItemsPerRow = 8;
-    const itemSize = 90; // Square items
+    const maxItemsPerRow = 4; // Reduced from 8 to make items larger
+    const itemSize = 150; // Increased from 90 to make items larger
     const itemPadding = 10;
     const itemsCount = BUILDING_DEFINITIONS.length;
     const itemsPerRow = Math.min(itemsCount, maxItemsPerRow);
@@ -210,28 +217,35 @@ export class BuildMenu {
       const itemBg = this.scene.add
         .rectangle(0, 0, itemSize, itemSize, 0x555555)
         .setOrigin(0.5)
-        .setInteractive()
-        .on("pointerover", () => itemBg.setFillStyle(0x777777))
-        .on("pointerout", () => itemBg.setFillStyle(0x555555))
+        .setInteractive({ useHandCursor: true })
+        .on("pointerover", () => {
+          itemBg.setFillStyle(0x777777);
+          itemBg.setStrokeStyle(2, 0xffffff);
+        })
+        .on("pointerout", () => {
+          itemBg.setFillStyle(0x555555);
+          itemBg.setStrokeStyle(0);
+        })
         .on("pointerdown", () =>
           this.selectConstructionItem(item.buildingType)
         );
 
       // Item image with fixed display size
       const itemImage = this.scene.add
-        .image(0, -15, item.buildingType)
+        .image(0, -40, item.buildingType) // Adjusted Y position
         .setOrigin(0.5)
-        .setDisplaySize(32, 32);
+        .setDisplaySize(48, 48); // Increased from 32x32
 
-      // Item text
+      // Item text - increased font size and adjusted position
       const itemText = this.scene.add
-        .text(0, 15, item.name, {
-          fontSize: "12px",
+        .text(0, 0, item.name, {
+          // Adjusted Y position
+          fontSize: "16px", // Increased from 12px
           color: "#ffffff",
         })
         .setOrigin(0.5);
 
-      // Add resource cost text
+      // Add resource cost text - adjusted positions and increased spacing
       const costTexts: Phaser.GameObjects.Text[] = [];
       item.cost.forEach((cost, costIndex) => {
         const resource = ResourceManager.getResource(cost.type);
@@ -239,10 +253,10 @@ export class BuildMenu {
           const costText = this.scene.add
             .text(
               0,
-              30 + costIndex * 12,
-              `${resource.displayName}: ${cost.amount}`,
+              25 + costIndex * 20, // Increased Y spacing between cost items
+              `${resource.name}: ${cost.amount}`,
               {
-                fontSize: "10px",
+                fontSize: "14px", // Increased from 10px
                 color: "#cccccc",
               }
             )
@@ -255,21 +269,57 @@ export class BuildMenu {
       this.constructionPanel.add(itemContainer);
     });
 
-    // Add close button - adjusted position for dynamic panel
+    // Create a separate container for the close button
+    const closeButtonContainer = this.scene.add.container(0, 0);
+
+    // Position the close button at the top-right corner of the panel
+    const closeButtonX = panelWidth / 2; // Right edge of panel
+    const closeButtonY = -panelHeight / 2; // Top edge of panel
+
+    // Create a visible background for the close button - smaller size
+    const closeButtonBg = this.scene.add
+      .rectangle(closeButtonX, closeButtonY, 30, 30, 0x333333)
+      .setOrigin(0.5)
+      .setStrokeStyle(1, 0x888888);
+
+    // Add close button text - smaller font
     const closeButton = this.scene.add
-      .text(panelWidth / 2 - 20, -panelHeight / 2 + 15, "X", {
+      .text(closeButtonX, closeButtonY, "X", {
         fontSize: "18px",
         color: "#ffffff",
-        backgroundColor: "#555555",
-        padding: { x: 8, y: 4 },
       })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .on("pointerover", () => closeButton.setBackgroundColor("#777777"))
-      .on("pointerout", () => closeButton.setBackgroundColor("#555555"))
-      .on("pointerdown", () => this.toggleConstructionPanel(false));
+      .setOrigin(0.5);
 
-    this.constructionPanel.add(closeButton);
+    // Create an invisible hit area that's larger than the visible button
+    // This will capture clicks even if they're slightly outside the visible button
+    const hitArea = this.scene.add
+      .rectangle(closeButtonX, closeButtonY, 60, 60, 0x000000, 0)
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+
+    // Make the hit area handle all interactions
+    hitArea
+      .on("pointerup", () => this.toggleConstructionPanel(false))
+      .on("pointerover", () => {
+        // Add highlight effect when hovering
+        closeButtonBg.setFillStyle(0x555555);
+        closeButtonBg.setStrokeStyle(2, 0xffffff);
+      })
+      .on("pointerout", () => {
+        // Remove highlight effect when not hovering
+        closeButtonBg.setFillStyle(0x333333);
+        closeButtonBg.setStrokeStyle(1, 0x888888);
+      })
+      .setDepth(300); // Very high depth to ensure it captures all clicks
+
+    // Add all elements to the container
+    closeButtonContainer.add([closeButtonBg, closeButton, hitArea]);
+
+    // Add the close button container to the construction panel
+    this.constructionPanel.add(closeButtonContainer);
+
+    // Set the depth of the close button container
+    closeButtonContainer.setDepth(200);
 
     // Make sure the panel is on top of other elements
     this.constructionPanel.setDepth(100);
@@ -399,41 +449,8 @@ export class BuildMenu {
       }
     }
 
-    // Check for clicks on UI elements
-    if (
-      this.scene.input.activePointer.isDown &&
-      this.scene.input.activePointer.getDuration() < 100
-    ) {
-      const pointer = this.scene.input.activePointer;
-
-      // Check if clicking on the build button
-      if (this.isPointInButton(pointer, this.buildButton)) {
-        this.toggleConstructionPanel();
-      }
-
-      // Check if clicking on the construction panel
-      if (this.isConstructionPanelOpen) {
-        // Check close button
-        const closeButtonBounds = {
-          x: this.constructionPanel.x + this.constructionPanel.width / 2 - 20,
-          y: this.constructionPanel.y - this.constructionPanel.height / 2 + 15,
-          width: 30,
-          height: 30,
-        };
-
-        if (
-          pointer.x >= closeButtonBounds.x - closeButtonBounds.width / 2 &&
-          pointer.x <= closeButtonBounds.x + closeButtonBounds.width / 2 &&
-          pointer.y >= closeButtonBounds.y - closeButtonBounds.height / 2 &&
-          pointer.y <= closeButtonBounds.y + closeButtonBounds.height / 2
-        ) {
-          this.toggleConstructionPanel(false);
-        }
-
-        // Check item clicks
-        // ... similar code for each item ...
-      }
-    }
+    // Remove the manual click detection in update() since we're now using Phaser's event system
+    // The buttons will handle their own clicks through the pointerup events
   }
 
   private isPlacementValid(tileX: number, tileY: number): boolean {
@@ -442,8 +459,36 @@ export class BuildMenu {
       return false;
     }
 
-    // Add more validation as needed (e.g., check if tile is buildable)
-    // For example, check if the tile is a valid ground tile
+    // Get the selected building definition
+    const selectedItemDef = BUILDING_DEFINITIONS.find(
+      (item) => item.buildingType === this.selectedItem
+    );
+
+    if (!selectedItemDef) return false;
+
+    // Check placement requirements if they exist
+    if (
+      selectedItemDef.placementRequirements &&
+      selectedItemDef.placementRequirements.onlyOn
+    ) {
+      // Check if this tile has an ice deposit
+      const tileHasIceDeposit =
+        gameState.tileData &&
+        gameState.tileData[`${tileX},${tileY}`] &&
+        gameState.tileData[`${tileX},${tileY}`].hasIceDeposit;
+
+      // If the building requires an ice deposit but the tile doesn't have one
+      if (
+        selectedItemDef.placementRequirements.onlyOn.includes(
+          ResourceNodeType.IceDeposit
+        ) &&
+        !tileHasIceDeposit
+      ) {
+        return false;
+      }
+    }
+
+    // Check if the tile is a valid ground tile
     const tile = this.map.getTileAt(tileX, tileY);
     if (!tile) {
       return false;
@@ -513,15 +558,74 @@ export class BuildMenu {
     this.cancelPlacement();
   }
 
-  private isPointInButton(
-    pointer: Phaser.Input.Pointer,
-    button: Phaser.GameObjects.Container
-  ): boolean {
-    return (
-      pointer.x >= button.x - 60 &&
-      pointer.x <= button.x + 60 &&
-      pointer.y >= button.y - 20 &&
-      pointer.y <= button.y + 20
-    );
+  createBuildingButton(key: string, building: any): void {
+    // ... existing code ...
+
+    const button = this.scene.add.container(/* your button creation code */);
+
+    button.on("pointerdown", () => {
+      // ... existing code ...
+
+      // Add placement preview that follows the mouse
+      const preview = this.scene.add.rectangle(
+        0,
+        0,
+        40,
+        40,
+        0xffffff,
+        0.5
+      ) as PlacementPreview;
+      if (building.icon) {
+        const iconText = this.scene.add.text(0, 0, building.icon, {
+          fontSize: "20px",
+        });
+        iconText.setOrigin(0.5);
+        // Group the preview and icon
+        preview.iconText = iconText;
+      }
+
+      // Handle mouse movement for placement preview
+      this.scene.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+        preview.setPosition(pointer.x, pointer.y);
+        if (preview.iconText) {
+          preview.iconText.setPosition(pointer.x, pointer.y);
+        }
+
+        // Check placement requirements
+        if (
+          building.placementRequirement &&
+          !building.placementRequirement(this.scene, pointer.x, pointer.y)
+        ) {
+          preview.setFillStyle(0xff0000, 0.5); // Red if can't place
+        } else {
+          preview.setFillStyle(0x00ff00, 0.5); // Green if can place
+        }
+      });
+
+      // Handle placement
+      this.scene.input.once("pointerdown", (pointer: Phaser.Input.Pointer) => {
+        // Check if we can place the building here
+        if (
+          !building.placementRequirement ||
+          building.placementRequirement(this.scene, pointer.x, pointer.y)
+        ) {
+          // ... existing placement code ...
+
+          // Call onPlace if it exists
+          if (building.onPlace) {
+            building.onPlace(this.scene, pointer.x, pointer.y);
+          }
+        }
+
+        // Clean up preview
+        preview.destroy();
+        if (preview.iconText) {
+          preview.iconText.destroy();
+        }
+        this.scene.input.off("pointermove");
+      });
+    });
+
+    // ... existing code ...
   }
 }
