@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { PLAYER_VELOCITY } from "../config";
+import { PLAYER_VELOCITY } from "../constants";
 
 // Create the player
 export function createPlayer(
@@ -65,22 +65,5 @@ export function updatePlayerMovement(
     player.setVelocityY(-PLAYER_VELOCITY);
   } else if (cursors.down.isDown || wasdKeys.S.isDown) {
     player.setVelocityY(PLAYER_VELOCITY);
-  }
-}
-
-export class Player {
-  canAfford(cost: Record<string, number>): boolean {
-    for (const [resource, amount] of Object.entries(cost)) {
-      if (!this.resources[resource] || this.resources[resource] < amount) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  spendResources(cost: Record<string, number>): void {
-    for (const [resource, amount] of Object.entries(cost)) {
-      this.resources[resource] -= amount;
-    }
   }
 }

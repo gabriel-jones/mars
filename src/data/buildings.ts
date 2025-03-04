@@ -8,6 +8,19 @@ export type BuildingType =
 import { ResourceType } from "./resources";
 import { ResourceNodeType } from "../entities/resourceNode";
 
+// Define placement types
+export enum PlacementType {
+  SingleTile, // Default placement on a single tile
+  RangeSelect, // Drag to select a range (for habitat)
+}
+
+// Define location types
+export enum LocationType {
+  Outside, // Can only be placed outside (solar panels, etc.)
+  Inside, // Can only be placed inside habitats (farms, etc.)
+  Both, // Can be placed anywhere
+}
+
 // Define a type-safe structure for building definitions
 export interface BuildMenuItem {
   buildingType: BuildingType;
@@ -16,6 +29,8 @@ export interface BuildMenuItem {
     type: ResourceType;
     amount: number;
   }[];
+  placementType: PlacementType;
+  locationType: LocationType;
   placementRequirements?: {
     onlyOn?: ResourceNodeType[];
   };
@@ -30,6 +45,8 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
       { type: "silicon", amount: 100 },
       { type: "iron", amount: 25 },
     ],
+    placementType: PlacementType.RangeSelect,
+    locationType: LocationType.Outside,
   },
   {
     buildingType: "solar-panel",
@@ -38,11 +55,15 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
       { type: "silicon", amount: 50 },
       { type: "aluminium", amount: 15 },
     ],
+    placementType: PlacementType.SingleTile,
+    locationType: LocationType.Outside,
   },
   {
     buildingType: "miner-drone",
     name: "Miner Drone",
     cost: [{ type: "iron", amount: 50 }],
+    placementType: PlacementType.SingleTile,
+    locationType: LocationType.Outside,
   },
   {
     buildingType: "ice-drill",
@@ -51,6 +72,8 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
       { type: "iron", amount: 50 },
       { type: "titanium", amount: 10 },
     ],
+    placementType: PlacementType.SingleTile,
+    locationType: LocationType.Outside,
     placementRequirements: {
       onlyOn: [ResourceNodeType.IceDeposit],
     },
@@ -73,7 +96,7 @@ export interface Building {
     y: number;
   };
   placedAt: number; // timestamp
-  size?: { width: number; height: number };
+  size?: { width: number; height: number }; // For range-selected buildings like habitats
   placementRequirements?: {
     onlyOn?: ResourceNodeType[];
   };
@@ -86,7 +109,13 @@ export class BuildingManager {
   static addBuilding(building: Building): void {
     this.buildings.push(building);
     console.log(
-      `Building added: ${building.type} at (${building.position.x}, ${building.position.y})`
+      `Building added: ${building.type} at (${building.position.x}, ${
+        building.position.y
+      })${
+        building.size
+          ? ` with size ${building.size.width}x${building.size.height}`
+          : ""
+      }`
     );
   }
 
@@ -99,14 +128,36 @@ export class BuildingManager {
   }
 
   static getBuildingAt(x: number, y: number): Building | undefined {
-    return this.buildings.find(
-      (building) => building.position.x === x && building.position.y === y
-    );
+    return this.buildings.find((building) => {
+      // For single-tile buildings
+      if (!building.size) {
+        return building.position.x === x && building.position.y === y;
+      }
+
+      // For range-based buildings (like habitats)
+      const startX = building.position.x;
+      const startY = building.position.y;
+      const endX = startX + (building.size.width - 1);
+      const endY = startY + (building.size.height - 1);
+
+      return x >= startX && x <= endX && y >= startY && y <= endY;
+    });
   }
 
   static isTileOccupied(x: number, y: number): boolean {
-    return this.buildings.some(
-      (building) => building.position.x === x && building.position.y === y
-    );
+    return this.buildings.some((building) => {
+      // For single-tile buildings
+      if (!building.size) {
+        return building.position.x === x && building.position.y === y;
+      }
+
+      // For range-based buildings (like habitats)
+      const startX = building.position.x;
+      const startY = building.position.y;
+      const endX = startX + (building.size.width - 1);
+      const endY = startY + (building.size.height - 1);
+
+      return x >= startX && x <= endX && y >= startY && y <= endY;
+    });
   }
 }

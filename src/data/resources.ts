@@ -122,7 +122,8 @@ export const RESOURCE_DEFINITIONS: Resource[] = [
 
 export class ResourceManager {
   private static inventory: ResourceCount[] = [
-    { type: "iron", amount: 50 },
+    { type: "silicon", amount: 500 },
+    { type: "iron", amount: 500 },
     { type: "water", amount: 100 },
     { type: "oxygen", amount: 75 },
   ];
@@ -169,24 +170,3 @@ export class ResourceManager {
     });
   }
 }
-
-// Remove ice from resources if it exists
-export const resources = {
-  wood: {
-    name: "Wood",
-    icon: "🪵",
-    color: "#8B4513",
-  },
-  stone: {
-    name: "Stone",
-    icon: "🪨",
-    color: "#808080",
-  },
-  water: {
-    name: "Water",
-    icon: "💧",
-    color: "#1E90FF",
-  },
-  // ... other resources except ice
-  // ... existing code ...
-};

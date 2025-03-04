@@ -4,21 +4,19 @@ import {
   BuildingManager,
   BuildingType,
   BUILDING_DEFINITIONS,
+  PlacementType,
+  BuildMenuItem,
 } from "../data/buildings";
 import { ResourceManager } from "../data/resources";
 import { ResourceNodeType } from "../entities/resourceNode";
 import { gameState } from "../state";
-import { TILE_SIZE } from "../config";
+import { TILE_SIZE } from "../constants";
 
 interface ButtonConfig {
   text: string;
   x: number;
   y: number;
   onClick: () => void;
-}
-
-interface PlacementPreview extends Phaser.GameObjects.Rectangle {
-  iconText?: Phaser.GameObjects.Text;
 }
 
 export class BuildMenu {
@@ -39,6 +37,11 @@ export class BuildMenu {
   private canPlace: boolean = false;
   private container: Phaser.GameObjects.Container;
   private uiCamera: Phaser.Cameras.Scene2D.Camera;
+  private rangeStartTile: { x: number; y: number } | null = null;
+  private rangeEndTile: { x: number; y: number } | null = null;
+  private rangePreview: Phaser.GameObjects.Rectangle | null = null;
+  private selectedBuildingDef: BuildMenuItem | null = null;
+  private pointerWasDown: boolean = false;
 
   constructor(
     scene: Phaser.Scene,
@@ -351,32 +354,59 @@ export class BuildMenu {
     this.selectedItem = buildingType;
     this.toggleConstructionPanel(false);
 
-    // Create placement sprite
-    if (this.placementSprite) {
-      this.placementSprite.destroy();
+    // Find the building definition
+    this.selectedBuildingDef =
+      BUILDING_DEFINITIONS.find((item) => item.buildingType === buildingType) ||
+      null;
+
+    if (!this.selectedBuildingDef) return;
+
+    // Clean up any existing placement objects
+    this.cleanupPlacementObjects();
+
+    // Handle different placement types
+    if (this.selectedBuildingDef.placementType === PlacementType.RangeSelect) {
+      console.log("Setting up range selection for", buildingType);
+      this.setupRangeSelection();
+
+      // Verify the range preview was created
+      if (!this.rangePreview) {
+        console.error(
+          "Failed to create range preview in selectConstructionItem"
+        );
+      }
+    } else {
+      this.setupSingleTilePlacement();
     }
 
-    // Create a placement sprite that follows the cursor
-    this.placementSprite = this.scene.add
-      .sprite(0, 0, buildingType)
-      .setAlpha(0.7)
-      .setDisplaySize(TILE_SIZE, TILE_SIZE);
+    // Add instruction text based on placement type
+    const instructionMessage =
+      this.selectedBuildingDef.placementType === PlacementType.RangeSelect
+        ? "Click and drag to select area. Press ESC to cancel."
+        : "Click to place. Press ESC to cancel.";
 
-    // Add instruction text
     this.instructionText = this.scene.add
-      .text(
-        this.scene.cameras.main.width / 2,
-        50,
-        "Click to place. Press ESC to cancel.",
-        { fontSize: "18px", color: "#ffffff" }
-      )
+      .text(this.scene.cameras.main.width / 2, 50, instructionMessage, {
+        fontSize: "18px",
+        color: "#ffffff",
+      })
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(100);
 
-    // Prevent immediate placement by setting a flag
+    // Prevent immediate placement by setting a flag and adding a delay
     this.canPlace = false;
     this.lastPlacementTime = this.scene.time.now;
+
+    // Add a slightly longer delay for range selection to prevent accidental selection
+    if (this.selectedBuildingDef.placementType === PlacementType.RangeSelect) {
+      this.scene.time.delayedCall(300, () => {
+        // Only set canPlace to true if we're still in placement mode
+        if (this.selectedItem) {
+          this.canPlace = true;
+        }
+      });
+    }
 
     // Add ESC key for canceling placement
     const escKey = this.scene.input.keyboard!.addKey("ESC");
@@ -385,10 +415,56 @@ export class BuildMenu {
     });
   }
 
-  private cancelPlacement() {
+  private setupSingleTilePlacement() {
+    // Create a placement sprite that follows the cursor
+    this.placementSprite = this.scene.add
+      .sprite(0, 0, this.selectedItem!)
+      .setAlpha(0.7)
+      .setDisplaySize(TILE_SIZE, TILE_SIZE);
+  }
+
+  private setupRangeSelection() {
+    // Clean up any existing preview first
+    if (this.rangePreview) {
+      this.rangePreview.destroy();
+      this.rangePreview = null;
+    }
+
+    // Create a new range preview
+    return this.ensureRangePreviewExists();
+  }
+
+  private ensureRangePreviewExists(): boolean {
+    if (!this.rangePreview) {
+      console.log("Range preview doesn't exist, creating it");
+      try {
+        // For range selection, we'll use a rectangle to show the selected area
+        this.rangePreview = this.scene.add
+          .rectangle(0, 0, TILE_SIZE, TILE_SIZE, 0x00ff00, 0.3)
+          .setStrokeStyle(2, 0xffffff)
+          .setOrigin(0, 0)
+          .setAlpha(0.5)
+          .setDepth(100); // Make sure it's visible above other elements
+
+        console.log("Range preview created successfully:", this.rangePreview);
+        return true;
+      } catch (error) {
+        console.error("Error creating range preview:", error);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private cleanupPlacementObjects() {
     if (this.placementSprite) {
       this.placementSprite.destroy();
       this.placementSprite = null;
+    }
+
+    if (this.rangePreview) {
+      this.rangePreview.destroy();
+      this.rangePreview = null;
     }
 
     if (this.instructionText) {
@@ -396,61 +472,313 @@ export class BuildMenu {
       this.instructionText = null;
     }
 
+    this.rangeStartTile = null;
+    this.rangeEndTile = null;
+  }
+
+  private cancelPlacement() {
+    this.cleanupPlacementObjects();
     this.selectedItem = null;
+    this.selectedBuildingDef = null;
   }
 
   update() {
-    // Update placement sprite position if active
-    if (this.placementSprite && this.selectedItem) {
-      // Get the current pointer position in world coordinates
-      const worldPoint = this.scene.input.activePointer.positionToCamera(
-        this.scene.cameras.main
-      ) as Phaser.Math.Vector2;
+    if (!this.selectedItem || !this.selectedBuildingDef) return;
 
-      // Convert world position to tile position
-      const tileX = this.map.worldToTileX(worldPoint.x)!;
-      const tileY = this.map.worldToTileY(worldPoint.y)!;
+    // Get the current pointer position in world coordinates
+    const worldPoint = this.scene.input.activePointer.positionToCamera(
+      this.scene.cameras.main
+    ) as Phaser.Math.Vector2;
 
-      // Convert back to world coordinates (snapped to grid)
-      const snappedX = this.map.tileToWorldX(tileX)! + TILE_SIZE / 2;
-      const snappedY = this.map.tileToWorldY(tileY)! + TILE_SIZE / 2;
+    // Convert world position to tile position
+    const tileX = this.map.worldToTileX(worldPoint.x)!;
+    const tileY = this.map.worldToTileY(worldPoint.y)!;
 
-      // Update the placement sprite position
-      this.placementSprite.setPosition(snappedX, snappedY);
-
-      // Check if placement is valid at this position
-      this.placementValid = this.isPlacementValid(tileX, tileY);
-
-      // Update sprite appearance based on validity
-      if (this.placementValid) {
-        this.placementSprite.setTint(0xffffff);
-      } else {
-        this.placementSprite.setTint(0xff0000);
-      }
-
-      // Enable placement after a delay
-      if (
-        !this.canPlace &&
-        this.scene.time.now - this.lastPlacementTime > 500
-      ) {
-        this.canPlace = true;
-      }
-
-      // Check if player clicks to place the item
-      if (
-        this.canPlace &&
-        this.placementValid &&
-        !this.isConstructionPanelOpen &&
-        this.scene.input.activePointer.isDown &&
-        this.scene.input.activePointer.getDuration() < 100
-      ) {
-        this.placeConstructionItem(tileX, tileY, snappedX, snappedY);
-        this.lastPlacementTime = this.scene.time.now;
-      }
+    // Handle different placement types
+    if (this.selectedBuildingDef.placementType === PlacementType.RangeSelect) {
+      this.updateRangeSelection(tileX, tileY, worldPoint);
+    } else {
+      this.updateSingleTilePlacement(tileX, tileY, worldPoint);
     }
 
-    // Remove the manual click detection in update() since we're now using Phaser's event system
-    // The buttons will handle their own clicks through the pointerup events
+    // Enable placement after a delay
+    if (!this.canPlace && this.scene.time.now - this.lastPlacementTime > 500) {
+      this.canPlace = true;
+      // Initialize pointer state when we're ready to place
+      this.pointerWasDown = this.scene.input.activePointer.isDown;
+    }
+  }
+
+  private updateSingleTilePlacement(
+    tileX: number,
+    tileY: number,
+    worldPoint: Phaser.Math.Vector2
+  ) {
+    if (!this.placementSprite) return;
+
+    // Convert to world coordinates (snapped to grid)
+    const snappedX = this.map.tileToWorldX(tileX)! + TILE_SIZE / 2;
+    const snappedY = this.map.tileToWorldY(tileY)! + TILE_SIZE / 2;
+
+    // Update the placement sprite position
+    this.placementSprite.setPosition(snappedX, snappedY);
+
+    // Check if placement is valid at this position
+    this.placementValid = this.isPlacementValid(tileX, tileY);
+
+    // Update sprite appearance based on validity
+    if (this.placementValid) {
+      this.placementSprite.setTint(0xffffff);
+    } else {
+      this.placementSprite.setTint(0xff0000);
+    }
+
+    // Check if player clicks to place the item
+    if (
+      this.canPlace &&
+      this.placementValid &&
+      !this.isConstructionPanelOpen &&
+      this.scene.input.activePointer.isDown &&
+      this.scene.input.activePointer.getDuration() < 100
+    ) {
+      this.placeConstructionItem(tileX, tileY, snappedX, snappedY);
+      this.lastPlacementTime = this.scene.time.now;
+    }
+  }
+
+  private updateRangeSelection(
+    tileX: number,
+    tileY: number,
+    worldPoint: Phaser.Math.Vector2
+  ) {
+    // Make absolutely sure we have a range preview
+    if (!this.ensureRangePreviewExists()) {
+      console.error("Failed to create range preview, aborting update");
+      return;
+    }
+
+    // Get the current pointer state
+    const pointerIsDown = this.scene.input.activePointer.isDown;
+
+    try {
+      // If not dragging, just show a single tile preview
+      if (!pointerIsDown && !this.rangeStartTile) {
+        const worldX = this.map.tileToWorldX(tileX)!;
+        const worldY = this.map.tileToWorldY(tileY)!;
+
+        // Safely update the preview position and size
+        if (this.rangePreview) {
+          this.rangePreview.setPosition(worldX, worldY);
+          this.rangePreview.width = TILE_SIZE;
+          this.rangePreview.height = TILE_SIZE;
+        }
+
+        // Check if placement is valid at this position
+        this.placementValid = this.isPlacementValid(tileX, tileY);
+
+        // Update preview color based on validity
+        if (this.rangePreview) {
+          if (this.placementValid) {
+            this.rangePreview.setStrokeStyle(2, 0x00ff00);
+            this.rangePreview.setFillStyle(0x00ff00, 0.3);
+          } else {
+            this.rangePreview.setStrokeStyle(2, 0xff0000);
+            this.rangePreview.setFillStyle(0xff0000, 0.3);
+          }
+        }
+      }
+
+      // Handle range selection start - only start when pointer is down AND we've waited a bit
+      if (pointerIsDown && !this.rangeStartTile && this.canPlace) {
+        this.rangeStartTile = { x: tileX, y: tileY };
+        console.log("Range selection started at", tileX, tileY);
+      }
+
+      // Update current end position while dragging
+      if (pointerIsDown && this.rangeStartTile) {
+        this.rangeEndTile = { x: tileX, y: tileY };
+
+        // Calculate the rectangle dimensions
+        const startX = Math.min(this.rangeStartTile.x, this.rangeEndTile.x);
+        const startY = Math.min(this.rangeStartTile.y, this.rangeEndTile.y);
+        const width = Math.abs(this.rangeEndTile.x - this.rangeStartTile.x) + 1;
+        const height =
+          Math.abs(this.rangeEndTile.y - this.rangeStartTile.y) + 1;
+
+        // Update the preview rectangle
+        const worldX = this.map.tileToWorldX(startX)!;
+        const worldY = this.map.tileToWorldY(startY)!;
+
+        // Safely update the preview
+        if (this.rangePreview) {
+          this.rangePreview.setPosition(worldX, worldY);
+          this.rangePreview.width = width * TILE_SIZE;
+          this.rangePreview.height = height * TILE_SIZE;
+        }
+
+        // Check if the entire range is valid
+        this.placementValid = this.isRangePlacementValid(
+          startX,
+          startY,
+          width,
+          height
+        );
+
+        // Update preview color based on validity
+        if (this.rangePreview) {
+          if (this.placementValid) {
+            this.rangePreview.setStrokeStyle(2, 0x00ff00);
+            this.rangePreview.setFillStyle(0x00ff00, 0.3);
+          } else {
+            this.rangePreview.setStrokeStyle(2, 0xff0000);
+            this.rangePreview.setFillStyle(0xff0000, 0.3);
+          }
+        }
+      }
+
+      // Handle range selection end - detect when pointer was down and is now up
+      if (
+        this.pointerWasDown &&
+        !pointerIsDown &&
+        this.rangeStartTile &&
+        this.rangeEndTile
+      ) {
+        console.log("Mouse released, attempting to place habitat");
+
+        // Calculate final dimensions
+        const startX = Math.min(this.rangeStartTile.x, this.rangeEndTile.x);
+        const startY = Math.min(this.rangeStartTile.y, this.rangeEndTile.y);
+        const width = Math.abs(this.rangeEndTile.x - this.rangeStartTile.x) + 1;
+        const height =
+          Math.abs(this.rangeEndTile.y - this.rangeStartTile.y) + 1;
+
+        // Check if the placement is valid one more time
+        this.placementValid = this.isRangePlacementValid(
+          startX,
+          startY,
+          width,
+          height
+        );
+
+        if (this.placementValid) {
+          console.log("Placement valid, placing habitat");
+          this.placeHabitat(startX, startY, width, height);
+        } else {
+          console.log("Placement invalid, not placing habitat");
+        }
+
+        // Reset range selection
+        this.rangeStartTile = null;
+        this.rangeEndTile = null;
+      }
+
+      // Update the pointer state for the next frame
+      this.pointerWasDown = pointerIsDown;
+    } catch (error) {
+      console.error("Error in updateRangeSelection:", error);
+      // Try to recover by recreating the range preview
+      this.setupRangeSelection();
+    }
+  }
+
+  private isRangePlacementValid(
+    startX: number,
+    startY: number,
+    width: number,
+    height: number
+  ): boolean {
+    // Check if any tile in the range is invalid
+    for (let x = startX; x < startX + width; x++) {
+      for (let y = startY; y < startY + height; y++) {
+        if (!this.isPlacementValid(x, y)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  private placeHabitat(
+    startX: number,
+    startY: number,
+    width: number,
+    height: number
+  ) {
+    console.log("placeHabitat called with", startX, startY, width, height);
+
+    if (!this.selectedItem || !this.selectedBuildingDef) {
+      console.log("No selected item or building def");
+      return;
+    }
+
+    if (!this.placementValid) {
+      console.log("Placement not valid");
+      return;
+    }
+
+    // Check if player has enough resources
+    if (!ResourceManager.hasResources(this.selectedBuildingDef.cost)) {
+      console.log("Not enough resources");
+
+      // Show error message
+      const errorText = this.scene.add
+        .text(this.scene.cameras.main.width / 2, 100, "Not enough resources!", {
+          fontSize: "18px",
+          color: "#ff0000",
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(100);
+
+      // Remove error message after 2 seconds
+      this.scene.time.delayedCall(2000, () => {
+        errorText.destroy();
+      });
+
+      return;
+    }
+
+    console.log("All checks passed, placing habitat");
+
+    // Use the resources
+    this.selectedBuildingDef.cost.forEach((cost) => {
+      ResourceManager.useResource(cost.type, cost.amount);
+    });
+
+    // Calculate world position for the top-left corner
+    const worldX = this.map.tileToWorldX(startX)! + TILE_SIZE / 2;
+    const worldY = this.map.tileToWorldY(startY)! + TILE_SIZE / 2;
+
+    // Create a new building record
+    const building: Building = {
+      type: this.selectedItem,
+      displayName: this.selectedBuildingDef.name,
+      position: {
+        x: startX,
+        y: startY,
+      },
+      size: {
+        width: width,
+        height: height,
+      },
+      placedAt: Date.now(),
+    };
+
+    // Add to building manager
+    BuildingManager.addBuilding(building);
+    console.log("Building added to BuildingManager");
+
+    // Call the callback to handle the actual placement in the main scene
+    this.onItemPlaced(this.selectedItem, worldX, worldY);
+    console.log("onItemPlaced callback called");
+
+    // Emit the event
+    this.scene.events.emit("habitatPlaced", { startX, startY, width, height });
+    console.log("habitatPlaced event emitted");
+
+    // Clean up placement mode
+    this.cancelPlacement();
+    console.log("Placement canceled/reset");
   }
 
   private isPlacementValid(tileX: number, tileY: number): boolean {
@@ -556,76 +884,5 @@ export class BuildMenu {
     // Clean up placement mode
     this.scene.events.emit("itemPlaced");
     this.cancelPlacement();
-  }
-
-  createBuildingButton(key: string, building: any): void {
-    // ... existing code ...
-
-    const button = this.scene.add.container(/* your button creation code */);
-
-    button.on("pointerdown", () => {
-      // ... existing code ...
-
-      // Add placement preview that follows the mouse
-      const preview = this.scene.add.rectangle(
-        0,
-        0,
-        40,
-        40,
-        0xffffff,
-        0.5
-      ) as PlacementPreview;
-      if (building.icon) {
-        const iconText = this.scene.add.text(0, 0, building.icon, {
-          fontSize: "20px",
-        });
-        iconText.setOrigin(0.5);
-        // Group the preview and icon
-        preview.iconText = iconText;
-      }
-
-      // Handle mouse movement for placement preview
-      this.scene.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-        preview.setPosition(pointer.x, pointer.y);
-        if (preview.iconText) {
-          preview.iconText.setPosition(pointer.x, pointer.y);
-        }
-
-        // Check placement requirements
-        if (
-          building.placementRequirement &&
-          !building.placementRequirement(this.scene, pointer.x, pointer.y)
-        ) {
-          preview.setFillStyle(0xff0000, 0.5); // Red if can't place
-        } else {
-          preview.setFillStyle(0x00ff00, 0.5); // Green if can place
-        }
-      });
-
-      // Handle placement
-      this.scene.input.once("pointerdown", (pointer: Phaser.Input.Pointer) => {
-        // Check if we can place the building here
-        if (
-          !building.placementRequirement ||
-          building.placementRequirement(this.scene, pointer.x, pointer.y)
-        ) {
-          // ... existing placement code ...
-
-          // Call onPlace if it exists
-          if (building.onPlace) {
-            building.onPlace(this.scene, pointer.x, pointer.y);
-          }
-        }
-
-        // Clean up preview
-        preview.destroy();
-        if (preview.iconText) {
-          preview.iconText.destroy();
-        }
-        this.scene.input.off("pointermove");
-      });
-    });
-
-    // ... existing code ...
   }
 }

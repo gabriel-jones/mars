@@ -8,23 +8,22 @@ import { createTileHighlight, updateTileHighlight } from "../ui";
 import { gameState } from "../state";
 import { BuildMenu } from "../ui/buildMenu";
 import { ResourceDisplay } from "../ui/resourceDisplay";
-import { TerrainHighlight } from "../ui/terrainHighlight";
 import { createMarsTileset, createTerrain } from "../terrain";
-import { ResourceNode, ResourceNodeType } from "../entities/resourceNode";
+import { ResourceNode } from "../entities/resourceNode";
 import { RESOURCE_DEFINITIONS } from "../data/resources";
-import { TILE_SIZE } from "../config";
+import { TILE_SIZE } from "../constants";
 import { TileType, tileData } from "../data/tiles";
-import { BUILDING_DEFINITIONS, BuildingType } from "../data/buildings";
+import { createFPS, updateFPS } from "../ui/fps";
 
 export class MainScene extends Phaser.Scene {
   private buildMenu: BuildMenu;
   private resourceDisplay: ResourceDisplay;
   private uiCamera: Phaser.Cameras.Scene2D.Camera;
-  private terrainHighlight: TerrainHighlight;
   private resourceNodes: ResourceNode[] = [];
   private spawnPoint: Phaser.Math.Vector2;
   private map: Phaser.Tilemaps.Tilemap;
   private tileGroup: Phaser.GameObjects.Group | null = null;
+  private fpsText: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: "MainScene" });
@@ -37,28 +36,17 @@ export class MainScene extends Phaser.Scene {
     this.load.image("habitat", "assets/habitat.png");
     this.load.image("solar-panel", "assets/solar-panel.png");
 
-    // Load resource icons
-    this.load.image("iron-icon", "assets/iron-icon.png");
-    this.load.image("water-icon", "assets/water-icon.png");
-    this.load.image("oxygen-icon", "assets/oxygen-icon.png");
-
     // Tileset
     createMarsTileset(this);
 
-    this.load.image("ice_deposit", "assets/ice_deposit.png");
-    this.load.image("ice_drill", "assets/ice_drill.png");
-
-    // Load resource node sprites
-    this.load.image("ice_deposit", "assets/ice_deposit.png");
-    this.load.image("coal_deposit", "assets/coal_deposit.png");
-    this.load.image("iron_deposit", "assets/iron_deposit.png");
-
     // Load building sprites
     this.load.image("ice-drill", "assets/ice-drill.png");
-    this.load.image("coal-mine", "assets/coal-mine.png");
   }
 
   create() {
+    // Initialize FPS counter
+    this.fpsText = createFPS(this);
+
     // Create terrain
     const { map, groundLayer } = createTerrain(this);
     gameState.map = map;
@@ -119,9 +107,6 @@ export class MainScene extends Phaser.Scene {
       (this.game.config.height as number) * 2
     );
 
-    // Create terrain highlight
-    this.terrainHighlight = new TerrainHighlight(this);
-
     // Create the player at the spawn point
     this.spawnPoint = new Phaser.Math.Vector2(
       gameState.player.x,
@@ -136,6 +121,9 @@ export class MainScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number) {
+    // Update FPS counter
+    updateFPS(this.fpsText, this);
+
     // Update player movement
     updatePlayerMovement(
       gameState.player,

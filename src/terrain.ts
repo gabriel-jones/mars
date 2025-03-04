@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { TILE_SIZE } from "./config";
+import { TILE_SIZE } from "./constants";
 
 // Create a mars terrain tileset programmatically
 export function createMarsTileset(scene: Phaser.Scene): void {
