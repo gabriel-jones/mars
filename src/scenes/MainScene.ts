@@ -15,6 +15,7 @@ import { TILE_SIZE } from "../constants";
 import { TileType, tileData } from "../data/tiles";
 import { createFPS, updateFPS } from "../ui/fps";
 import { Starship } from "../entities/starship";
+import { Optimus, MiningDrone, Robot } from "../entities/robot";
 
 export class MainScene extends Phaser.Scene {
   private buildMenu: BuildMenu;
@@ -26,6 +27,9 @@ export class MainScene extends Phaser.Scene {
   private tileGroup: Phaser.GameObjects.Group | null = null;
   private fpsText: Phaser.GameObjects.Text;
   private starship: Starship;
+  private robots: Robot[] = [];
+  private miningDrones: MiningDrone[] = [];
+  private optimuses: Optimus[] = [];
 
   constructor() {
     super({ key: "MainScene" });
@@ -37,6 +41,7 @@ export class MainScene extends Phaser.Scene {
     // Load construction assets
     this.load.image("habitat", "assets/habitat.png");
     this.load.image("solar-panel", "assets/solar-panel.png");
+    this.load.image("mining-station", "assets/mining-station.png");
 
     // Tileset
     createMarsTileset(this);
@@ -48,6 +53,10 @@ export class MainScene extends Phaser.Scene {
     this.load.image("starship", "assets/starship.png");
     this.load.image("engine-flame", "assets/engine-flame.svg");
     this.load.svg("landingpad", "assets/landingpad.svg");
+
+    // Load robot assets
+    this.load.image("optimus", "assets/optimus.png");
+    this.load.svg("mining-drone", "assets/mining-drone.svg");
   }
 
   create() {
@@ -131,6 +140,13 @@ export class MainScene extends Phaser.Scene {
 
     // Place ice deposits on specific tiles
     this.placeIceDepositsOnTiles();
+
+    // Create robots
+    this.createRobots();
+
+    // Store current tile position in registry for robot panel to access
+    this.registry.set("player", gameState.player);
+    this.registry.set("currentTilePos", gameState.currentTilePos);
   }
 
   update(time: number, delta: number) {
@@ -163,6 +179,12 @@ export class MainScene extends Phaser.Scene {
 
     // Update starship
     this.starship.update();
+
+    // Update robots
+    this.updateRobots();
+
+    // Update registry values
+    this.registry.set("currentTilePos", gameState.currentTilePos);
   }
 
   private handleItemPlaced(itemName: string, x: number, y: number) {
@@ -312,5 +334,74 @@ export class MainScene extends Phaser.Scene {
       tile.x < map.width - 3 &&
       tile.y < map.height - 3
     );
+  }
+
+  // Create robots for the colony
+  private createRobots(): void {
+    // Create a few humanoid robots near the starship
+    for (let i = 0; i < 2; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = 100 + Math.random() * 50;
+      const x = this.starship.x + Math.cos(angle) * distance;
+      const y = this.starship.y + Math.sin(angle) * distance;
+
+      const optimus = new Optimus(this, x, y);
+      this.robots.push(optimus);
+      this.optimuses.push(optimus);
+
+      // Assign some initial tasks to the humanoid robot
+      // For example, move to a random position near the spawn point
+      const randomX = this.spawnPoint.x + (Math.random() - 0.5) * 200;
+      const randomY = this.spawnPoint.y + (Math.random() - 0.5) * 200;
+      optimus.moveToPosition(randomX, randomY);
+    }
+
+    // Create mining drones in areas with resources
+    // We'll create a few mining areas around the map
+    const miningAreas = [
+      {
+        x: this.spawnPoint.x + 300,
+        y: this.spawnPoint.y + 300,
+        width: 200,
+        height: 200,
+      },
+      {
+        x: this.spawnPoint.x - 300,
+        y: this.spawnPoint.y - 300,
+        width: 200,
+        height: 200,
+      },
+      {
+        x: this.spawnPoint.x + 300,
+        y: this.spawnPoint.y - 300,
+        width: 200,
+        height: 200,
+      },
+    ];
+
+    // Create a mining drone for each area
+    miningAreas.forEach((area) => {
+      const drone = new MiningDrone(
+        this,
+        area.x,
+        area.y,
+        area.width,
+        area.height
+      );
+
+      // Set the deposit target to the starship for now
+      drone.setDepositTarget(this.starship);
+
+      // Set the resource type to mine (silicon for regolith)
+      drone.setResourceType("silicon");
+
+      this.robots.push(drone);
+      this.miningDrones.push(drone);
+    });
+  }
+
+  // Update all robots
+  private updateRobots(): void {
+    this.robots.forEach((robot) => robot.update());
   }
 }

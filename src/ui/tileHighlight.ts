@@ -1,6 +1,8 @@
 import Phaser from "phaser";
 import { TILE_SIZE } from "../constants";
 
+const HIGHLIGHT_COLOR = 0x00ff00;
+
 // Create tile highlight
 export function createTileHighlight(
   scene: Phaser.Scene
@@ -10,9 +12,10 @@ export function createTileHighlight(
     0,
     TILE_SIZE,
     TILE_SIZE,
-    0x00ff00,
-    0.3
+    HIGHLIGHT_COLOR,
+    0
   );
+  highlightRect.setStrokeStyle(3, HIGHLIGHT_COLOR, 0.5);
   highlightRect.setOrigin(0);
   highlightRect.setVisible(false);
   return highlightRect;

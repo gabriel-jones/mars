@@ -41,7 +41,7 @@ function createRandomDustyMarsTile(
   graphics.fillStyle(dustColor);
 
   // Random number of dust specks for this tile pattern
-  const numSpecks = Phaser.Math.Between(30, 60); // Reduced count to balance larger size
+  const numSpecks = Phaser.Math.Between(0, 10); // Reduced count to balance larger size
 
   // Dust specks with varying opacity
   for (let i = 0; i < numSpecks; i++) {
@@ -56,7 +56,7 @@ function createRandomDustyMarsTile(
   }
 
   // Random number of clusters for this tile pattern
-  const numClusters = Phaser.Math.Between(4, 8); // Reduced count to balance larger size
+  const numClusters = Phaser.Math.Between(0, 2); // Reduced count to balance larger size
 
   // Add clusters of larger pixels for subtle variation
   for (let i = 0; i < numClusters; i++) {

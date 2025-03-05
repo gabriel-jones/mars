@@ -2,7 +2,7 @@
 export type BuildingType =
   | "habitat"
   | "solar-panel"
-  | "miner-drone"
+  | "mining-station"
   | "ice-drill";
 
 import { ResourceType } from "./resources";
@@ -29,6 +29,10 @@ export interface BuildMenuItem {
     type: ResourceType;
     amount: number;
   }[];
+  tileSize?: {
+    width: number;
+    height: number;
+  };
   placementType: PlacementType;
   locationType: LocationType;
   placementRequirements?: {
@@ -59,11 +63,15 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     locationType: LocationType.Outside,
   },
   {
-    buildingType: "miner-drone",
-    name: "Miner Drone",
+    buildingType: "mining-station",
+    name: "Mining Station",
     cost: [{ type: "iron", amount: 50 }],
     placementType: PlacementType.SingleTile,
     locationType: LocationType.Outside,
+    tileSize: {
+      width: 1,
+      height: 2,
+    },
   },
   {
     buildingType: "ice-drill",

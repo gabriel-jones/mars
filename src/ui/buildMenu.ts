@@ -62,10 +62,10 @@ export class BuildMenu {
     this.buildButton.setScrollFactor(0);
 
     this.buttonB = this.createButton({
-      text: "BUTTON B",
+      text: "ROBOTS",
       x: this.scene.cameras.main.width / 2 + 150,
       y: this.scene.cameras.main.height - 50,
-      onClick: () => console.log("Button B clicked!"),
+      onClick: () => console.log("robots button clicked!"),
     });
     this.buttonB.setScrollFactor(0);
 
@@ -76,44 +76,6 @@ export class BuildMenu {
     this.buildButton.setDepth(1000);
     this.buttonB.setDepth(1000);
     this.constructionPanel.setDepth(1000);
-  }
-
-  private createUIElements() {
-    // Create a container for UI elements
-    this.container = this.scene.add.container(0, 0);
-
-    // Create buttons
-    this.buildButton = this.createButton({
-      text: "BUILD",
-      x: this.scene.cameras.main.width / 2,
-      y: this.scene.cameras.main.height - 50,
-      onClick: () => this.toggleConstructionPanel(),
-    });
-
-    this.buttonB = this.createButton({
-      text: "BUTTON B",
-      x: this.scene.cameras.main.width / 2 + 150,
-      y: this.scene.cameras.main.height - 50,
-      onClick: () => console.log("Button B clicked!"),
-    });
-
-    this.createConstructionPanel();
-
-    // Add all UI elements to the container
-    this.container.add([
-      this.buildButton,
-      this.buttonB,
-      this.constructionPanel,
-    ]);
-
-    // Make sure UI elements are only visible to the UI camera
-    this.container.setDepth(1000);
-
-    // Make the main camera ignore the UI container
-    this.scene.cameras.main.ignore(this.container);
-
-    // Make sure the UI camera can see the UI container
-    this.uiCamera.ignore([]); // Clear any ignores
   }
 
   private createButton(config: ButtonConfig): Phaser.GameObjects.Container {
