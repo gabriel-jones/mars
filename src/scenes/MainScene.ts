@@ -14,6 +14,7 @@ import { RESOURCE_DEFINITIONS } from "../data/resources";
 import { TILE_SIZE } from "../constants";
 import { TileType, tileData } from "../data/tiles";
 import { createFPS, updateFPS } from "../ui/fps";
+import { Starship } from "../entities/starship";
 
 export class MainScene extends Phaser.Scene {
   private buildMenu: BuildMenu;
@@ -24,6 +25,7 @@ export class MainScene extends Phaser.Scene {
   private map: Phaser.Tilemaps.Tilemap;
   private tileGroup: Phaser.GameObjects.Group | null = null;
   private fpsText: Phaser.GameObjects.Text;
+  private starship: Starship;
 
   constructor() {
     super({ key: "MainScene" });
@@ -41,6 +43,11 @@ export class MainScene extends Phaser.Scene {
 
     // Load building sprites
     this.load.image("ice-drill", "assets/ice-drill.png");
+
+    // Load starship assets
+    this.load.image("starship", "assets/starship.png");
+    this.load.image("engine-flame", "assets/engine-flame.svg");
+    this.load.svg("landingpad", "assets/landingpad.svg");
   }
 
   create() {
@@ -113,6 +120,12 @@ export class MainScene extends Phaser.Scene {
       gameState.player.y
     );
 
+    // Create starship near spawn point
+    const starshipOffset = 200; // Distance from spawn point
+    const starshipX = this.spawnPoint.x + starshipOffset;
+    const starshipY = this.spawnPoint.y - starshipOffset; // Position above the spawn point
+    this.starship = new Starship(this, starshipX, starshipY);
+
     // Add resource nodes near the spawn point
     this.addResourceNodesNearSpawn();
 
@@ -147,6 +160,9 @@ export class MainScene extends Phaser.Scene {
 
     // Make resource nodes react to player movement
     this.updateResourceNodePhysics();
+
+    // Update starship
+    this.starship.update();
   }
 
   private handleItemPlaced(itemName: string, x: number, y: number) {

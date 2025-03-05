@@ -123,6 +123,7 @@ export const RESOURCE_DEFINITIONS: Resource[] = [
 export class ResourceManager {
   private static inventory: ResourceCount[] = [
     { type: "silicon", amount: 500 },
+    { type: "aluminium", amount: 500 },
     { type: "iron", amount: 500 },
     { type: "water", amount: 100 },
     { type: "oxygen", amount: 75 },

@@ -576,11 +576,24 @@ export class BuildMenu {
         // Check if placement is valid at this position
         this.placementValid = this.isPlacementValid(tileX, tileY);
 
+        // Check if we're adjacent to an existing habitat
+        const adjacentHabitat = BuildingManager.getAdjacentHabitat(
+          tileX,
+          tileY
+        );
+        const isExpandingHabitat = adjacentHabitat !== undefined;
+
         // Update preview color based on validity
         if (this.rangePreview) {
           if (this.placementValid) {
-            this.rangePreview.setStrokeStyle(2, 0x00ff00);
-            this.rangePreview.setFillStyle(0x00ff00, 0.3);
+            // Use a different color if we're expanding an existing habitat
+            if (isExpandingHabitat) {
+              this.rangePreview.setStrokeStyle(2, 0x00ffff); // Cyan for expansion
+              this.rangePreview.setFillStyle(0x00ffff, 0.3);
+            } else {
+              this.rangePreview.setStrokeStyle(2, 0x00ff00); // Green for new habitat
+              this.rangePreview.setFillStyle(0x00ff00, 0.3);
+            }
           } else {
             this.rangePreview.setStrokeStyle(2, 0xff0000);
             this.rangePreview.setFillStyle(0xff0000, 0.3);
@@ -624,11 +637,30 @@ export class BuildMenu {
           height
         );
 
+        // Check if we're adjacent to an existing habitat
+        let isExpandingHabitat = false;
+        for (let x = startX; x < startX + width; x++) {
+          for (let y = startY; y < startY + height; y++) {
+            const adjacentHabitat = BuildingManager.getAdjacentHabitat(x, y);
+            if (adjacentHabitat) {
+              isExpandingHabitat = true;
+              break;
+            }
+          }
+          if (isExpandingHabitat) break;
+        }
+
         // Update preview color based on validity
         if (this.rangePreview) {
           if (this.placementValid) {
-            this.rangePreview.setStrokeStyle(2, 0x00ff00);
-            this.rangePreview.setFillStyle(0x00ff00, 0.3);
+            // Use a different color if we're expanding an existing habitat
+            if (isExpandingHabitat) {
+              this.rangePreview.setStrokeStyle(2, 0x00ffff); // Cyan for expansion
+              this.rangePreview.setFillStyle(0x00ffff, 0.3);
+            } else {
+              this.rangePreview.setStrokeStyle(2, 0x00ff00); // Green for new habitat
+              this.rangePreview.setFillStyle(0x00ff00, 0.3);
+            }
           } else {
             this.rangePreview.setStrokeStyle(2, 0xff0000);
             this.rangePreview.setFillStyle(0xff0000, 0.3);

@@ -15,6 +15,47 @@ export class ResourceDisplay {
     this.container = this.scene.add.container(10, 10).setScrollFactor(0);
     this.createResourceDisplay();
   }
+  // Get emoji for resource type
+  private getResourceEmoji(type: ResourceType): string {
+    switch (type) {
+      // Life Support
+      case "oxygen":
+        return "🅾️";
+      case "water":
+        return "💧";
+      // Elements
+      case "silicon":
+        return "🧱";
+      case "sulphur":
+        return "🟡";
+      // Metals
+      case "iron":
+        return "🔘";
+      case "aluminium":
+        return "🔩";
+      case "magnesium":
+        return "✨";
+      case "calcium":
+        return "⚪️";
+      case "titanium":
+        return "⚫️";
+      case "potassium":
+        return "🧪";
+      case "sodium":
+        return "🧂";
+      // Food
+      case "carrots":
+        return "🥕";
+      case "tomatoes":
+        return "🍅";
+      case "potatoes":
+        return "🥔";
+      case "beans":
+        return "🫘";
+      default:
+        return "❓";
+    }
+  }
 
   private createResourceDisplay() {
     // Background panel - make it taller to accommodate groups
@@ -44,11 +85,12 @@ export class ResourceDisplay {
         resource.type === "iron" ||
         resource.type === "silicon"
       ) {
-        // Resource icon
-        const icon = this.scene.add
-          .image(20, yPosition, resource.type)
-          .setOrigin(0, 0.5)
-          .setScale(0.5);
+        // Resource emoji instead of icon
+        const emoji = this.scene.add
+          .text(20, yPosition, this.getResourceEmoji(resource.type), {
+            fontSize: "20px",
+          })
+          .setOrigin(0, 0.5);
 
         // Resource name and amount
         const text = this.scene.add
@@ -59,7 +101,7 @@ export class ResourceDisplay {
           .setOrigin(0, 0.5);
 
         this.resourceDisplays.set(resource.type, text);
-        this.container.add([icon, text]);
+        this.container.add([emoji, text]);
 
         yPosition += 25;
       } else {
@@ -91,9 +133,9 @@ export class ResourceDisplay {
         .on("pointerout", () => rowBackground.setFillStyle(0x000000, 0)) // Transparent on pointer out
         .on("pointerdown", () => this.toggleCategory(category));
 
-      // Category header
+      // Category header with total count (will be updated later)
       const headerText = this.scene.add
-        .text(20, 0, `${category} (${resourceTypes.length})`, {
+        .text(20, 0, `${category}: 0`, {
           fontSize: "16px",
           color: "#ffffff",
           fontStyle: "bold",
@@ -115,11 +157,12 @@ export class ResourceDisplay {
       resourceTypes.forEach((resourceType) => {
         const resource = ResourceManager.getResource(resourceType);
         if (resource) {
-          // Resource icon
-          const icon = this.scene.add
-            .image(20, resourceY, resourceType)
+          // Resource emoji instead of icon
+          const emoji = this.scene.add
+            .text(20, resourceY, this.getResourceEmoji(resourceType), {
+              fontSize: "20px",
+            })
             .setOrigin(0, 0.5)
-            .setScale(0.5)
             .setVisible(false); // Initially hidden
 
           // Resource name and amount
@@ -132,7 +175,7 @@ export class ResourceDisplay {
             .setVisible(false); // Initially hidden
 
           this.resourceDisplays.set(resourceType, text);
-          categoryContainer.add([icon, text]);
+          categoryContainer.add([emoji, text]);
 
           resourceY += 25;
         }
@@ -198,6 +241,8 @@ export class ResourceDisplay {
 
   update() {
     const inventory = ResourceManager.getInventory();
+
+    // Update individual resource displays
     inventory.forEach((item) => {
       const display = this.resourceDisplays.get(item.type);
       if (display) {
@@ -206,6 +251,28 @@ export class ResourceDisplay {
           display.setText(`${resource.name}: ${item.amount}`);
         }
       }
+    });
+
+    // Update category totals
+    this.categoryContainers.forEach((container, category) => {
+      const headerText = container.getAt(1) as Phaser.GameObjects.Text;
+
+      // Calculate total for this category
+      let categoryTotal = 0;
+      inventory.forEach((item) => {
+        // Skip silicon and iron since they're shown separately
+        if (item.type === "silicon" || item.type === "iron") {
+          return;
+        }
+
+        const resource = ResourceManager.getResource(item.type);
+        if (resource && resource.category === category) {
+          categoryTotal += item.amount;
+        }
+      });
+
+      // Update header text with total
+      headerText.setText(`${category}: ${categoryTotal}`);
     });
   }
 }

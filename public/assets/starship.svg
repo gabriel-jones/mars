@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="200px" height="500px" viewBox="0 0 200 500" version="1.1" xmlns="http://www.w3.org/2000/svg">
+    <title>SpaceX Starship</title>
+    <g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <!-- Main body -->
+        <path d="M100,10 C140,10 160,50 160,100 L160,400 C160,450 140,490 100,490 C60,490 40,450 40,400 L40,100 C40,50 60,10 100,10 Z" fill="#E0E0E0" stroke="#AAAAAA" stroke-width="2"></path>
+        
+        <!-- Windows -->
+        <circle cx="100" cy="80" r="10" fill="#87CEFA" stroke="#4682B4" stroke-width="1"></circle>
+        <circle cx="100" cy="110" r="10" fill="#87CEFA" stroke="#4682B4" stroke-width="1"></circle>
+        <circle cx="100" cy="140" r="10" fill="#87CEFA" stroke="#4682B4" stroke-width="1"></circle>
+        
+        <!-- Fins -->
+        <path d="M40,400 L10,470 L40,470 Z" fill="#E0E0E0" stroke="#AAAAAA" stroke-width="2"></path>
+        <path d="M160,400 L190,470 L160,470 Z" fill="#E0E0E0" stroke="#AAAAAA" stroke-width="2"></path>
+        
+        <!-- SpaceX logo -->
+        <text x="100" y="250" font-family="Arial" font-size="20" text-anchor="middle" fill="#000000">SPACEX</text>
+        
+        <!-- Nose cone -->
+        <path d="M100,10 C120,10 130,20 140,30 C130,20 120,0 100,0 C80,0 70,20 60,30 C70,20 80,10 100,10 Z" fill="#E0E0E0" stroke="#AAAAAA" stroke-width="2"></path>
+        
+        <!-- Engine section -->
+        <path d="M40,470 L40,490 L160,490 L160,470 Z" fill="#555555" stroke="#333333" stroke-width="2"></path>
+        
+        <!-- Engine nozzles -->
+        <circle cx="70" cy="480" r="10" fill="#333333" stroke="#222222" stroke-width="1"></circle>
+        <circle cx="100" cy="480" r="10" fill="#333333" stroke="#222222" stroke-width="1"></circle>
+        <circle cx="130" cy="480" r="10" fill="#333333" stroke="#222222" stroke-width="1"></circle>
+    </g>
+</svg> 

@@ -8,7 +8,7 @@ export enum ResourceNodeType {
 export class ResourceNode extends Phaser.GameObjects.Container {
   private resource: Resource;
   private amount: number;
-  private orb: Phaser.GameObjects.Graphics;
+  private emojiText: Phaser.GameObjects.Text;
   private pulseEffect: Phaser.Tweens.Tween;
   private label: Phaser.GameObjects.Text;
   public tileX: number;
@@ -26,10 +26,13 @@ export class ResourceNode extends Phaser.GameObjects.Container {
     this.resource = resource;
     this.amount = amount;
 
-    // Create the orb graphic
-    this.orb = scene.add.graphics();
-    this.drawOrb();
-    this.add(this.orb);
+    // Create the emoji text instead of orb graphic
+    this.emojiText = scene.add
+      .text(0, 0, this.getResourceEmoji(), {
+        fontSize: "32px",
+      })
+      .setOrigin(0.5);
+    this.add(this.emojiText);
 
     // Add a label showing the resource type
     this.label = scene.add
@@ -43,9 +46,9 @@ export class ResourceNode extends Phaser.GameObjects.Container {
       .setOrigin(0.5);
     this.add(this.label);
 
-    // Add a pulsing effect
+    // Add a pulsing effect to the emoji
     this.pulseEffect = scene.tweens.add({
-      targets: this.orb,
+      targets: this.emojiText,
       scaleX: 1.1,
       scaleY: 1.1,
       duration: 1000,
@@ -69,46 +72,45 @@ export class ResourceNode extends Phaser.GameObjects.Container {
     scene.add.existing(this);
   }
 
-  private drawOrb(): void {
-    const color = this.getResourceColor();
-    const radius = 15;
-
-    this.orb.clear();
-
-    // Draw the main orb
-    this.orb.fillStyle(color, 1);
-    this.orb.fillCircle(0, 0, radius);
-
-    // Add a highlight effect
-    this.orb.fillStyle(0xffffff, 0.5);
-    this.orb.fillCircle(-radius / 3, -radius / 3, radius / 3);
-
-    // Add a subtle glow
-    for (let i = 1; i <= 3; i++) {
-      this.orb.fillStyle(color, 0.1 - i * 0.03);
-      this.orb.fillCircle(0, 0, radius + i * 5);
-    }
-  }
-
-  private getResourceColor(): number {
-    switch (this.resource.category) {
-      case "food":
-        return 0x2ecc71; // Green
-      case "metals":
-        return 0xbdc3c7; // Silver
-      case "elements":
-        return 0x9b59b6; // Purple
-      case "life-support":
-        switch (this.resource.type) {
-          case "oxygen":
-            return 0xff0000; // Red
-          case "water":
-            return 0x3498db; // Blue
-          default:
-            return 0xffffff; // White
-        }
+  // Get emoji for resource type
+  private getResourceEmoji(): string {
+    switch (this.resource.type) {
+      // Life Support
+      case "oxygen":
+        return "💨"; // Wind emoji for oxygen
+      case "water":
+        return "💧"; // Water droplet
+      // Elements
+      case "silicon":
+        return "🔷"; // Blue diamond for silicon
+      case "sulphur":
+        return "🟡"; // Yellow circle for sulphur
+      // Metals
+      case "iron":
+        return "⚙️"; // Gear for iron
+      case "aluminium":
+        return "🥫"; // Can for aluminium
+      case "magnesium":
+        return "✨"; // Sparkles for magnesium
+      case "calcium":
+        return "🦴"; // Bone for calcium
+      case "titanium":
+        return "🔩"; // Nut and bolt for titanium
+      case "potassium":
+        return "🧪"; // Test tube for potassium
+      case "sodium":
+        return "🧂"; // Salt for sodium
+      // Food
+      case "carrots":
+        return "🥕"; // Carrot
+      case "tomatoes":
+        return "🍅"; // Tomato
+      case "potatoes":
+        return "🥔"; // Potato
+      case "beans":
+        return "🫘"; // Beans
       default:
-        return 0xffffff; // White
+        return "❓"; // Question mark for unknown resources
     }
   }
 

@@ -11,7 +11,8 @@ export function createPlayer(
 
   const player = scene.physics.add
     .sprite(centerX, centerY, "player")
-    .setDisplaySize(64, 64);
+    .setDisplaySize(64, 64)
+    .setDepth(10);
   player.setCollideWorldBounds(true);
   return player;
 }

@@ -55,7 +55,7 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
       { type: "silicon", amount: 50 },
       { type: "aluminium", amount: 15 },
     ],
-    placementType: PlacementType.SingleTile,
+    placementType: PlacementType.RangeSelect,
     locationType: LocationType.Outside,
   },
   {
@@ -100,13 +100,21 @@ export interface Building {
   placementRequirements?: {
     onlyOn?: ResourceNodeType[];
   };
+  habitatId?: string;
+  tiles?: { x: number; y: number }[];
 }
 
 // Store for all placed buildings
 export class BuildingManager {
   private static buildings: Building[] = [];
+  private static nextHabitatId: number = 1;
 
   static addBuilding(building: Building): void {
+    // Generate a unique ID for habitats
+    if (building.type === "habitat" && !building.habitatId) {
+      building.habitatId = `habitat-${this.nextHabitatId++}`;
+    }
+
     this.buildings.push(building);
     console.log(
       `Building added: ${building.type} at (${building.position.x}, ${
@@ -115,7 +123,7 @@ export class BuildingManager {
         building.size
           ? ` with size ${building.size.width}x${building.size.height}`
           : ""
-      }`
+      }${building.tiles ? ` with ${building.tiles.length} tiles` : ""}`
     );
   }
 
@@ -129,12 +137,17 @@ export class BuildingManager {
 
   static getBuildingAt(x: number, y: number): Building | undefined {
     return this.buildings.find((building) => {
+      // For habitats with tiles array
+      if (building.tiles) {
+        return building.tiles.some((tile) => tile.x === x && tile.y === y);
+      }
+
       // For single-tile buildings
       if (!building.size) {
         return building.position.x === x && building.position.y === y;
       }
 
-      // For range-based buildings (like habitats)
+      // For range-based buildings (legacy support)
       const startX = building.position.x;
       const startY = building.position.y;
       const endX = startX + (building.size.width - 1);
@@ -146,12 +159,17 @@ export class BuildingManager {
 
   static isTileOccupied(x: number, y: number): boolean {
     return this.buildings.some((building) => {
+      // For habitats with tiles array
+      if (building.tiles) {
+        return building.tiles.some((tile) => tile.x === x && tile.y === y);
+      }
+
       // For single-tile buildings
       if (!building.size) {
         return building.position.x === x && building.position.y === y;
       }
 
-      // For range-based buildings (like habitats)
+      // For range-based buildings (legacy support)
       const startX = building.position.x;
       const startY = building.position.y;
       const endX = startX + (building.size.width - 1);
@@ -159,5 +177,44 @@ export class BuildingManager {
 
       return x >= startX && x <= endX && y >= startY && y <= endY;
     });
+  }
+
+  static getAdjacentHabitat(x: number, y: number): Building | undefined {
+    // Check if any habitat is adjacent to the given tile
+    return this.buildings.find((building) => {
+      if (building.type !== "habitat" || !building.tiles) {
+        return false;
+      }
+
+      // Check if any tile in the habitat is adjacent to the given tile
+      return building.tiles.some(
+        (tile) =>
+          // Check all 4 adjacent tiles
+          (Math.abs(tile.x - x) === 1 && tile.y === y) ||
+          (Math.abs(tile.y - y) === 1 && tile.x === x)
+      );
+    });
+  }
+
+  static expandHabitat(
+    habitatId: string,
+    newTiles: { x: number; y: number }[]
+  ): boolean {
+    const habitat = this.buildings.find(
+      (building) =>
+        building.type === "habitat" && building.habitatId === habitatId
+    );
+
+    if (!habitat || !habitat.tiles) {
+      return false;
+    }
+
+    // Add new tiles to the habitat
+    habitat.tiles.push(...newTiles);
+
+    console.log(
+      `Habitat ${habitatId} expanded with ${newTiles.length} new tiles. Total: ${habitat.tiles.length} tiles`
+    );
+    return true;
   }
 }
