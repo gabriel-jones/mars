@@ -77,6 +77,12 @@ export class ResourceNode extends Phaser.GameObjects.Container {
     return this.amount;
   }
 
+  public addAmount(amount: number): void {
+    this.amount += amount;
+    // Update the label to show the new amount
+    this.label.setText(`${this.resource.type} (${this.amount})`);
+  }
+
   public harvest(amount: number): number {
     const harvestedAmount = Math.min(amount, this.amount);
     this.amount -= harvestedAmount;

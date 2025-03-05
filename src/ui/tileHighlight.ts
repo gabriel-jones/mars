@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { TILE_SIZE } from "../constants";
 
-const HIGHLIGHT_COLOR = 0x00ff00;
+const HIGHLIGHT_COLOR = 0xffffff;
 
 // Create tile highlight
 export function createTileHighlight(

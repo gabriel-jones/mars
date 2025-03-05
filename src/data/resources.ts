@@ -19,6 +19,7 @@ export type ResourceType =
   | "potassium"
   | "sodium"
   // Life Support
+  | "energy"
   | "oxygen"
   | "water";
 
@@ -27,6 +28,7 @@ export interface Resource {
   category?: ResourceCategory;
   name: string;
   emoji: string;
+  occurrenceRate?: number; // Rate at which this resource occurs in regolith (0-1)
 }
 
 export interface ResourceCount {
@@ -71,6 +73,7 @@ export const RESOURCE_DEFINITIONS: Resource[] = [
     category: "elements",
     name: "Silicon",
     emoji: "🧱",
+    occurrenceRate: 0.4, // 40% occurrence in regolith
   },
   {
     type: "regolith",
@@ -83,6 +86,7 @@ export const RESOURCE_DEFINITIONS: Resource[] = [
     category: "elements",
     name: "Sulphur",
     emoji: "🟡",
+    occurrenceRate: 0.05, // 5% occurrence in regolith
   },
 
   // Metals
@@ -91,44 +95,57 @@ export const RESOURCE_DEFINITIONS: Resource[] = [
     category: "metals",
     name: "Iron",
     emoji: "🔘",
+    occurrenceRate: 0.2, // 20% occurrence in regolith
   },
   {
     type: "aluminium",
     category: "metals",
     name: "Aluminium",
     emoji: "🔩",
+    occurrenceRate: 0.1, // 10% occurrence in regolith
   },
   {
     type: "magnesium",
     category: "metals",
     name: "Magnesium",
     emoji: "✨",
+    occurrenceRate: 0.1, // 10% occurrence in regolith
   },
   {
     type: "calcium",
     category: "metals",
     name: "Calcium",
     emoji: "🦴",
+    occurrenceRate: 0.08, // 8% occurrence in regolith
   },
   {
     type: "titanium",
     category: "metals",
     name: "Titanium",
     emoji: "🔩",
+    occurrenceRate: 0.02, // 2% occurrence in regolith
   },
   {
     type: "potassium",
     category: "metals",
     name: "Potassium",
     emoji: "🧪",
+    occurrenceRate: 0.01, // 1% occurrence in regolith
   },
   {
     type: "sodium",
     category: "metals",
     name: "Sodium",
     emoji: "🧂",
+    occurrenceRate: 0.02, // 2% occurrence in regolith
   },
   // Life Support
+  {
+    type: "energy",
+    category: "life-support",
+    name: "Energy",
+    emoji: "⚡️",
+  },
   {
     type: "water",
     category: "life-support",

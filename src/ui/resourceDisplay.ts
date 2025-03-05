@@ -1,6 +1,14 @@
 import Phaser from "phaser";
 import { ResourceManager, ResourceType } from "../data/resources";
 
+const TOP_LEVEL_RESOURCES: ResourceType[] = [
+  "energy",
+  "oxygen",
+  "water",
+  "iron",
+  "silicon",
+];
+
 export class ResourceDisplay {
   private scene: Phaser.Scene;
   private container: Phaser.GameObjects.Container;
@@ -14,47 +22,6 @@ export class ResourceDisplay {
     this.scene = scene;
     this.container = this.scene.add.container(10, 10).setScrollFactor(0);
     this.createResourceDisplay();
-  }
-  // Get emoji for resource type
-  private getResourceEmoji(type: ResourceType): string {
-    switch (type) {
-      // Life Support
-      case "oxygen":
-        return "🅾️";
-      case "water":
-        return "💧";
-      // Elements
-      case "silicon":
-        return "🧱";
-      case "sulphur":
-        return "🟡";
-      // Metals
-      case "iron":
-        return "🔘";
-      case "aluminium":
-        return "🔩";
-      case "magnesium":
-        return "✨";
-      case "calcium":
-        return "⚪️";
-      case "titanium":
-        return "⚫️";
-      case "potassium":
-        return "🧪";
-      case "sodium":
-        return "🧂";
-      // Food
-      case "carrots":
-        return "🥕";
-      case "tomatoes":
-        return "🍅";
-      case "potatoes":
-        return "🥔";
-      case "beans":
-        return "🫘";
-      default:
-        return "❓";
-    }
   }
 
   private createResourceDisplay() {
@@ -79,15 +46,10 @@ export class ResourceDisplay {
 
     resources.forEach((resource) => {
       // Common resources to display separately
-      if (
-        resource.type === "oxygen" ||
-        resource.type === "water" ||
-        resource.type === "iron" ||
-        resource.type === "silicon"
-      ) {
+      if (TOP_LEVEL_RESOURCES.includes(resource.type)) {
         // Resource emoji instead of icon
         const emoji = this.scene.add
-          .text(20, yPosition, this.getResourceEmoji(resource.type), {
+          .text(20, yPosition, resource.emoji, {
             fontSize: "20px",
           })
           .setOrigin(0, 0.5);
@@ -159,7 +121,7 @@ export class ResourceDisplay {
         if (resource) {
           // Resource emoji instead of icon
           const emoji = this.scene.add
-            .text(20, resourceY, this.getResourceEmoji(resourceType), {
+            .text(20, resourceY, resource.emoji, {
               fontSize: "20px",
             })
             .setOrigin(0, 0.5)
@@ -194,10 +156,12 @@ export class ResourceDisplay {
     this.categoryStates.set(category, !isExpanded);
 
     const container = this.categoryContainers.get(category);
-    if (container) {
+    if (container && container.length >= 3) {
       // Update expand/collapse button text
       const expandButton = container.getAt(2) as Phaser.GameObjects.Text;
-      expandButton.setText(isExpanded ? "+" : "-");
+      if (expandButton) {
+        expandButton.setText(isExpanded ? "+" : "-");
+      }
 
       // Show/hide resource items
       for (let i = 3; i < container.length; i++) {
@@ -206,7 +170,7 @@ export class ResourceDisplay {
         ) as Phaser.GameObjects.GameObject & {
           setVisible: (visible: boolean) => void;
         };
-        if (gameObject) {
+        if (gameObject && typeof gameObject.setVisible === "function") {
           gameObject.setVisible(!isExpanded);
         }
       }
@@ -217,26 +181,33 @@ export class ResourceDisplay {
   }
 
   private updateCategoryPositions() {
-    // Adjust starting position based on number of standalone resources (now 4 instead of 2)
-    let yPosition = 115; // Start after Oxygen, Water, Iron, and Silicon (15 + 4*25)
+    // Dynamically calculate starting position based on number of top-level resources
+    const topLevelResourcesCount = TOP_LEVEL_RESOURCES.length;
+    let yPosition = 15 + topLevelResourcesCount * 25; // Initial offset + height per resource
 
     // Adjust positions based on expanded/collapsed state
     this.categoryContainers.forEach((container, category) => {
-      container.setY(yPosition);
+      if (container) {
+        container.setY(yPosition);
 
-      const isExpanded = this.categoryStates.get(category) || false;
-      const resourceCount = (container.length - 3) / 2; // Subtract header, button, and row background, divide by 2 (icon + text)
+        const isExpanded = this.categoryStates.get(category) || false;
+        const resourceCount = (container.length - 3) / 2; // Subtract header, button, and row background, divide by 2 (icon + text)
 
-      // Move to next category position
-      yPosition += 30; // Header height
-      if (isExpanded) {
-        yPosition += resourceCount * 25; // Add height for visible resources
+        // Move to next category position
+        yPosition += 30; // Header height
+        if (isExpanded) {
+          yPosition += resourceCount * 25; // Add height for visible resources
+        }
       }
     });
 
     // Adjust panel height
-    const panel = this.container.getAt(0) as Phaser.GameObjects.Rectangle;
-    panel.height = Math.max(200, yPosition + 10);
+    if (this.container && this.container.length > 0) {
+      const panel = this.container.getAt(0) as Phaser.GameObjects.Rectangle;
+      if (panel && typeof panel.height !== "undefined") {
+        panel.height = Math.max(200, yPosition + 10);
+      }
+    }
   }
 
   update() {
@@ -255,24 +226,30 @@ export class ResourceDisplay {
 
     // Update category totals
     this.categoryContainers.forEach((container, category) => {
-      const headerText = container.getAt(1) as Phaser.GameObjects.Text;
+      // Make sure container has at least 2 elements before trying to access index 1
+      if (container && container.length > 1) {
+        const headerText = container.getAt(1) as Phaser.GameObjects.Text;
 
-      // Calculate total for this category
-      let categoryTotal = 0;
-      inventory.forEach((item) => {
-        // Skip silicon and iron since they're shown separately
-        if (item.type === "silicon" || item.type === "iron") {
-          return;
+        // Add null check before calling setText
+        if (headerText) {
+          // Calculate total for this category
+          let categoryTotal = 0;
+          inventory.forEach((item) => {
+            // Skip silicon and iron since they're shown separately
+            if (TOP_LEVEL_RESOURCES.includes(item.type)) {
+              return;
+            }
+
+            const resource = ResourceManager.getResource(item.type);
+            if (resource && resource.category === category) {
+              categoryTotal += item.amount;
+            }
+          });
+
+          // Update header text with total
+          headerText.setText(`${category}: ${categoryTotal}`);
         }
-
-        const resource = ResourceManager.getResource(item.type);
-        if (resource && resource.category === category) {
-          categoryTotal += item.amount;
-        }
-      });
-
-      // Update header text with total
-      headerText.setText(`${category}: ${categoryTotal}`);
+      }
     });
   }
 }

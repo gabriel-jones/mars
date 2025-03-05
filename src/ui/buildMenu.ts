@@ -14,11 +14,15 @@ export class BuildMenu {
   private scene: Phaser.Scene;
   private buildButton: Phaser.GameObjects.Container;
   private buttonB: Phaser.GameObjects.Container;
+  private bulldozeButton: Phaser.GameObjects.Container;
   private buildButtonBg: Phaser.GameObjects.Rectangle;
   private buildButtonBorder: Phaser.GameObjects.Rectangle;
+  private bulldozeButtonBg: Phaser.GameObjects.Rectangle;
+  private bulldozeButtonBorder: Phaser.GameObjects.Rectangle;
   private constructionPanel: Phaser.GameObjects.Container;
   private isConstructionPanelOpen: boolean = false;
   private buildingPlacer: BuildingPlacer;
+  private isBulldozeModeActive: boolean = false;
 
   constructor(
     scene: Phaser.Scene,
@@ -30,18 +34,37 @@ export class BuildMenu {
     // Create the building placer
     this.buildingPlacer = new BuildingPlacer(scene, map, onItemPlaced);
 
+    // Add keyboard listener for Escape key
+    if (this.scene.input && this.scene.input.keyboard) {
+      this.scene.input.keyboard.on("keydown-ESC", () => {
+        if (this.isBulldozeModeActive) {
+          this.toggleBulldozeMode(false);
+        } else if (this.isConstructionPanelOpen) {
+          this.toggleConstructionPanel(false);
+        }
+      });
+    }
+
     // Create buttons with fixed position
     this.buildButton = this.createButton({
       text: "BUILD",
-      x: this.scene.cameras.main.width / 2,
+      x: this.scene.cameras.main.width / 2 - 75,
       y: this.scene.cameras.main.height - 50,
       onClick: () => this.toggleConstructionPanel(),
     });
     this.buildButton.setScrollFactor(0);
 
+    this.bulldozeButton = this.createButton({
+      text: "BULLDOZE",
+      x: this.scene.cameras.main.width / 2 + 75,
+      y: this.scene.cameras.main.height - 50,
+      onClick: () => this.toggleBulldozeMode(),
+    });
+    this.bulldozeButton.setScrollFactor(0);
+
     this.buttonB = this.createButton({
       text: "ROBOTS",
-      x: this.scene.cameras.main.width / 2 + 150,
+      x: this.scene.cameras.main.width / 2 + 225,
       y: this.scene.cameras.main.height - 50,
       onClick: () => console.log("robots button clicked!"),
     });
@@ -52,6 +75,7 @@ export class BuildMenu {
 
     // Set high depth to ensure UI is on top
     this.buildButton.setDepth(1000);
+    this.bulldozeButton.setDepth(1000);
     this.buttonB.setDepth(1000);
     this.constructionPanel.setDepth(1000);
   }
@@ -108,6 +132,9 @@ export class BuildMenu {
     if (config.text === "BUILD") {
       this.buildButtonBg = buttonBg;
       this.buildButtonBorder = buttonBorder;
+    } else if (config.text === "BULLDOZE") {
+      this.bulldozeButtonBg = buttonBg;
+      this.bulldozeButtonBorder = buttonBorder;
     }
 
     return button;
@@ -269,6 +296,11 @@ export class BuildMenu {
   }
 
   private toggleConstructionPanel(forceState?: boolean) {
+    // Exit bulldoze mode if it's active
+    if (this.isBulldozeModeActive) {
+      this.toggleBulldozeMode(false);
+    }
+
     this.isConstructionPanelOpen =
       forceState !== undefined ? forceState : !this.isConstructionPanelOpen;
 
@@ -285,6 +317,32 @@ export class BuildMenu {
 
       // Cancel placement if panel is closed
       this.buildingPlacer.cancelPlacement();
+    }
+  }
+
+  private toggleBulldozeMode(forceState?: boolean) {
+    // Close construction panel if it's open
+    if (this.isConstructionPanelOpen) {
+      this.toggleConstructionPanel(false);
+    }
+
+    this.isBulldozeModeActive =
+      forceState !== undefined ? forceState : !this.isBulldozeModeActive;
+
+    if (this.isBulldozeModeActive) {
+      // Enter bulldoze mode
+      this.buildingPlacer.enterBulldozeMode();
+
+      // Highlight the bulldoze button
+      this.bulldozeButtonBg.setFillStyle(0x666666);
+      this.bulldozeButtonBorder.setStrokeStyle(3, 0xff0000);
+    } else {
+      // Exit bulldoze mode
+      this.buildingPlacer.exitBulldozeMode();
+
+      // Reset bulldoze button appearance
+      this.bulldozeButtonBg.setFillStyle(0x444444);
+      this.bulldozeButtonBorder.setStrokeStyle(2, 0xffffff);
     }
   }
 

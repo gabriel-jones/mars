@@ -287,4 +287,30 @@ export class BuildingManager {
       );
     });
   }
+
+  static removeBuilding(x: number, y: number): Building | undefined {
+    // Find the building at the given position
+    const building = this.getBuildingAt(x, y);
+
+    if (!building) {
+      return undefined;
+    }
+
+    // Remove the building from the array
+    const index = this.buildings.findIndex((b) => b === building);
+    if (index !== -1) {
+      this.buildings.splice(index, 1);
+
+      // Update gameState.buildings to keep it in sync
+      gameState.buildings = this.buildings;
+
+      console.log(
+        `Building removed: ${building.type} at (${building.position.x}, ${building.position.y})`
+      );
+
+      return building;
+    }
+
+    return undefined;
+  }
 }

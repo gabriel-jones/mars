@@ -24,6 +24,7 @@ import {
   BuildingFactory,
 } from "../entities/buildings";
 import { BuildingType } from "../data/buildings";
+import { Building } from "../entities/buildings/Building";
 
 export class MainScene extends Phaser.Scene {
   private buildMenu: BuildMenu;
@@ -44,32 +45,33 @@ export class MainScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image("player", "assets/player.png");
-
-    // Load construction assets
-    this.load.image("habitat", "assets/habitat.png");
-    this.load.image("solar-panel", "assets/solar-panel.png");
-    this.load.image("mining-station", "assets/mining-station.png");
-
     // Tileset
     createMarsTileset(this);
 
-    // Load building sprites
+    // Player
+    this.load.image("player", "assets/player.png");
+
+    // Buildings
+    this.load.image("habitat", "assets/habitat.png");
+    this.load.image("solar-panel", "assets/solar-panel.png");
+    this.load.image("mining-station", "assets/mining-station.png");
     this.load.image("ice-drill", "assets/ice-drill.png");
+    this.load.image("regolith-processor", "assets/regolith-processor.png");
 
-    // Load starship assets
+    // Starship
     this.load.image("starship", "assets/starship.png");
-    this.load.image("engine-flame", "assets/engine-flame.svg");
-    this.load.svg("landingpad", "assets/landingpad.svg");
+    this.load.image("landingpad", "assets/landing-pad.png");
+    this.load.svg("engine-flame", "assets/engine-flame.svg");
 
-    // Load robot assets
+    // Robots
     this.load.image("optimus", "assets/optimus.png");
     this.load.image("mining-drone", "assets/mining-drone.png");
-    this.load.image("regolith-processor", "assets/regolith-processor.png");
-    this.load.image("flare", "assets/flare.svg"); // Particle effect for mining
 
-    // Load SVGs
-    this.load.svg("mining-drone", "assets/mining-drone.svg");
+    // Particles
+    this.load.image("flare", "assets/flare.png"); // Particle effect for mining
+
+    // Other
+    this.load.svg("bulldozer", "assets/bulldozer.svg");
   }
 
   create() {
@@ -195,6 +197,9 @@ export class MainScene extends Phaser.Scene {
 
     // Update robots
     this.updateRobots();
+
+    // Update buildings
+    this.updateBuildings();
 
     // Update registry values
     this.registry.set("currentTilePos", gameState.currentTilePos);
@@ -390,5 +395,18 @@ export class MainScene extends Phaser.Scene {
     } else if (robot instanceof Optimus) {
       this.optimuses.push(robot);
     }
+  }
+
+  // Update all buildings in the game
+  private updateBuildings(): void {
+    // Get all building game objects from the scene
+    const buildings = this.children.list.filter(
+      (child) => child instanceof Building
+    ) as Building[];
+
+    // Update each building
+    buildings.forEach((building) => {
+      building.update();
+    });
   }
 }

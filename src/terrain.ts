@@ -20,7 +20,11 @@ export function createMarsTileset(scene: Phaser.Scene): void {
 
   // Define a color palette for different richness levels
   const colorPalette = {
-    base: 0xc97c5e, // Muted terracotta (main color)
+    // Base colors - darker for higher richness
+    baseLow: 0xc97c5e, // Muted terracotta (standard color)
+    baseMedium: 0xc17456, // Slightly darker base for medium richness
+    baseHigh: 0xb06a4c, // Darker terracotta for high richness, less orange more brown
+    // Dust colors
     low: 0xb66c50, // Lighter color for dust specks in low-richness areas
     medium: 0xd88c6e, // Medium richness
     high: 0xe67e5d, // High richness
@@ -36,19 +40,22 @@ export function createMarsTileset(scene: Phaser.Scene): void {
     const tileX = (tileIndex % 5) * TILE_SIZE;
     const tileY = Math.floor(tileIndex / 5) * TILE_SIZE;
 
-    // Determine richness level and colors
-    let dustColor, speckMultiplier;
+    // Determine richness level, base color, dust color, and speck multiplier
+    let baseColor, dustColor, speckMultiplier;
 
     if (tileIndex < 5) {
       // Low richness
+      baseColor = colorPalette.baseLow;
       dustColor = colorPalette.low;
       speckMultiplier = 1;
     } else if (tileIndex < 10) {
       // Medium richness
+      baseColor = colorPalette.baseMedium;
       dustColor = colorPalette.medium;
       speckMultiplier = 1.5;
     } else {
       // High richness
+      baseColor = colorPalette.baseHigh;
       dustColor = colorPalette.high;
       speckMultiplier = 2;
     }
@@ -58,7 +65,7 @@ export function createMarsTileset(scene: Phaser.Scene): void {
       graphics,
       tileX,
       tileY,
-      colorPalette.base,
+      baseColor,
       dustColor,
       speckMultiplier
     );
@@ -81,6 +88,29 @@ function createRandomDustyMarsTile(
   // Fill with base color
   graphics.fillStyle(baseColor);
   graphics.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+
+  // Add subtle darker patches for higher richness areas
+  if (speckMultiplier > 1) {
+    // Add darker patches to indicate resource concentration
+    const darkerColor = Phaser.Display.Color.ValueToColor(baseColor).darken(
+      10 * (speckMultiplier - 1)
+    ).color;
+
+    graphics.fillStyle(darkerColor);
+
+    // Number of patches increases with richness
+    const numPatches = Math.floor(speckMultiplier * 2);
+
+    for (let i = 0; i < numPatches; i++) {
+      const patchX = Phaser.Math.Between(4, TILE_SIZE - 12) + x;
+      const patchY = Phaser.Math.Between(4, TILE_SIZE - 12) + y;
+      const patchSize = Phaser.Math.Between(6, 12);
+      const alpha = Phaser.Math.FloatBetween(0.2, 0.4);
+
+      graphics.setAlpha(alpha);
+      graphics.fillRect(patchX, patchY, patchSize, patchSize);
+    }
+  }
 
   // Add random dust specks as larger pixels
   graphics.fillStyle(dustColor);
@@ -154,20 +184,39 @@ function createRandomDustyMarsTile(
     }
 
     // For very rich areas (speckMultiplier >= 2), add small glints
-    if (speckMultiplier >= 2) {
-      const numGlints = Phaser.Math.Between(2, 4);
+    // if (speckMultiplier >= 2) {
+    //   // Add a subtle color overlay to indicate very rich areas
+    //   graphics.fillStyle(0xf56e42); // Orange-red color
+    //   graphics.setAlpha(0.1); // Very subtle
+    //   graphics.fillRect(x, y, TILE_SIZE, TILE_SIZE);
 
-      for (let i = 0; i < numGlints; i++) {
-        const glintX = Phaser.Math.Between(5, TILE_SIZE - 5) + x;
-        const glintY = Phaser.Math.Between(5, TILE_SIZE - 5) + y;
-        const glintSize = Phaser.Math.Between(1, 2);
+    //   // Add more prominent glints
+    //   const numGlints = Phaser.Math.Between(3, 6); // Increased number of glints
 
-        // Bright glint
-        graphics.setAlpha(0.7);
-        graphics.fillStyle(0xffffff); // White glint
-        graphics.fillRect(glintX, glintY, glintSize, glintSize);
-      }
-    }
+    //   for (let i = 0; i < numGlints; i++) {
+    //     const glintX = Phaser.Math.Between(5, TILE_SIZE - 5) + x;
+    //     const glintY = Phaser.Math.Between(5, TILE_SIZE - 5) + y;
+    //     const glintSize = Phaser.Math.Between(1, 3); // Slightly larger glints
+
+    //     // Bright glint
+    //     graphics.setAlpha(0.8); // More visible
+    //     graphics.fillStyle(0xffffff); // White glint
+    //     graphics.fillRect(glintX, glintY, glintSize, glintSize);
+
+    //     // Add a subtle glow effect around some glints
+    //     if (i % 2 === 0) {
+    //       // Only for some glints
+    //       graphics.setAlpha(0.3);
+    //       graphics.fillStyle(0xffcc00); // Yellow-orange glow
+    //       graphics.fillRect(
+    //         glintX - 1,
+    //         glintY - 1,
+    //         glintSize + 2,
+    //         glintSize + 2
+    //       );
+    //     }
+    //   }
+    // }
   }
 
   // Reset alpha

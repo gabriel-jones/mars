@@ -28,6 +28,8 @@ export class BuildingPlacer {
   private rangePreview: Phaser.GameObjects.Rectangle | null = null;
   private selectedBuildingDef: BuildMenuItem | null = null;
   private pointerWasDown: boolean = false;
+  private bulldozeMode: boolean = false;
+  private bulldozeSprite: Phaser.GameObjects.Sprite | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -37,9 +39,25 @@ export class BuildingPlacer {
     this.scene = scene;
     this.map = map;
     this.onItemPlaced = onItemPlaced;
+
+    // Add keyboard listener for Escape key
+    if (this.scene.input && this.scene.input.keyboard) {
+      this.scene.input.keyboard.on("keydown-ESC", () => {
+        if (this.bulldozeMode) {
+          this.exitBulldozeMode();
+        } else if (this.selectedItem) {
+          this.cancelPlacement();
+        }
+      });
+    }
   }
 
   selectBuildingType(buildingType: BuildingType) {
+    // Exit bulldoze mode if it was active
+    if (this.bulldozeMode) {
+      this.exitBulldozeMode();
+    }
+
     this.selectedItem = buildingType;
 
     // Find the building definition
@@ -179,6 +197,12 @@ export class BuildingPlacer {
   }
 
   cancelPlacement() {
+    // Exit bulldoze mode if active
+    if (this.bulldozeMode) {
+      this.exitBulldozeMode();
+      return;
+    }
+
     // Clean up any mining station preview
     if (this.selectedItem === "mining-station") {
       MiningStation.cleanupPreview();
@@ -190,6 +214,12 @@ export class BuildingPlacer {
   }
 
   update() {
+    // Handle bulldoze mode
+    if (this.bulldozeMode) {
+      this.updateBulldozeMode();
+      return;
+    }
+
     if (!this.selectedItem || !this.selectedBuildingDef) return;
 
     // Get the current pointer position in world coordinates
@@ -721,5 +751,179 @@ export class BuildingPlacer {
     // Reset selection
     this.selectedItem = null;
     this.selectedBuildingDef = null;
+  }
+
+  enterBulldozeMode() {
+    // Cancel any ongoing placement
+    this.cancelPlacement();
+
+    // Set bulldoze mode
+    this.bulldozeMode = true;
+
+    // Create bulldoze cursor sprite
+    this.bulldozeSprite = this.scene.add.sprite(0, 0, "bulldozer");
+    this.bulldozeSprite.setOrigin(0.5);
+    this.bulldozeSprite.setAlpha(0.8);
+    this.bulldozeSprite.setScale(0.5);
+    this.bulldozeSprite.setDepth(100);
+
+    // Add instruction text
+    this.instructionText = this.scene.add
+      .text(
+        this.scene.cameras.main.width / 2,
+        50,
+        "Click on a building to remove it (ESC to cancel)",
+        {
+          fontSize: "18px",
+          color: "#ff0000",
+          backgroundColor: "#00000088",
+          padding: { x: 10, y: 5 },
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(100);
+  }
+
+  exitBulldozeMode() {
+    this.bulldozeMode = false;
+
+    // Clean up bulldoze sprite
+    if (this.bulldozeSprite) {
+      this.bulldozeSprite.destroy();
+      this.bulldozeSprite = null;
+    }
+
+    // Clean up instruction text
+    if (this.instructionText) {
+      this.instructionText.destroy();
+      this.instructionText = null;
+    }
+
+    // Clean up range preview
+    if (this.rangePreview) {
+      this.rangePreview.destroy();
+      this.rangePreview = null;
+    }
+  }
+
+  private updateBulldozeMode() {
+    const pointer = this.scene.input.activePointer;
+    const worldPoint = pointer.positionToCamera(
+      this.scene.cameras.main
+    ) as Phaser.Math.Vector2;
+
+    // Convert world coordinates to tile coordinates
+    const tileXY = this.map.worldToTileXY(worldPoint.x, worldPoint.y);
+
+    // Update bulldoze sprite position
+    if (this.bulldozeSprite) {
+      this.bulldozeSprite.setPosition(worldPoint.x, worldPoint.y);
+    }
+
+    // Check if there's a valid tile position
+    if (!tileXY) {
+      return;
+    }
+
+    const tileX = tileXY.x;
+    const tileY = tileXY.y;
+
+    // Check if there's a building at this position
+    const building = BuildingManager.getBuildingAt(tileX, tileY);
+
+    // Update bulldoze sprite appearance based on whether there's a building
+    if (this.bulldozeSprite) {
+      if (building) {
+        this.bulldozeSprite.setTint(0xff0000); // Red tint when over a building
+
+        // Create a red tile highlight if it doesn't exist
+        if (!this.rangePreview) {
+          const tile = this.map.getTileAt(tileX, tileY);
+          if (tile && tile.pixelX !== undefined && tile.pixelY !== undefined) {
+            const worldX = tile.pixelX;
+            const worldY = tile.pixelY;
+            this.rangePreview = this.scene.add.rectangle(
+              worldX + TILE_SIZE / 2,
+              worldY + TILE_SIZE / 2,
+              TILE_SIZE,
+              TILE_SIZE,
+              0xff0000,
+              0.3
+            );
+            this.rangePreview.setStrokeStyle(2, 0xff0000);
+            this.rangePreview.setDepth(10);
+          }
+        } else {
+          // Update the position of the existing highlight
+          const tile = this.map.getTileAt(tileX, tileY);
+          if (tile && tile.pixelX !== undefined && tile.pixelY !== undefined) {
+            this.rangePreview.setPosition(
+              tile.pixelX + TILE_SIZE / 2,
+              tile.pixelY + TILE_SIZE / 2
+            );
+            this.rangePreview.setVisible(true);
+          }
+        }
+      } else {
+        this.bulldozeSprite.setTint(0xffffff); // Normal color otherwise
+        // Hide the highlight if there's no building
+        if (this.rangePreview) {
+          this.rangePreview.setVisible(false);
+        }
+      }
+    }
+
+    // Handle click to remove building
+    if (pointer.isDown && !this.pointerWasDown) {
+      if (building) {
+        // Get the building's visual representation from the scene
+        const buildingSprites = this.scene.children.getAll().filter((obj) => {
+          // Check if it's a sprite or container at the building's position
+          if (
+            (obj instanceof Phaser.GameObjects.Sprite ||
+              obj instanceof Phaser.GameObjects.Container) &&
+            Math.abs(obj.x - building.position.x) < TILE_SIZE / 2 &&
+            Math.abs(obj.y - building.position.y) < TILE_SIZE / 2
+          ) {
+            return true;
+          }
+          return false;
+        });
+
+        // Remove all building sprites found
+        buildingSprites.forEach((sprite) => {
+          sprite.destroy();
+        });
+
+        // Remove the building from the manager
+        const removedBuilding = BuildingManager.removeBuilding(tileX, tileY);
+
+        if (removedBuilding) {
+          // Show success message
+          const successText = this.scene.add
+            .text(this.scene.cameras.main.width / 2, 100, "Building removed!", {
+              fontSize: "24px",
+              color: "#00ff00",
+            })
+            .setOrigin(0.5)
+            .setScrollFactor(0)
+            .setDepth(100);
+
+          // Fade out and destroy after 2 seconds
+          this.scene.tweens.add({
+            targets: successText,
+            alpha: 0,
+            duration: 1000,
+            delay: 1000,
+            onComplete: () => {
+              successText.destroy();
+            },
+          });
+        }
+      }
+    }
+
+    this.pointerWasDown = pointer.isDown;
   }
 }
