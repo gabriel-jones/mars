@@ -11,7 +11,7 @@ import { BuildMenu } from "../ui/buildMenu";
 import { ResourceDisplay } from "../ui/resourceDisplay";
 import { createMarsTileset, createTerrain } from "../terrain";
 import { ResourceNode } from "../entities/resourceNode";
-import { RESOURCE_DEFINITIONS } from "../data/resources";
+import { RESOURCE_DEFINITIONS, ResourceType } from "../data/resources";
 import { TILE_SIZE } from "../constants";
 import { createFPS } from "../ui/fps";
 import { Starship } from "../entities/starship";
@@ -228,16 +228,26 @@ export class MainScene extends Phaser.Scene {
   }
 
   private addResourceNodesNearSpawn(): void {
-    // Add various resource nodes around the spawn point
-    const resourceTypes = ["potatoes", "iron", "silicon", "water", "aluminium"];
+    // Define specific resource types and amounts to spawn
+    const resourcesToSpawn: {
+      type: ResourceType;
+      amount: number;
+    }[] = [
+      { type: "iron", amount: 256 },
+      { type: "silicon", amount: 256 },
+      { type: "aluminium", amount: 64 },
+      { type: "potatoes", amount: 64 },
+    ];
 
     // Create a set of unique tile positions to avoid duplicates
     const usedTilePositions = new Set<string>();
 
-    // Add 10 resource nodes of different types
-    for (let i = 0; i < 10; i++) {
-      // Generate a random angle and distance from spawn
-      const angle = Math.random() * Math.PI * 2;
+    // Add resource nodes for each specified resource
+    resourcesToSpawn.forEach((resourceInfo, index) => {
+      ResourceManager.addResource(resourceInfo.type, resourceInfo.amount);
+
+      // Generate a position based on index to ensure they're spread out
+      const angle = (index / resourcesToSpawn.length) * Math.PI * 2;
       const distance = 100 + Math.random() * 50;
 
       // Calculate world position
@@ -251,32 +261,78 @@ export class MainScene extends Phaser.Scene {
 
       // Skip if this tile already has a resource node
       if (usedTilePositions.has(tileKey)) {
-        continue;
+        return;
       }
 
       // Mark this tile as used
       usedTilePositions.add(tileKey);
 
-      // Select a random resource type
-      const resourceType =
-        resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
+      // Find the resource definition
       const resourceDef = RESOURCE_DEFINITIONS.find(
-        (r) => r.type === resourceType
+        (r) => r.type === resourceInfo.type
       );
 
       if (resourceDef) {
-        // Create the resource node with a random amount between 10 and 64
-        const node = new ResourceNode(
-          this,
-          x,
-          y,
-          resourceDef,
-          Phaser.Math.Between(10, 64)
-        );
+        // Calculate how many nodes we need (max stack size is 64)
+        const MAX_STACK_SIZE = 64;
+        const numNodes = Math.ceil(resourceInfo.amount / MAX_STACK_SIZE);
 
-        this.resourceNodes.push(node);
+        // Create multiple resource nodes if needed
+        for (let i = 0; i < numNodes; i++) {
+          // Calculate amount for this node (last node might have less)
+          const nodeAmount =
+            i === numNodes - 1
+              ? resourceInfo.amount % MAX_STACK_SIZE || MAX_STACK_SIZE
+              : MAX_STACK_SIZE;
+
+          // Calculate a unique position for each node to prevent overlap
+          // Use a spiral pattern around the original position
+          const nodeAngle = (i / numNodes) * Math.PI * 2;
+          const nodeDistance = 20 + i * 10; // Increasing distance for each node
+          const nodeX = x + Math.cos(nodeAngle) * nodeDistance;
+          const nodeY = y + Math.sin(nodeAngle) * nodeDistance;
+
+          // Ensure this specific position isn't already used
+          const nodeTileX = Math.floor(nodeX / TILE_SIZE);
+          const nodeTileY = Math.floor(nodeY / TILE_SIZE);
+          const nodeTileKey = `${nodeTileX},${nodeTileY}`;
+
+          // Find an unused position nearby if this one is taken
+          let finalX = nodeX;
+          let finalY = nodeY;
+          let attempts = 0;
+
+          while (usedTilePositions.has(nodeTileKey) && attempts < 8) {
+            // Try a slightly different angle and distance
+            const adjustedAngle = nodeAngle + Math.random() * 0.5;
+            const adjustedDistance = nodeDistance + Math.random() * 30;
+            finalX = x + Math.cos(adjustedAngle) * adjustedDistance;
+            finalY = y + Math.sin(adjustedAngle) * adjustedDistance;
+
+            const finalTileX = Math.floor(finalX / TILE_SIZE);
+            const finalTileY = Math.floor(finalY / TILE_SIZE);
+            const finalTileKey = `${finalTileX},${finalTileY}`;
+
+            if (!usedTilePositions.has(finalTileKey)) {
+              usedTilePositions.add(finalTileKey);
+              break;
+            }
+
+            attempts++;
+          }
+
+          // Create the resource node with the appropriate amount at the unique position
+          const node = new ResourceNode(
+            this,
+            finalX,
+            finalY,
+            resourceDef,
+            nodeAmount
+          );
+          this.resourceNodes.push(node);
+        }
       }
-    }
+    });
   }
 
   private updateResourceNodePhysics(): void {
@@ -406,21 +462,69 @@ export class MainScene extends Phaser.Scene {
     // Get all buildings from the BuildingManager
     const buildings = BuildingManager.getBuildings();
 
+    // Debug log the buildings
+    if (this.time.now % 5000 < 20) {
+      // Log every ~5 seconds
+      console.log(`BuildingManager has ${buildings.length} buildings:`);
+      buildings.forEach((b, index) => {
+        console.log(
+          `  ${index}: ${b.type} at (${b.position.x}, ${b.position.y})`
+        );
+      });
+    }
+
+    // Get all building instances in the scene
+    const buildingInstances = this.children
+      .getChildren()
+      .filter((child) => child instanceof Building);
+
+    // Debug log if we have any regolith processors
+    if (this.time.now % 5000 < 20) {
+      const processors = buildingInstances.filter(
+        (child) => child.constructor.name === "RegolithProcessor"
+      );
+      console.log(
+        `Found ${processors.length} RegolithProcessor instances in the scene`
+      );
+
+      // Update all processors directly
+      processors.forEach((processor) => {
+        console.log(
+          `Directly updating RegolithProcessor at (${processor.x}, ${processor.y})`
+        );
+        // Call the update method using bracket notation to avoid TypeScript errors
+        (processor as any).update(this.time.now);
+      });
+    }
+
     // Loop through each building and update it
     buildings.forEach((buildingData: BuildingData) => {
+      // Calculate the expected position in world coordinates
+      const expectedX = buildingData.position.x * TILE_SIZE + TILE_SIZE / 2;
+      const expectedY = buildingData.position.y * TILE_SIZE + TILE_SIZE / 2;
+
       // Find the building instance in the scene
-      const buildingInstance = this.children
-        .getChildren()
-        .find(
-          (child) =>
-            child instanceof Building &&
-            child.x === buildingData.position.x * TILE_SIZE + TILE_SIZE / 2 &&
-            child.y === buildingData.position.y * TILE_SIZE + TILE_SIZE / 2
-        ) as Building;
+      const buildingInstance = buildingInstances.find(
+        (child) =>
+          Math.abs(child.x - expectedX) < 10 &&
+          Math.abs(child.y - expectedY) < 10
+      );
+
+      // Debug log if we found the building instance
+      if (
+        buildingData.type === "regolith-processor" &&
+        this.time.now % 5000 < 20
+      ) {
+        console.log(
+          `Looking for RegolithProcessor at (${expectedX}, ${expectedY})`
+        );
+        console.log(`Found instance: ${buildingInstance ? "YES" : "NO"}`);
+      }
 
       // If we found the building instance, update it
       if (buildingInstance) {
-        buildingInstance.update(this.time.now);
+        // Call the update method using bracket notation to avoid TypeScript errors
+        (buildingInstance as any).update(this.time.now);
       }
     });
   }

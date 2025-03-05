@@ -13,7 +13,7 @@ export class MiningDrone extends Robot {
 
   // Resource handling
   private resourceAmount: number = 0;
-  private maxResourceCapacity: number = 100;
+  private maxResourceCapacity: number = 10;
   private miningDuration: number = 1500; // 1.5 seconds to mine
   private miningCompleteTime: number = 0;
   private resourceType: ResourceType = "regolith"; // Default to regolith
@@ -307,6 +307,8 @@ export class MiningDrone extends Robot {
     // Calculate duration based on distance and robot velocity
     const duration = (distance / ROBOT_VELOCITY) * 1000; // Convert to milliseconds
 
+    console.log(`Moving to mining point (${nextPoint.x}, ${nextPoint.y})`);
+
     // Use tweens for smoother movement
     this.scene.tweens.add({
       targets: this,
@@ -315,11 +317,19 @@ export class MiningDrone extends Robot {
       duration: duration,
       ease: "Linear",
       onComplete: () => {
+        console.log(`Reached mining point (${nextPoint.x}, ${nextPoint.y})`);
+        // Stop movement dust when we reach the target
+        this.dustEffects.stopMovementDust();
+
+        // Only start mining if we're still in the MOVING state
+        // This prevents issues if the state was changed during movement
         if (this.robotState === RobotState.MOVING) {
-          // Stop movement dust when we reach the target
-          this.dustEffects.stopMovementDust();
           // Start mining when we reach the tile
           this.startMining();
+        } else {
+          console.log(
+            `Not starting mining because state is ${this.robotState}`
+          );
         }
       },
     });
@@ -531,10 +541,30 @@ export class MiningDrone extends Robot {
         // Reset our resource amount
         this.resourceAmount = 0;
 
-        // Return to mining
-        this.robotState = RobotState.IDLE;
-        this.updateStateText();
-        this.patternGenerated = false; // Generate a new pattern
+        // Important: Don't set the state here, as the base Robot class will set it to IDLE
+        // in the moveToTarget onComplete callback. Instead, we'll directly call moveToNextPatternPoint
+        // which will set the state to MOVING and continue the mining process.
+        console.log("After depositing, continuing mining pattern");
+
+        // Instead of resetting the pattern, continue mining from where we left off
+        if (this.patternGenerated && this.snakePattern.length > 0) {
+          console.log("Continuing mining pattern after processor drop-off");
+          // Use a small delay to ensure the state transition happens after the base class has finished
+          this.scene.time.delayedCall(100, () => {
+            this.moveToNextPatternPoint();
+          });
+        } else {
+          // Only generate a new pattern if we don't have one
+          console.log(
+            "No pattern exists, generating new one after processor drop-off"
+          );
+          this.patternGenerated = false;
+          // Use a small delay to ensure the state transition happens after the base class has finished
+          this.scene.time.delayedCall(100, () => {
+            this.generateSnakePattern();
+            this.moveToNextPatternPoint();
+          });
+        }
       } else {
         console.log("Failed to deposit regolith: No valid processor found");
         this.showWarning();

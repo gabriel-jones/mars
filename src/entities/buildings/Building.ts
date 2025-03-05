@@ -16,6 +16,8 @@ export class Building extends Phaser.GameObjects.Container {
     super(scene, x, y);
     this.buildingType = buildingType;
 
+    console.log(`Creating Building: ${buildingType} at (${x}, ${y})`);
+
     // Create the building sprite
     this.sprite = scene.add.sprite(0, 0, buildingType);
     this.sprite.setDisplaySize(64, 64);
@@ -32,5 +34,6 @@ export class Building extends Phaser.GameObjects.Container {
 
   public update(time?: number, delta?: number): void {
     // Base update method, to be overridden by subclasses
+    console.log(`Base Building.update called for ${this.buildingType}`);
   }
 }

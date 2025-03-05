@@ -191,5 +191,25 @@ export class ResourceNode extends Phaser.GameObjects.Container {
     return nodes;
   }
 
+  // Method to add this node's resources to the global inventory
+  public addToInventory(): void {
+    // Add the resource to the global inventory
+    ResourceManager.addResource(this.resource.type, this.amount);
+
+    // Clear the node's amount since it's been added to inventory
+    this.amount = 0;
+
+    // Update the label
+    if (this.label && this.label.active) {
+      this.label.setText(`${this.resource.type} (${this.amount})`);
+    }
+
+    // Remove from tracking and destroy
+    const tileKey = `${this.tileX},${this.tileY}`;
+    ResourceNode.nodesByTile.delete(tileKey);
+    ResourceManager.unregisterResourceNode(this);
+    this.destroy();
+  }
+
   // No longer need applyForce since nodes are now immovable
 }
