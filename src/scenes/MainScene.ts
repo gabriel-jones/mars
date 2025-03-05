@@ -15,7 +15,15 @@ import { TILE_SIZE } from "../constants";
 import { TileType, tileData } from "../data/tiles";
 import { createFPS, updateFPS } from "../ui/fps";
 import { Starship } from "../entities/starship";
-import { Optimus, MiningDrone, Robot } from "../entities/robot";
+import { Optimus, MiningDrone, Robot } from "../entities/robots";
+import {
+  MiningStation,
+  Habitat,
+  SolarPanel,
+  IceDrill,
+  BuildingFactory,
+} from "../entities/buildings";
+import { BuildingType } from "../data/buildings";
 
 export class MainScene extends Phaser.Scene {
   private buildMenu: BuildMenu;
@@ -56,6 +64,11 @@ export class MainScene extends Phaser.Scene {
 
     // Load robot assets
     this.load.image("optimus", "assets/optimus.png");
+    this.load.image("mining-drone", "assets/mining-drone.png");
+    this.load.image("regolith-processor", "assets/regolith-processor.png");
+    this.load.image("flare", "assets/flare.svg"); // Particle effect for mining
+
+    // Load SVGs
     this.load.svg("mining-drone", "assets/mining-drone.svg");
   }
 
@@ -188,8 +201,13 @@ export class MainScene extends Phaser.Scene {
   }
 
   private handleItemPlaced(itemName: string, x: number, y: number) {
-    // Create the actual building/item sprite
-    const newBuilding = this.add.sprite(x, y, itemName).setDisplaySize(64, 64); // Set to tile size
+    // Create the building using the factory
+    const building = BuildingFactory.createBuilding(
+      this,
+      x,
+      y,
+      itemName as BuildingType
+    );
 
     console.log(
       `Placed ${itemName} at tile (${Math.floor(x / 64)}, ${Math.floor(
@@ -355,53 +373,22 @@ export class MainScene extends Phaser.Scene {
       const randomY = this.spawnPoint.y + (Math.random() - 0.5) * 200;
       optimus.moveToPosition(randomX, randomY);
     }
-
-    // Create mining drones in areas with resources
-    // We'll create a few mining areas around the map
-    const miningAreas = [
-      {
-        x: this.spawnPoint.x + 300,
-        y: this.spawnPoint.y + 300,
-        width: 200,
-        height: 200,
-      },
-      {
-        x: this.spawnPoint.x - 300,
-        y: this.spawnPoint.y - 300,
-        width: 200,
-        height: 200,
-      },
-      {
-        x: this.spawnPoint.x + 300,
-        y: this.spawnPoint.y - 300,
-        width: 200,
-        height: 200,
-      },
-    ];
-
-    // Create a mining drone for each area
-    miningAreas.forEach((area) => {
-      const drone = new MiningDrone(
-        this,
-        area.x,
-        area.y,
-        area.width,
-        area.height
-      );
-
-      // Set the deposit target to the starship for now
-      drone.setDepositTarget(this.starship);
-
-      // Set the resource type to mine (silicon for regolith)
-      drone.setResourceType("silicon");
-
-      this.robots.push(drone);
-      this.miningDrones.push(drone);
-    });
   }
 
   // Update all robots
   private updateRobots(): void {
     this.robots.forEach((robot) => robot.update());
+  }
+
+  // Add a robot to the scene
+  public addRobot(robot: Robot): void {
+    this.robots.push(robot);
+
+    // Also add to the specific type array
+    if (robot instanceof MiningDrone) {
+      this.miningDrones.push(robot);
+    } else if (robot instanceof Optimus) {
+      this.optimuses.push(robot);
+    }
   }
 }

@@ -3,10 +3,12 @@ export type BuildingType =
   | "habitat"
   | "solar-panel"
   | "mining-station"
-  | "ice-drill";
+  | "ice-drill"
+  | "regolith-processor";
 
 import { ResourceType } from "./resources";
 import { ResourceNodeType } from "../entities/resourceNode";
+import { gameState } from "../state";
 
 // Define placement types
 export enum PlacementType {
@@ -86,6 +88,16 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
       onlyOn: [ResourceNodeType.IceDeposit],
     },
   },
+  {
+    buildingType: "regolith-processor",
+    name: "Regolith Processor",
+    cost: [
+      { type: "iron", amount: 75 },
+      { type: "silicon", amount: 30 },
+    ],
+    placementType: PlacementType.SingleTile,
+    locationType: LocationType.Outside,
+  },
 ];
 
 // Or as an enum
@@ -124,6 +136,10 @@ export class BuildingManager {
     }
 
     this.buildings.push(building);
+
+    // Update gameState.buildings to keep it in sync
+    gameState.buildings = this.buildings;
+
     console.log(
       `Building added: ${building.type} at (${building.position.x}, ${
         building.position.y
@@ -224,5 +240,51 @@ export class BuildingManager {
       `Habitat ${habitatId} expanded with ${newTiles.length} new tiles. Total: ${habitat.tiles.length} tiles`
     );
     return true;
+  }
+
+  // Check if a mining area would overlap with existing mining stations
+  static wouldMiningAreaOverlap(x: number, y: number, radius: number): boolean {
+    // Get all mining stations
+    const miningStations = this.buildings.filter(
+      (building) => building.type === "mining-station"
+    );
+
+    // If there are no mining stations, there can't be any overlap
+    if (miningStations.length === 0) {
+      return false;
+    }
+
+    // Calculate the size of a mining area in tiles
+    const miningAreaSizeInTiles = radius * 2 + 1;
+    // Convert to world coordinates (pixels)
+    const miningAreaSize = miningAreaSizeInTiles * 64; // TILE_SIZE is 64
+
+    // Calculate the bounds of the new mining area
+    const newMiningAreaLeft = x - miningAreaSize / 2;
+    const newMiningAreaTop = y - miningAreaSize / 2;
+    const newMiningAreaRight = newMiningAreaLeft + miningAreaSize;
+    const newMiningAreaBottom = newMiningAreaTop + miningAreaSize;
+
+    // Check if the new mining area overlaps with any existing mining station's area
+    return miningStations.some((station) => {
+      const stationX = station.position.x;
+      const stationY = station.position.y;
+
+      // Calculate the bounds of the existing mining station's area
+      const existingMiningAreaLeft = stationX - miningAreaSize / 2;
+      const existingMiningAreaTop = stationY - miningAreaSize / 2;
+      const existingMiningAreaRight = existingMiningAreaLeft + miningAreaSize;
+      const existingMiningAreaBottom = existingMiningAreaTop + miningAreaSize;
+
+      // Check for rectangle overlap
+      // For adjacent placement, we need to check if the rectangles are strictly overlapping
+      // This allows mining areas to be placed right next to each other (sharing an edge)
+      return (
+        newMiningAreaLeft < existingMiningAreaRight &&
+        newMiningAreaRight > existingMiningAreaLeft &&
+        newMiningAreaTop < existingMiningAreaBottom &&
+        newMiningAreaBottom > existingMiningAreaTop
+      );
+    });
   }
 }

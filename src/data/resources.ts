@@ -9,6 +9,7 @@ export type ResourceType =
   // Elements
   | "silicon"
   | "sulphur"
+  | "regolith"
   // Metals
   | "iron"
   | "aluminium"
@@ -70,6 +71,12 @@ export const RESOURCE_DEFINITIONS: Resource[] = [
     category: "elements",
     name: "Silicon",
     emoji: "🧱",
+  },
+  {
+    type: "regolith",
+    category: "elements",
+    name: "Regolith",
+    emoji: "🪨",
   },
   {
     type: "sulphur",

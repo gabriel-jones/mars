@@ -5,10 +5,9 @@ export function createFPS(scene: Phaser.Scene): Phaser.GameObjects.Text {
     .text(scene.cameras.main.width - 10, 10, "FPS: 0", {
       fontFamily: "Arial",
       fontSize: "18px", // Slightly larger
-      color: "#ffff00", // Yellow color for better visibility
-      stroke: "#000000", // Black outline
-      strokeThickness: 2, // Outline thickness
+      color: "#ffffff", // Yellow color for better visibility
     })
+    .setAlpha(0.8)
     .setOrigin(1, 0); // Right-aligned
 
   // Make it fixed to the camera so it doesn't move with the game world
