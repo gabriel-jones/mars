@@ -188,7 +188,7 @@ export class MainScene extends Phaser.Scene {
         this,
         x,
         y,
-        RESOURCE_DEFINITIONS.find((x) => x.type === "water")!,
+        RESOURCE_DEFINITIONS.find((x) => x.type === "potatoes")!,
         1000 + Math.floor(Math.random() * 1000)
       );
       this.resourceNodes.push(waterNode);
