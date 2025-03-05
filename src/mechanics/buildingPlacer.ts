@@ -8,7 +8,7 @@ import {
   BuildMenuItem,
 } from "../data/buildings";
 import { ResourceManager } from "../data/resources";
-import { ResourceNodeType } from "../entities/resourceNode";
+import { TerrainFeatureType } from "../entities/TerrainFeature";
 import { gameState } from "../state";
 import { TILE_SIZE } from "../constants";
 import { MiningStation, MINING_RADIUS } from "../entities/buildings";
@@ -665,7 +665,7 @@ export class BuildingPlacer {
       // If the building requires an ice deposit but the tile doesn't have one
       if (
         selectedItemDef.placementRequirements.onlyOn.includes(
-          ResourceNodeType.IceDeposit
+          TerrainFeatureType.IceDeposit
         ) &&
         !tileHasIceDeposit
       ) {

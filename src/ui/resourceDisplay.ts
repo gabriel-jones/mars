@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { ResourceManager, ResourceType } from "../data/resources";
+import { gameState } from "../state";
 
 const TOP_LEVEL_RESOURCES: ResourceType[] = [
   "energy",
@@ -22,6 +23,13 @@ export class ResourceDisplay {
     this.scene = scene;
     this.container = this.scene.add.container(10, 10).setScrollFactor(0);
     this.createResourceDisplay();
+
+    // Listen for inventory changes
+    gameState.resources.events.on(
+      ResourceManager.EVENTS.INVENTORY_CHANGED,
+      this.handleInventoryChanged,
+      this
+    );
   }
 
   private createResourceDisplay() {
@@ -210,11 +218,14 @@ export class ResourceDisplay {
     }
   }
 
-  update() {
-    const inventory = ResourceManager.getInventory();
+  private handleInventoryChanged(inventory: any) {
+    this.updateResourceDisplays(inventory);
+    this.updateCategoryTotals(inventory);
+  }
 
+  private updateResourceDisplays(inventory: any) {
     // Update individual resource displays
-    inventory.forEach((item) => {
+    inventory.forEach((item: any) => {
       const display = this.resourceDisplays.get(item.type);
       if (display) {
         const resource = ResourceManager.getResource(item.type);
@@ -223,7 +234,9 @@ export class ResourceDisplay {
         }
       }
     });
+  }
 
+  private updateCategoryTotals(inventory: any) {
     // Update category totals
     this.categoryContainers.forEach((container, category) => {
       // Make sure container has at least 2 elements before trying to access index 1
@@ -234,8 +247,8 @@ export class ResourceDisplay {
         if (headerText) {
           // Calculate total for this category
           let categoryTotal = 0;
-          inventory.forEach((item) => {
-            // Skip silicon and iron since they're shown separately
+          inventory.forEach((item: any) => {
+            // Skip top level resources since they're shown separately
             if (TOP_LEVEL_RESOURCES.includes(item.type)) {
               return;
             }
@@ -251,5 +264,24 @@ export class ResourceDisplay {
         }
       }
     });
+  }
+
+  update() {
+    // This method is still called from the scene's update loop,
+    // but we don't need to do anything here anymore as we're using events
+  }
+
+  destroy() {
+    // Clean up event listeners when the display is destroyed
+    gameState.resources.events.off(
+      ResourceManager.EVENTS.INVENTORY_CHANGED,
+      this.handleInventoryChanged,
+      this
+    );
+
+    // Remove the container from the scene
+    if (this.container) {
+      this.container.destroy();
+    }
   }
 }

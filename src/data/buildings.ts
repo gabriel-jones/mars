@@ -7,7 +7,7 @@ export type BuildingType =
   | "regolith-processor";
 
 import { ResourceType } from "./resources";
-import { ResourceNodeType } from "../entities/resourceNode";
+import { TerrainFeatureType } from "../entities/TerrainFeature";
 import { gameState } from "../state";
 
 // Define placement types
@@ -38,7 +38,7 @@ export interface BuildMenuItem {
   placementType: PlacementType;
   locationType: LocationType;
   placementRequirements?: {
-    onlyOn?: ResourceNodeType[];
+    onlyOn?: TerrainFeatureType[];
   };
 }
 
@@ -85,7 +85,7 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     placementType: PlacementType.SingleTile,
     locationType: LocationType.Outside,
     placementRequirements: {
-      onlyOn: [ResourceNodeType.IceDeposit],
+      onlyOn: [TerrainFeatureType.IceDeposit],
     },
   },
   {
@@ -118,7 +118,7 @@ export interface Building {
   placedAt: number; // timestamp
   size?: { width: number; height: number }; // For range-selected buildings like habitats
   placementRequirements?: {
-    onlyOn?: ResourceNodeType[];
+    onlyOn?: TerrainFeatureType[];
   };
   habitatId?: string;
   tiles?: { x: number; y: number }[];

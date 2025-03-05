@@ -122,7 +122,7 @@ export const RESOURCE_DEFINITIONS: Resource[] = [
     type: "titanium",
     category: "metals",
     name: "Titanium",
-    emoji: "🔩",
+    emoji: "🔳",
     occurrenceRate: 0.02, // 2% occurrence in regolith
   },
   {
@@ -160,14 +160,18 @@ export const RESOURCE_DEFINITIONS: Resource[] = [
   },
 ];
 
+import { gameState } from "../state";
+
 export class ResourceManager {
-  private static inventory: ResourceCount[] = [
-    { type: "silicon", amount: 500 },
-    { type: "aluminium", amount: 500 },
-    { type: "iron", amount: 500 },
-    { type: "water", amount: 100 },
-    { type: "oxygen", amount: 75 },
-  ];
+  // Track all resource nodes in the game
+  private static resourceNodes: any[] = [];
+
+  // Event constants
+  static readonly EVENTS = {
+    RESOURCE_ADDED: "resource-added",
+    RESOURCE_USED: "resource-used",
+    INVENTORY_CHANGED: "inventory-changed",
+  };
 
   static getResources(): Resource[] {
     return RESOURCE_DEFINITIONS;
@@ -178,27 +182,53 @@ export class ResourceManager {
   }
 
   static getInventory(): ResourceCount[] {
-    return this.inventory;
+    return gameState.resources.inventory;
   }
 
   static getResourceAmount(type: ResourceType): number {
-    const resource = this.inventory.find((item) => item.type === type);
+    const resource = gameState.resources.inventory.find(
+      (item) => item.type === type
+    );
     return resource ? resource.amount : 0;
   }
 
   static addResource(type: ResourceType, amount: number): void {
-    const resource = this.inventory.find((item) => item.type === type);
+    const resource = gameState.resources.inventory.find(
+      (item) => item.type === type
+    );
     if (resource) {
       resource.amount += amount;
     } else {
-      this.inventory.push({ type, amount });
+      gameState.resources.inventory.push({ type, amount });
     }
+
+    // Emit events
+    gameState.resources.events.emit(this.EVENTS.RESOURCE_ADDED, {
+      type,
+      amount,
+    });
+    gameState.resources.events.emit(
+      this.EVENTS.INVENTORY_CHANGED,
+      gameState.resources.inventory
+    );
   }
 
   static useResource(type: ResourceType, amount: number): boolean {
-    const resource = this.inventory.find((item) => item.type === type);
+    const resource = gameState.resources.inventory.find(
+      (item) => item.type === type
+    );
     if (resource && resource.amount >= amount) {
       resource.amount -= amount;
+
+      // Emit events
+      gameState.resources.events.emit(this.EVENTS.RESOURCE_USED, {
+        type,
+        amount,
+      });
+      gameState.resources.events.emit(
+        this.EVENTS.INVENTORY_CHANGED,
+        gameState.resources.inventory
+      );
       return true;
     }
     return false;
@@ -209,5 +239,24 @@ export class ResourceManager {
       const currentAmount = this.getResourceAmount(req.type);
       return currentAmount >= req.amount;
     });
+  }
+
+  static registerResourceNode(node: any): void {
+    // Add the node to our tracking array if it's not already there
+    if (!this.resourceNodes.includes(node)) {
+      this.resourceNodes.push(node);
+    }
+  }
+
+  static unregisterResourceNode(node: any): void {
+    // Remove the node from our tracking array
+    const index = this.resourceNodes.indexOf(node);
+    if (index !== -1) {
+      this.resourceNodes.splice(index, 1);
+    }
+  }
+
+  static getAllResourceNodes(): any[] {
+    return this.resourceNodes;
   }
 }

@@ -4,3 +4,5 @@ export const TILE_SIZE = 64;
 
 export const WORLD_WIDTH = 100; // Example
 export const WORLD_HEIGHT = 100; // Example
+
+export const DUST_COLOR = 0xd2b48c;

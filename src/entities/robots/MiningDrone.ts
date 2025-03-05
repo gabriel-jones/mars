@@ -1,9 +1,10 @@
 import * as Phaser from "phaser";
 import { Robot, RobotState } from "./Robot";
 import { ResourceManager, ResourceType } from "../../data/resources";
-import { TILE_SIZE, ROBOT_VELOCITY } from "../../constants";
+import { TILE_SIZE, ROBOT_VELOCITY, DUST_COLOR } from "../../constants";
 import { MINING_RADIUS, MiningStation } from "../buildings/MiningStation";
 import { getResourceRichnessAt } from "../../terrain";
+import { DustEffects } from "../../effects/DustEffects";
 
 // Mining Drone class - specialized for mining regolith
 export class MiningDrone extends Robot {
@@ -16,22 +17,7 @@ export class MiningDrone extends Robot {
   private miningDuration: number = 1500; // 1.5 seconds to mine
   private miningCompleteTime: number = 0;
   private resourceType: ResourceType = "regolith"; // Default to regolith
-  private miningEfficiency: number = 5; // Base mining efficiency
-
-  // Visual effects
-  private sparkleParticles: Phaser.GameObjects.Particles.ParticleEmitter | null =
-    null;
-  private sparkleEmitter: Phaser.GameObjects.Particles.ParticleEmitter | null =
-    null;
-  private dustParticles: Phaser.GameObjects.Particles.ParticleEmitter | null =
-    null;
-
-  // Dust graphics for mining effect
-  private dustGraphics: Phaser.GameObjects.Graphics[] = [];
-  private isDustVisible: boolean = false;
-  private isMovementDustVisible: boolean = false;
-  private movementDustGraphics: Phaser.GameObjects.Graphics[] = [];
-  private lastPosition: Phaser.Math.Vector2 = new Phaser.Math.Vector2(0, 0);
+  private miningEfficiency: number = 8; // Increased from 5 to compensate for richness factor
 
   // Mining pattern
   private snakePattern: Phaser.Math.Vector2[] = [];
@@ -52,7 +38,7 @@ export class MiningDrone extends Robot {
     y: number,
     miningStation: MiningStation
   ) {
-    super(scene, x, y, "mining-drone", 100);
+    super(scene, x, y, "mining-drone");
     this.miningStation = miningStation;
 
     // Set home position to the mining station
@@ -61,18 +47,32 @@ export class MiningDrone extends Robot {
       miningStation.y
     );
 
-    // Initialize last position with current position
-    this.lastPosition = new Phaser.Math.Vector2(x, y);
-
     // Set the robot's depth to ensure it renders above dust particles
     this.setDepth(10);
 
-    // Create sparkle particles for mining effects
-    this.createSparkleEffect();
-    this.createDustEffect();
+    // Configure Mars-appropriate dust effects
+    this.configureDustEffects(scene);
+  }
 
-    // Create dust graphics
-    this.createDustGraphics();
+  // Configure Mars-appropriate dust effects
+  private configureDustEffects(scene: Phaser.Scene): void {
+    // Override the default dust effects with Mars-appropriate colors
+    this.dustEffects = new DustEffects(scene, this, {
+      dustColor: 0xd2b48c, // Tan color for Mars dust
+      dustSize: 5, // Reduced from 8
+      dustAlpha: 0.75, // Reduced from 0.85
+      dustCount: 14, // Reduced from 16
+      dustInterval: 70, // Increased from 60 to spawn less frequently
+      dustLifetime: 1000, // Reduced from 1200
+      workingDustColor: 0xd2b48c, // Tan color for Mars dust
+      workingDustSize: 6, // Reduced from 9
+      workingDustAlpha: 0.85, // Reduced from 0.95
+      workingDustCount: 18, // Reduced from 24
+      movementDustColor: 0xc19a6b, // Darker tan for movement dust
+      movementDustSize: 5, // Reduced from 8
+      movementDustAlpha: 0.8, // Reduced from 0.9
+      movementDustCount: 25, // Reduced from 35
+    });
   }
 
   protected getRobotName(): string {
@@ -87,40 +87,60 @@ export class MiningDrone extends Robot {
     // Update state text with resource info if carrying resources
     if (this.resourceAmount > 0) {
       this.stateText.setText(
-        `${this.robotState} (${this.resourceAmount}/${this.maxResourceCapacity})`
+        `${this.robotState.toUpperCase()} (${this.resourceAmount}/${
+          this.maxResourceCapacity
+        })`
       );
     } else {
       this.updateStateText();
     }
 
-    // Show movement dust when robot is moving
+    // Update dust effects
+    this.updateDustEffects(this.scene.time.now);
+
+    // If we're idle and don't have a pattern, generate one and start mining
+    if (this.robotState === RobotState.IDLE && !this.patternGenerated) {
+      console.log("Idle drone, generating mining pattern");
+      this.generateSnakePattern();
+      this.moveToNextPatternPoint();
+    }
+
+    // Check if we're mining and if mining is complete
     if (
-      this.robotState === RobotState.MOVING ||
-      this.robotState === RobotState.RETURNING
+      this.robotState === RobotState.WORKING &&
+      this.scene.time.now >= this.miningCompleteTime
     ) {
-      // Calculate distance moved since last update
-      const distance = Phaser.Math.Distance.Between(
-        this.x,
-        this.y,
-        this.lastPosition.x,
-        this.lastPosition.y
+      // Mining complete, collect resources
+      // Get the mining yield from the mining station
+      const stationYield = this.miningStation.getMiningYield();
+
+      // Get the average richness from the mining station's area
+      const { avgRichness } = MiningStation.calculateMiningYieldAt(
+        this.miningStation.x,
+        this.miningStation.y
       );
 
-      // Create dust particles based on movement speed
-      if (distance > 3) {
-        // Create more particles when moving faster
-        const particleCount = Math.min(Math.floor(distance / 2), 3);
+      // Calculate amount mined based on the mining station's yield and the richness at current position
+      const localRichness = this.getResourceRichnessAtCurrentPosition();
 
-        for (let i = 0; i < particleCount; i++) {
-          this.showMovementDust();
-        }
+      // Scale the mining yield by the local richness relative to the average richness
+      const richnessRatio = localRichness / Math.max(0.1, avgRichness);
+      const amountMined = Math.ceil((stationYield / 10) * richnessRatio);
 
-        // Update last position
-        this.lastPosition.set(this.x, this.y);
+      this.resourceAmount += amountMined;
+      console.log(
+        `Mining complete. Mined ${amountMined} ${this.resourceType}. Total: ${this.resourceAmount}/${this.maxResourceCapacity}`
+      );
+
+      // Check if we've reached capacity
+      if (this.resourceAmount >= this.maxResourceCapacity) {
+        console.log("Reached capacity, returning to station");
+        this.resourceAmount = this.maxResourceCapacity; // Cap at max
+        this.returnToStation();
+      } else {
+        // Move to next point in the pattern
+        this.moveToNextPatternPoint();
       }
-    } else {
-      // Hide movement dust when not moving
-      this.hideMovementDust();
     }
 
     // Find the nearest regolith processor if we're full
@@ -141,160 +161,16 @@ export class MiningDrone extends Robot {
         this.showWarning();
       }
     }
-
-    // If in WORKING state, make sure dust particles are at the robot's position
-    if (this.robotState === RobotState.WORKING) {
-      // Update particle positions
-      if (this.sparkleEmitter) {
-        this.sparkleEmitter.setPosition(this.x, this.y);
-      }
-
-      if (this.dustParticles) {
-        this.dustParticles.setPosition(this.x, this.y);
-      }
-
-      // Update dust graphics positions
-      this.dustGraphics.forEach((graphics) => {
-        if (graphics.active && graphics.visible) {
-          // Only reposition if it's a circle (not our custom graphics)
-          if (graphics.type === "Circle") {
-            graphics.x = this.x;
-            graphics.y = this.y;
-          }
-        }
-      });
-    }
-
-    // State machine for the mining drone
-    switch (this.robotState) {
-      case RobotState.IDLE:
-        // If not full, generate snake pattern and start mining
-        if (this.resourceAmount < this.maxResourceCapacity) {
-          if (!this.patternGenerated) {
-            this.generateSnakePattern();
-          }
-          this.moveToNextPatternPoint();
-        }
-        break;
-
-      case RobotState.MOVING:
-        // Movement is now handled by tweens in moveToNextPatternPoint
-        // No need to check for hasReachedTarget here
-        break;
-
-      case RobotState.WORKING:
-        // Check if mining is complete
-        if (this.scene.time.now >= this.miningCompleteTime) {
-          // Calculate mining yield based on the mining station's yield
-          // Convert yield/min to yield/operation
-          const yieldPerMinute = (this.miningStation as any).miningYield || 1;
-          const operationsPerMinute = 60000 / this.miningDuration;
-          const yieldPerOperation = Math.max(
-            1,
-            Math.round(yieldPerMinute / operationsPerMinute)
-          );
-
-          // Apply mining efficiency and collect resources
-          const resourcesMined = Math.min(
-            yieldPerOperation * this.miningEfficiency,
-            this.maxResourceCapacity - this.resourceAmount
-          );
-
-          this.resourceAmount += resourcesMined;
-          console.log(
-            `Mined ${resourcesMined} ${this.resourceType} (Total: ${this.resourceAmount}/${this.maxResourceCapacity})`
-          );
-
-          // If we've reached capacity, go deposit
-          if (this.resourceAmount >= this.maxResourceCapacity) {
-            const processor = this.findNearestRegolithProcessor();
-            if (processor) {
-              this.robotState = RobotState.RETURNING;
-              this.updateStateText();
-              this.moveToTarget(
-                new Phaser.Math.Vector2(processor.x, processor.y)
-              );
-              this.clearWarning();
-            } else {
-              // No processor found, go idle and show warning
-              this.robotState = RobotState.IDLE;
-              this.updateStateText();
-              this.showWarning();
-            }
-          } else {
-            // Continue mining in the pattern
-            this.moveToNextPatternPoint();
-          }
-
-          // Stop mining effects
-          this.stopMining();
-        }
-        break;
-
-      case RobotState.RETURNING:
-        // The tween onComplete will trigger hasReachedTarget
-        // We just need to check if we're at the target position
-        if (
-          this.target &&
-          Math.abs(this.x - this.target.x) < 5 &&
-          Math.abs(this.y - this.target.y) < 5
-        ) {
-          // Only process this once
-          if (this.robotState === RobotState.RETURNING) {
-            console.log("Processing deposit at processor");
-
-            // Deposit resources
-            if (this.resourceAmount > 0) {
-              // Try to deposit at a RegolithProcessor
-              const processor = this.scene.children
-                .getAll()
-                .find(
-                  (child) =>
-                    child instanceof Phaser.GameObjects.Container &&
-                    child.x === this.target?.x &&
-                    child.y === this.target?.y &&
-                    (child as any).addRegolith
-                ) as any;
-
-              if (processor && processor.addRegolith) {
-                // Add resources to the processor
-                processor.addRegolith(this.resourceAmount);
-                console.log(
-                  `Deposited ${this.resourceAmount} regolith at processor`
-                );
-              } else {
-                // If no processor found, add to general inventory
-                ResourceManager.addResource(
-                  this.resourceType,
-                  this.resourceAmount
-                );
-                console.log(
-                  `Added ${this.resourceAmount} ${this.resourceType} to inventory`
-                );
-              }
-
-              // Reset resource amount
-              this.resourceAmount = 0;
-              // Don't reset pattern index after depositing at processor
-              // this.currentPatternIndex = 0; // Reset pattern index
-              // this.patternDirection = 1; // Reset to forward direction
-            }
-
-            // Return to mining station
-            this.returnToStation();
-
-            // Stop mining effects
-            this.stopMining();
-          }
-        }
-        break;
-    }
   }
 
   // Return to the mining station
   private returnToStation(): void {
     this.robotState = RobotState.MOVING;
     this.updateStateText();
+
+    // Start dust effects when moving
+    this.dustEffects.start();
+    this.dustEffects.startMovementDust();
 
     console.log(
       `Returning to station at (${this.miningStation.x}, ${this.miningStation.y})`
@@ -321,6 +197,7 @@ export class MiningDrone extends Robot {
       ease: "Linear",
       onComplete: () => {
         this.stopMoving();
+        this.dustEffects.stopMovementDust();
         this.robotState = RobotState.IDLE;
         this.updateStateText();
         console.log("Returned to station, going to next mining point");
@@ -415,6 +292,10 @@ export class MiningDrone extends Robot {
     this.robotState = RobotState.MOVING;
     this.updateStateText();
 
+    // Start dust effects when moving
+    this.dustEffects.start();
+    this.dustEffects.startMovementDust();
+
     // Calculate distance to target
     const distance = Phaser.Math.Distance.Between(
       this.x,
@@ -435,6 +316,8 @@ export class MiningDrone extends Robot {
       ease: "Linear",
       onComplete: () => {
         if (this.robotState === RobotState.MOVING) {
+          // Stop movement dust when we reach the target
+          this.dustEffects.stopMovementDust();
           // Start mining when we reach the tile
           this.startMining();
         }
@@ -505,8 +388,6 @@ export class MiningDrone extends Robot {
       .text(0, -55, "No processor!", {
         fontSize: "12px",
         color: "#FF0000",
-        stroke: "#000000",
-        strokeThickness: 1,
         align: "center",
       })
       .setOrigin(0.5);
@@ -531,248 +412,6 @@ export class MiningDrone extends Robot {
     if (this.warningText) {
       this.warningText.destroy();
       this.warningText = null;
-    }
-  }
-
-  // Create sparkle particle effect
-  private createSparkleEffect(): void {
-    // Create sparkle particle emitter
-    this.sparkleParticles = this.scene.add.particles(0, 0, "flare", {
-      lifespan: { min: 300, max: 600 },
-      speed: { min: 10, max: 30 },
-      scale: { start: 0.2, end: 0 },
-      alpha: { start: 0.6, end: 0 },
-      quantity: 5,
-      frequency: 50,
-      blendMode: "ADD",
-      tint: [0xffffff, 0xffd700, 0xffa500], // White, gold, orange
-      emitting: false, // Start disabled
-    });
-
-    this.sparkleEmitter = this.sparkleParticles;
-
-    // Set depth to be above the robot
-    if (this.sparkleParticles) {
-      this.sparkleParticles.setDepth(15);
-    }
-  }
-
-  // Create dust particle effect
-  private createDustEffect(): void {
-    console.log("Creating dust effect");
-    // Create dust particle emitter
-    this.dustParticles = this.scene.add.particles(0, 0, "flare", {
-      lifespan: { min: 800, max: 1500 },
-      speed: { min: 5, max: 20 },
-      scale: { start: 0.3, end: 0.1 }, // Larger particles
-      alpha: { start: 0.8, end: 0 }, // More opaque
-      quantity: 10, // More particles
-      frequency: 30, // More frequent particles
-      blendMode: "NORMAL",
-      tint: [0xd2b48c, 0xc19a6b, 0xbdb76b], // Tan/brown colors for Mars dust
-      emitting: false,
-      gravityY: 10, // Slight gravity to make dust fall
-      angle: { min: 0, max: 360 }, // Emit in all directions
-    });
-    console.log("Dust particles created:", this.dustParticles);
-
-    // Set depth to be below the robot
-    if (this.dustParticles) {
-      this.dustParticles.setDepth(5);
-    }
-  }
-
-  // Create custom dust graphics
-  private createDustGraphics(): void {
-    console.log("Creating dust graphics");
-
-    // Create 8 dust particles
-    for (let i = 0; i < 12; i++) {
-      // More particles
-      // Create a graphics object
-      const graphics = this.scene.add.graphics();
-
-      // Set initial position (will be updated when shown)
-      graphics.x = this.x;
-      graphics.y = this.y;
-
-      // Draw a small circle
-      graphics.fillStyle(0xd2b48c, 0.8); // Tan color with higher alpha
-      graphics.fillCircle(0, 0, 4); // Slightly larger circle
-
-      // Hide initially
-      graphics.visible = false;
-
-      // Set depth to be below the robot
-      graphics.setDepth(5);
-
-      // Add to array
-      this.dustGraphics.push(graphics);
-    }
-
-    // Create movement dust particles
-    for (let i = 0; i < 20; i++) {
-      // Increased from 8 to 20
-      const graphics = this.scene.add.graphics();
-      graphics.x = this.x;
-      graphics.y = this.y;
-      graphics.fillStyle(0xd2b48c, 0.6); // Tan color with medium alpha
-      graphics.fillCircle(0, 0, 3); // Smaller circle for movement dust
-      graphics.visible = false;
-
-      // Set depth to be below the robot
-      graphics.setDepth(5);
-
-      this.movementDustGraphics.push(graphics);
-    }
-  }
-
-  // Show dust graphics with animation
-  private showDustGraphics(): void {
-    if (this.isDustVisible) return;
-
-    this.isDustVisible = true;
-    console.log("Showing dust graphics");
-
-    // Update positions and show graphics
-    this.dustGraphics.forEach((graphics) => {
-      // Calculate random position around the robot
-      const angle = Math.random() * Math.PI * 2;
-      const distance = 8 + Math.random() * 12; // Random distance between 8-20
-
-      // Set position
-      graphics.x = this.x + Math.cos(angle) * distance;
-      graphics.y = this.y + Math.sin(angle) * distance;
-
-      // Make visible
-      graphics.visible = true;
-      graphics.alpha = 0.8;
-      graphics.scaleX = 1;
-      graphics.scaleY = 1;
-
-      // Create animation
-      this.scene.tweens.add({
-        targets: graphics,
-        alpha: 0,
-        scaleX: 2,
-        scaleY: 2,
-        x: graphics.x + Math.cos(angle) * 15, // Move outward more
-        y: graphics.y + Math.sin(angle) * 15 + 8, // Move outward and down more
-        duration: 400 + Math.random() * 300, // Faster animation
-        onComplete: () => {
-          if (this.isDustVisible) {
-            // Reset and start again if still mining
-            this.resetAndAnimateDustGraphic(graphics);
-          }
-        },
-      });
-    });
-  }
-
-  // Reset and animate a single dust graphic
-  private resetAndAnimateDustGraphic(
-    graphics: Phaser.GameObjects.Graphics
-  ): void {
-    if (!this.isDustVisible) return;
-
-    const newAngle = Math.random() * Math.PI * 2;
-    const newDistance = 8 + Math.random() * 12;
-
-    // Update position to current robot position
-    graphics.x = this.x + Math.cos(newAngle) * newDistance;
-    graphics.y = this.y + Math.sin(newAngle) * newDistance;
-    graphics.alpha = 0.8;
-    graphics.scaleX = 1;
-    graphics.scaleY = 1;
-
-    // Animate
-    this.scene.tweens.add({
-      targets: graphics,
-      alpha: 0,
-      scaleX: 2,
-      scaleY: 2,
-      x: graphics.x + Math.cos(newAngle) * 15,
-      y: graphics.y + Math.sin(newAngle) * 15 + 8,
-      duration: 400 + Math.random() * 300,
-      onComplete: () => {
-        if (this.isDustVisible) {
-          this.resetAndAnimateDustGraphic(graphics);
-        }
-      },
-    });
-  }
-
-  // Hide dust graphics
-  private hideDustGraphics(): void {
-    if (!this.isDustVisible) return;
-
-    this.isDustVisible = false;
-    console.log("Hiding dust graphics");
-
-    // Stop animations and hide graphics
-    this.dustGraphics.forEach((graphics) => {
-      this.scene.tweens.killTweensOf(graphics);
-      graphics.visible = false;
-    });
-  }
-
-  // Start mining at current location
-  private startMining(): void {
-    console.log("Starting mining at:", this.x, this.y);
-    this.robotState = RobotState.WORKING;
-    this.updateStateText();
-    this.miningCompleteTime = this.scene.time.now + this.miningDuration;
-
-    // Get resource richness at current position
-    const richness = this.getResourceRichnessAtCurrentPosition();
-    console.log("Resource richness:", richness);
-
-    // Add a subtle visual indicator on the robot
-    this.showMiningIndicator();
-
-    // Start sparkle effect based on richness
-    if (this.sparkleEmitter) {
-      console.log("Starting sparkle effect");
-      // Position the emitter at the drone
-      this.sparkleEmitter.setPosition(this.x, this.y);
-
-      // Scale particle quantity based on richness (0-1)
-      const particleQuantity = Math.ceil(richness * 15) + 5; // More particles
-      this.sparkleEmitter.setQuantity(particleQuantity);
-
-      // Set frequency based on richness (higher richness = more frequent particles)
-      const frequency = Math.max(30, 150 - richness * 120);
-      this.sparkleEmitter.setFrequency(frequency);
-
-      // Start the emitter
-      this.sparkleEmitter.start();
-      console.log("Sparkle emitter started");
-    }
-
-    // Show dust graphics
-    this.showDustGraphics();
-
-    // Start dust effect
-    if (this.dustParticles) {
-      console.log("Starting dust effect");
-      this.dustParticles.setPosition(this.x, this.y);
-
-      // Scale dust quantity based on richness
-      const dustQuantity = Math.ceil(richness * 12) + 8; // More dust particles
-      this.dustParticles.setQuantity(dustQuantity);
-
-      // Adjust frequency based on richness
-      const dustFrequency = Math.max(20, 80 - richness * 60); // More frequent particles
-      this.dustParticles.setFrequency(dustFrequency);
-
-      // Start the dust emitter
-      this.dustParticles.start();
-      console.log(
-        "Dust emitter started with quantity:",
-        dustQuantity,
-        "frequency:",
-        dustFrequency
-      );
     }
   }
 
@@ -815,27 +454,57 @@ export class MiningDrone extends Robot {
     this.setScale(1);
   }
 
+  // Start mining at current location
+  private startMining(): void {
+    if (this.robotState === RobotState.WORKING) return;
+
+    console.log("Starting mining operation");
+    this.robotState = RobotState.WORKING;
+    this.updateStateText();
+
+    // Calculate mining complete time
+    const now = this.scene.time.now;
+    this.miningCompleteTime = now + this.miningDuration;
+
+    // Show mining indicator
+    this.showMiningIndicator();
+
+    // Explicitly activate working dust effects
+    this.dustEffects.start();
+    this.dustEffects.showWorkingDust();
+  }
+
+  // Stop mining operation
+  private stopMining(): void {
+    if (this.robotState !== RobotState.WORKING) return;
+
+    console.log("Stopping mining operation");
+
+    // Hide mining indicator
+    this.hideMiningIndicator();
+
+    // Explicitly stop working dust effects
+    this.dustEffects.hideWorkingDust();
+
+    // Don't stop all dust effects here as we might be moving next
+  }
+
   // Get resource richness at current position
   private getResourceRichnessAtCurrentPosition(): number {
     // Use the imported getResourceRichnessAt function
     return getResourceRichnessAt(this.x, this.y);
   }
 
-  // Stop mining effects
-  private stopMining(): void {
-    if (this.sparkleEmitter) {
-      this.sparkleEmitter.stop();
+  // Clean up resources when destroyed
+  public destroy(fromScene?: boolean): void {
+    // Clean up warning text
+    if (this.warningText) {
+      this.warningText.destroy();
+      this.warningText = null;
     }
 
-    if (this.dustParticles) {
-      this.dustParticles.stop();
-    }
-
-    // Hide dust graphics
-    this.hideDustGraphics();
-
-    // Hide mining indicator
-    this.hideMiningIndicator();
+    // Call parent destroy method
+    super.destroy(fromScene);
   }
 
   // When the robot reaches its target
@@ -844,6 +513,32 @@ export class MiningDrone extends Robot {
     if (this.robotState === RobotState.MOVING && this.patternGenerated) {
       console.log("onReachTarget: Starting mining");
       this.startMining();
+    } else if (this.robotState === RobotState.RETURNING) {
+      // We've reached the processor, deposit our resources
+      console.log("onReachTarget: Reached processor, depositing resources");
+
+      // Find the processor we've reached
+      const processor = this.findNearestRegolithProcessor();
+      if (
+        processor &&
+        (processor as any).addRegolith &&
+        (processor as any).canAcceptRegolith()
+      ) {
+        // Deposit the regolith
+        (processor as any).addRegolith(this.resourceAmount);
+        console.log(`Deposited ${this.resourceAmount} regolith at processor`);
+
+        // Reset our resource amount
+        this.resourceAmount = 0;
+
+        // Return to mining
+        this.robotState = RobotState.IDLE;
+        this.updateStateText();
+        this.patternGenerated = false; // Generate a new pattern
+      } else {
+        console.log("Failed to deposit regolith: No valid processor found");
+        this.showWarning();
+      }
     } else {
       console.log(
         "onReachTarget: Not starting mining. State:",
@@ -852,108 +547,5 @@ export class MiningDrone extends Robot {
         this.patternGenerated
       );
     }
-  }
-
-  // Override hasReachedTarget to call onReachTarget
-  protected hasReachedTarget(threshold: number = 5): boolean {
-    const reached = super.hasReachedTarget(threshold);
-    if (reached) {
-      console.log("Robot has reached target");
-      this.onReachTarget();
-    }
-    return reached;
-  }
-
-  // Show dust behind the robot when moving
-  private showMovementDust(): void {
-    // Get a random dust graphic from the pool
-    const availableGraphics = this.movementDustGraphics.filter(
-      (g) => !g.visible
-    );
-
-    if (availableGraphics.length === 0) return;
-
-    // Get a random dust graphic
-    const graphics =
-      availableGraphics[Math.floor(Math.random() * availableGraphics.length)];
-
-    // Calculate position behind the robot
-    // Get direction vector from last position to current position
-    const directionX = this.x - this.lastPosition.x;
-    const directionY = this.y - this.lastPosition.y;
-
-    // Normalize and invert to get position behind the robot
-    const length = Math.sqrt(directionX * directionX + directionY * directionY);
-    if (length > 0) {
-      const normalizedX = -directionX / length;
-      const normalizedY = -directionY / length;
-
-      // Add some randomness to the position
-      const offsetX = (Math.random() - 0.5) * 10;
-      const offsetY = (Math.random() - 0.5) * 10;
-
-      // Set position further behind the robot
-      graphics.x = this.x + normalizedX * 20 + offsetX;
-      graphics.y = this.y + normalizedY * 20 + offsetY;
-
-      // Clear any previous graphics and redraw
-      graphics.clear();
-      graphics.fillStyle(0xd2b48c, 0.8); // Tan color with higher alpha
-      graphics.fillCircle(0, 0, 3 + Math.random() * 2); // Slightly varied size
-
-      // Make visible and ensure depth is below robot
-      graphics.visible = true;
-      graphics.alpha = 0.9;
-      graphics.scaleX = 1;
-      graphics.scaleY = 1;
-      graphics.setDepth(5); // Ensure depth is set correctly
-
-      // Create animation
-      this.scene.tweens.add({
-        targets: graphics,
-        alpha: 0,
-        scaleX: 2,
-        scaleY: 2,
-        x: graphics.x + normalizedX * 10, // Continue moving in same direction
-        y: graphics.y + normalizedY * 10 + 5, // Add slight gravity effect
-        duration: 400 + Math.random() * 200,
-        onComplete: () => {
-          graphics.visible = false;
-        },
-      });
-    }
-  }
-
-  // Hide all movement dust particles
-  private hideMovementDust(): void {
-    this.movementDustGraphics.forEach((graphics) => {
-      graphics.visible = false;
-    });
-    this.isMovementDustVisible = false;
-  }
-
-  // Clean up resources when destroyed
-  public destroy(fromScene?: boolean): void {
-    // Clean up all graphics and particles
-    this.dustGraphics.forEach((g) => g.destroy());
-    this.movementDustGraphics.forEach((g) => g.destroy());
-
-    if (this.sparkleParticles) {
-      this.sparkleParticles.destroy();
-    }
-
-    if (this.dustParticles) {
-      this.dustParticles.destroy();
-    }
-
-    if (this.miningIndicatorTween) {
-      this.miningIndicatorTween.stop();
-    }
-
-    if (this.warningText) {
-      this.warningText.destroy();
-    }
-
-    super.destroy(fromScene);
   }
 }

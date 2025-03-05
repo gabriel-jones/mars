@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
-import { Resource, ResourceType } from "../data/resources";
+import { Resource, ResourceType, ResourceManager } from "../data/resources";
+import { TILE_SIZE } from "../constants";
 
 export enum ResourceNodeType {
   IceDeposit = "ice_deposit",
@@ -13,18 +14,46 @@ export class ResourceNode extends Phaser.GameObjects.Container {
   private label: Phaser.GameObjects.Text;
   public tileX: number;
   public tileY: number;
+  private static MAX_STACK_SIZE = 64;
+  private static nodesByTile: Map<string, ResourceNode> = new Map();
 
   constructor(
     scene: Phaser.Scene,
     x: number,
     y: number,
     resource: Resource,
-    amount: number = 1000
+    amount: number = 64
   ) {
-    super(scene, x, y);
+    // Snap to tile grid
+    const tileX = Math.floor(x / TILE_SIZE);
+    const tileY = Math.floor(y / TILE_SIZE);
+    const snappedX = tileX * TILE_SIZE + TILE_SIZE / 2;
+    const snappedY = tileY * TILE_SIZE + TILE_SIZE / 2;
 
+    super(scene, snappedX, snappedY);
+
+    this.tileX = tileX;
+    this.tileY = tileY;
+
+    // Check if a resource node already exists at this tile
+    const tileKey = `${tileX},${tileY}`;
+    if (ResourceNode.nodesByTile.has(tileKey)) {
+      // If a node exists, add to its amount instead of creating a new one
+      const existingNode = ResourceNode.nodesByTile.get(tileKey)!;
+      existingNode.addAmount(amount);
+      this.destroy();
+      return;
+    }
+
+    // Cap the amount to MAX_STACK_SIZE
     this.resource = resource;
-    this.amount = amount;
+    this.amount = Math.min(amount, ResourceNode.MAX_STACK_SIZE);
+
+    // Register this node in the global inventory system
+    ResourceManager.registerResourceNode(this);
+
+    // Register this node in the tile map
+    ResourceNode.nodesByTile.set(tileKey, this);
 
     // Create the emoji text instead of orb graphic
     this.emojiText = scene.add
@@ -34,14 +63,12 @@ export class ResourceNode extends Phaser.GameObjects.Container {
       .setOrigin(0.5);
     this.add(this.emojiText);
 
-    // Add a label showing the resource type
-    const labelText = `${resource.type} (${amount})`;
+    // Add a label showing the resource type and amount
+    const labelText = `${resource.type} (${this.amount})`;
     this.label = scene.add
       .text(0, 30, labelText, {
-        fontSize: "14px",
+        fontSize: "11px",
         color: "#FFFFFF",
-        // stroke: "#000000",
-        // strokeThickness: 2,
         align: "center",
       })
       .setOrigin(0.5);
@@ -62,12 +89,8 @@ export class ResourceNode extends Phaser.GameObjects.Container {
     scene.physics.world.enable(this);
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setCircle(20); // Set collision radius
-    body.setBounce(0.3); // Reduce bounciness for more gentle movement
-    body.setDamping(true);
-    body.setDrag(0.95); // Increase drag for quicker stopping
-    body.setMass(2); // Increase mass for more resistance to movement
-
-    // Start with zero velocity
+    body.setBounce(0); // No bounce since we want them to stay in place
+    body.setImmovable(true); // Make immovable to prevent pushing
     body.setVelocity(0, 0);
 
     scene.add.existing(this);
@@ -77,40 +100,96 @@ export class ResourceNode extends Phaser.GameObjects.Container {
     return this.amount;
   }
 
+  public getResource(): Resource {
+    return this.resource;
+  }
+
+  public getTilePosition(): { x: number; y: number } {
+    return { x: this.tileX, y: this.tileY };
+  }
+
   public addAmount(amount: number): void {
-    this.amount += amount;
-    // Update the label to show the new amount
-    this.label.setText(`${this.resource.type} (${this.amount})`);
+    const newAmount = Math.min(
+      this.amount + amount,
+      ResourceNode.MAX_STACK_SIZE
+    );
+    const actualAdded = newAmount - this.amount;
+    this.amount = newAmount;
+
+    // Update the label to show the new amount if it exists
+    if (this.label && this.label.active) {
+      this.label.setText(`${this.resource.type} (${this.amount})`);
+    }
+
+    // Don't return anything since the method is void
   }
 
   public harvest(amount: number): number {
     const harvestedAmount = Math.min(amount, this.amount);
     this.amount -= harvestedAmount;
 
-    // If the node is depleted, destroy it
+    // Update the label
+    if (this.label && this.label.active) {
+      this.label.setText(`${this.resource.type} (${this.amount})`);
+    }
+
+    // If the node is depleted, destroy it and remove from tracking
     if (this.amount <= 0) {
+      const tileKey = `${this.tileX},${this.tileY}`;
+      ResourceNode.nodesByTile.delete(tileKey);
+      ResourceManager.unregisterResourceNode(this);
       this.destroy();
     }
 
     return harvestedAmount;
   }
 
-  // Apply force when player walks by
-  public applyForce(
-    playerX: number,
-    playerY: number,
-    strength: number = 5
-  ): void {
-    const body = this.body as Phaser.Physics.Arcade.Body;
-    if (!body) return;
+  // Override the destroy method to ensure proper cleanup
+  public override destroy(fromScene?: boolean): void {
+    // Clean up the label if it exists
+    if (this.label && this.label.active) {
+      this.label.destroy();
+      this.label = null as any;
+    }
 
-    // Calculate direction away from player
-    const angle = Phaser.Math.Angle.Between(playerX, playerY, this.x, this.y);
+    // Clean up the emoji text if it exists
+    if (this.emojiText && this.emojiText.active) {
+      this.emojiText.destroy();
+      this.emojiText = null as any;
+    }
 
-    // Apply gentle force in that direction
-    const forceX = Math.cos(angle) * strength;
-    const forceY = Math.sin(angle) * strength;
+    // Stop any active tweens
+    if (this.pulseEffect) {
+      this.pulseEffect.stop();
+      this.pulseEffect.remove();
+      this.pulseEffect = null as any;
+    }
 
-    body.setVelocity(forceX, forceY);
+    // Call the parent destroy method
+    super.destroy(fromScene);
   }
+
+  // Static method to get a resource node at a specific tile
+  public static getNodeAtTile(
+    tileX: number,
+    tileY: number
+  ): ResourceNode | undefined {
+    return ResourceNode.nodesByTile.get(`${tileX},${tileY}`);
+  }
+
+  // Static method to check if a tile has a resource node
+  public static hasTileResource(tileX: number, tileY: number): boolean {
+    return ResourceNode.nodesByTile.has(`${tileX},${tileY}`);
+  }
+
+  // Static method to get all resource nodes
+  public static getAllNodes(): ResourceNode[] {
+    const nodes: ResourceNode[] = [];
+    ResourceNode.nodesByTile.forEach((node) => {
+      nodes.push(node);
+    });
+    return nodes;
+  }
+
+  // No longer need applyForce since nodes are now immovable
 }

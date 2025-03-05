@@ -9,7 +9,7 @@ import { ResourceNode } from "../resourceNode";
 
 export class RegolithProcessor extends Building {
   private processingText: Phaser.GameObjects.Text;
-  private regolithAmount: number = 0;
+  private regolithAmount: number = 100;
   private processingRate: number = 5; // Process 5 regolith at a time
   private lastProcessTime: number = 0;
   private processingInterval: number = 2500; // Process every 2.5 seconds
@@ -288,9 +288,12 @@ export class RegolithProcessor extends Building {
     if (this.spawnedResources.has(resource.type)) {
       // Update existing node with additional amount
       const existingNode = this.spawnedResources.get(resource.type);
-      if (existingNode) {
+      if (existingNode && existingNode.active) {
         existingNode.addAmount(amount);
         return;
+      } else {
+        // Node is no longer valid, remove it from our map
+        this.spawnedResources.delete(resource.type);
       }
     }
 

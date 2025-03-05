@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { Building } from "./data/buildings";
+import { ResourceCount } from "./data/resources";
 
 // Game state interface
 interface GameState {
@@ -22,10 +23,19 @@ interface GameState {
     };
   };
   buildings?: Building[]; // Add buildings array to store all placed buildings
+  resources: {
+    inventory: ResourceCount[];
+    events: Phaser.Events.EventEmitter;
+  };
 }
 
 // Initialize empty game state
-export const gameState = {} as GameState;
+export const gameState = {
+  resources: {
+    inventory: [],
+    events: new Phaser.Events.EventEmitter(),
+  },
+} as unknown as GameState;
 
 // Make gameState accessible globally for debugging and for robots to access
 (window as any).gameState = gameState;

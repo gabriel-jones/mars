@@ -3,6 +3,7 @@ import {
   createPlayer,
   setupControls,
   updatePlayerMovement,
+  cleanupPlayerDustEffects,
 } from "../entities/player";
 import { createTileHighlight, updateTileHighlight } from "../ui/tileHighlight";
 import { gameState } from "../state";
@@ -12,25 +13,23 @@ import { createMarsTileset, createTerrain } from "../terrain";
 import { ResourceNode } from "../entities/resourceNode";
 import { RESOURCE_DEFINITIONS } from "../data/resources";
 import { TILE_SIZE } from "../constants";
-import { TileType, tileData } from "../data/tiles";
-import { createFPS, updateFPS } from "../ui/fps";
+import { createFPS } from "../ui/fps";
 import { Starship } from "../entities/starship";
 import { Optimus, MiningDrone, Robot } from "../entities/robots";
-import {
-  MiningStation,
-  Habitat,
-  SolarPanel,
-  IceDrill,
-  BuildingFactory,
-} from "../entities/buildings";
+import { BuildingFactory } from "../entities/buildings";
 import { BuildingType } from "../data/buildings";
 import { Building } from "../entities/buildings/Building";
+import { JobManager } from "../entities/robots/JobManager";
+import { TerrainFeature, TerrainFeatureType } from "../entities/TerrainFeature";
+import { BuildingManager, Building as BuildingData } from "../data/buildings";
+import { ResourceManager } from "../data/resources";
 
 export class MainScene extends Phaser.Scene {
   private buildMenu: BuildMenu;
   private resourceDisplay: ResourceDisplay;
   private uiCamera: Phaser.Cameras.Scene2D.Camera;
   private resourceNodes: ResourceNode[] = [];
+  private terrainFeatures: TerrainFeature[] = [];
   private spawnPoint: Phaser.Math.Vector2;
   private map: Phaser.Tilemaps.Tilemap;
   private tileGroup: Phaser.GameObjects.Group | null = null;
@@ -153,7 +152,7 @@ export class MainScene extends Phaser.Scene {
     // Add resource nodes near the spawn point
     this.addResourceNodesNearSpawn();
 
-    // Place ice deposits on specific tiles
+    // Place ice deposits on the map
     this.placeIceDepositsOnTiles();
 
     // Create robots
@@ -166,34 +165,36 @@ export class MainScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     // Update FPS counter
-    updateFPS(this.fpsText, this);
+    this.fpsText.setText(`FPS: ${Math.round(this.game.loop.actualFps)}`);
 
     // Update player movement
-    updatePlayerMovement(
-      gameState.player,
-      gameState.cursors,
-      gameState.wasdKeys
-    );
+    if (gameState.player) {
+      updatePlayerMovement(
+        gameState.player,
+        gameState.cursors,
+        gameState.wasdKeys,
+        time
+      );
+    }
 
     // Update tile highlight
-    gameState.currentTilePos = updateTileHighlight(
-      this,
-      gameState.highlightRect,
-      gameState.map,
-      gameState.currentTilePos
-    );
-
-    // Update build menu
-    this.buildMenu.update();
+    if (gameState.highlightRect) {
+      gameState.currentTilePos = updateTileHighlight(
+        this,
+        gameState.highlightRect,
+        gameState.map,
+        gameState.currentTilePos
+      );
+    }
 
     // Update resource display
     this.resourceDisplay.update();
 
-    // Make resource nodes react to player movement
-    this.updateResourceNodePhysics();
+    // Update build menu
+    this.buildMenu.update();
 
-    // Update starship
-    this.starship.update();
+    // Update resource node physics
+    this.updateResourceNodePhysics();
 
     // Update robots
     this.updateRobots();
@@ -203,6 +204,11 @@ export class MainScene extends Phaser.Scene {
 
     // Update registry values
     this.registry.set("currentTilePos", gameState.currentTilePos);
+
+    // Clean up completed jobs every 10 seconds
+    if (time % 10000 < 100) {
+      JobManager.getInstance().cleanupCompletedJobs();
+    }
   }
 
   private handleItemPlaced(itemName: string, x: number, y: number) {
@@ -222,54 +228,63 @@ export class MainScene extends Phaser.Scene {
   }
 
   private addResourceNodesNearSpawn(): void {
-    // Add water nodes
-    for (let i = 0; i < 3; i++) {
+    // Add various resource nodes around the spawn point
+    const resourceTypes = ["potatoes", "iron", "silicon", "water", "aluminium"];
+
+    // Create a set of unique tile positions to avoid duplicates
+    const usedTilePositions = new Set<string>();
+
+    // Add 10 resource nodes of different types
+    for (let i = 0; i < 10; i++) {
+      // Generate a random angle and distance from spawn
       const angle = Math.random() * Math.PI * 2;
-      const distance = 100 + Math.random() * 150;
+      const distance = 100 + Math.random() * 50;
+
+      // Calculate world position
       const x = this.spawnPoint.x + Math.cos(angle) * distance;
       const y = this.spawnPoint.y + Math.sin(angle) * distance;
 
-      const waterNode = new ResourceNode(
-        this,
-        x,
-        y,
-        RESOURCE_DEFINITIONS.find((x) => x.type === "potatoes")!,
-        Phaser.Math.Between(10, 50)
+      // Convert to tile position
+      const tileX = Math.floor(x / TILE_SIZE);
+      const tileY = Math.floor(y / TILE_SIZE);
+      const tileKey = `${tileX},${tileY}`;
+
+      // Skip if this tile already has a resource node
+      if (usedTilePositions.has(tileKey)) {
+        continue;
+      }
+
+      // Mark this tile as used
+      usedTilePositions.add(tileKey);
+
+      // Select a random resource type
+      const resourceType =
+        resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
+      const resourceDef = RESOURCE_DEFINITIONS.find(
+        (r) => r.type === resourceType
       );
-      this.resourceNodes.push(waterNode);
+
+      if (resourceDef) {
+        // Create the resource node with a random amount between 10 and 64
+        const node = new ResourceNode(
+          this,
+          x,
+          y,
+          resourceDef,
+          Phaser.Math.Between(10, 64)
+        );
+
+        this.resourceNodes.push(node);
+      }
     }
   }
 
   private updateResourceNodePhysics(): void {
-    const playerX = gameState.player.x;
-    const playerY = gameState.player.y;
-    const proximityRadius = 80; // Reduce radius for more localized effect
-
-    // Only proceed if player is moving
-    if (
-      gameState.player.body!.velocity.x !== 0 ||
-      gameState.player.body!.velocity.y !== 0
-    ) {
-      // Check each resource node
-      this.resourceNodes.forEach((node) => {
-        const distance = Phaser.Math.Distance.Between(
-          playerX,
-          playerY,
-          node.x,
-          node.y
-        );
-
-        // If player is close to the node, apply gentle force
-        if (distance < proximityRadius) {
-          // Force strength is inversely proportional to distance
-          // Use a smaller multiplier for gentler movement
-          const strength = 16 * (1 - distance / proximityRadius);
-          node.applyForce(playerX, playerY, strength);
-        }
-      });
-    }
-    // Add collisions between resource nodes
-    // this.physics.add.collider(this.resourceNodes, this.resourceNodes);
+    // Resource nodes are now immovable and snapped to tiles
+    // No need to apply physics forces anymore
+    // Instead, we can use this method to update any visual effects
+    // or handle any other resource node-related logic that needs
+    // to happen every frame
   }
 
   placeIceDepositsOnTiles() {
@@ -288,16 +303,10 @@ export class MainScene extends Phaser.Scene {
         const tile = map.getTileAt(x, y);
 
         // Check if this is a valid tile for an ice deposit
-        // You might want to check specific tile properties or types
         if (tile && this.isValidTileForIceDeposit(tile)) {
           validTiles.push(tile);
         }
       }
-    }
-
-    // Create the tile group if it doesn't exist
-    if (!this.tileGroup) {
-      this.tileGroup = this.add.group();
     }
 
     // Randomly select tiles for ice deposits
@@ -313,30 +322,16 @@ export class MainScene extends Phaser.Scene {
         const worldX = map.tileToWorldX(tile.x)! + TILE_SIZE / 2;
         const worldY = map.tileToWorldY(tile.y)! + TILE_SIZE / 2;
 
-        // Create the ice deposit at this position
-        const iceDeposit = this.add.rectangle(
+        // Create a terrain feature for the ice deposit
+        const iceDeposit = new TerrainFeature(
+          this,
           worldX,
           worldY,
-          TILE_SIZE,
-          TILE_SIZE,
-          parseInt(tileData[TileType.ICE_DEPOSIT].color.replace("#", "0x")),
-          0.7 // Add some transparency to see the underlying tile
+          TerrainFeatureType.IceDeposit
         );
 
-        // Add an icon if available
-        if (tileData[TileType.ICE_DEPOSIT].icon) {
-          this.add
-            .text(worldX, worldY, tileData[TileType.ICE_DEPOSIT].icon, {
-              fontSize: "20px",
-            })
-            .setOrigin(0.5);
-        }
-
-        // Store the tile type information
-        iceDeposit.setData("type", TileType.ICE_DEPOSIT);
-
-        // Add to the group for easier management
-        this.tileGroup.add(iceDeposit);
+        // Add to our terrain features array
+        this.terrainFeatures.push(iceDeposit);
 
         // Mark this tile as having an ice deposit in gameState
         gameState.tileData = gameState.tileData || {};
@@ -359,30 +354,39 @@ export class MainScene extends Phaser.Scene {
     );
   }
 
-  // Create robots for the colony
-  private createRobots(): void {
-    // Create a few humanoid robots near the starship
-    for (let i = 0; i < 2; i++) {
+  // Update all robots
+  private updateRobots(): void {
+    // Update all robots
+    this.robots.forEach((robot) => robot.update());
+
+    // Check if we need to create more Optimus robots
+    if (this.optimuses.length < 2) {
+      this.createOptimusRobots(2 - this.optimuses.length);
+    }
+  }
+
+  // Create a specific number of Optimus robots
+  private createOptimusRobots(count: number): void {
+    for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
       const distance = 100 + Math.random() * 50;
-      const x = this.starship.x + Math.cos(angle) * distance;
-      const y = this.starship.y + Math.sin(angle) * distance;
+      const x = this.starship
+        ? this.starship.x + Math.cos(angle) * distance
+        : 400;
+      const y = this.starship
+        ? this.starship.y + Math.sin(angle) * distance
+        : 400;
 
       const optimus = new Optimus(this, x, y);
       this.robots.push(optimus);
       this.optimuses.push(optimus);
-
-      // Assign some initial tasks to the humanoid robot
-      // For example, move to a random position near the spawn point
-      const randomX = this.spawnPoint.x + (Math.random() - 0.5) * 200;
-      const randomY = this.spawnPoint.y + (Math.random() - 0.5) * 200;
-      optimus.moveToPosition(randomX, randomY);
     }
   }
 
-  // Update all robots
-  private updateRobots(): void {
-    this.robots.forEach((robot) => robot.update());
+  // Create robots for the colony
+  private createRobots(): void {
+    // Create a few humanoid robots near the starship
+    this.createOptimusRobots(2);
   }
 
   // Add a robot to the scene
@@ -399,14 +403,40 @@ export class MainScene extends Phaser.Scene {
 
   // Update all buildings in the game
   private updateBuildings(): void {
-    // Get all building game objects from the scene
-    const buildings = this.children.list.filter(
-      (child) => child instanceof Building
-    ) as Building[];
+    // Get all buildings from the BuildingManager
+    const buildings = BuildingManager.getBuildings();
 
-    // Update each building
-    buildings.forEach((building) => {
-      building.update();
+    // Loop through each building and update it
+    buildings.forEach((buildingData: BuildingData) => {
+      // Find the building instance in the scene
+      const buildingInstance = this.children
+        .getChildren()
+        .find(
+          (child) =>
+            child instanceof Building &&
+            child.x === buildingData.position.x * TILE_SIZE + TILE_SIZE / 2 &&
+            child.y === buildingData.position.y * TILE_SIZE + TILE_SIZE / 2
+        ) as Building;
+
+      // If we found the building instance, update it
+      if (buildingInstance) {
+        buildingInstance.update(this.time.now);
+      }
     });
+  }
+
+  // Clean up resources when the scene is destroyed
+  shutdown() {
+    // Clean up player dust effects
+    if (gameState.player) {
+      cleanupPlayerDustEffects(gameState.player);
+    }
+
+    // Clean up the resource display
+    if (this.resourceDisplay) {
+      this.resourceDisplay.destroy();
+    }
+
+    // Clean up other resources as needed
   }
 }

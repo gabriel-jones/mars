@@ -30,7 +30,7 @@ export class Building extends Phaser.GameObjects.Container {
     return this.buildingType;
   }
 
-  public update(): void {
+  public update(time?: number, delta?: number): void {
     // Base update method, to be overridden by subclasses
   }
 }

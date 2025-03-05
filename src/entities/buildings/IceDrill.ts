@@ -1,10 +1,14 @@
 import Phaser from "phaser";
 import { Building } from "./Building";
+import { TerrainFeatureType } from "../TerrainFeature";
+import { ResourceManager } from "../../data/resources";
 
 export class IceDrill extends Building {
   protected waterOutput: number;
   protected drillEfficiency: number;
   protected outputText: Phaser.GameObjects.Text;
+  protected lastHarvestTime: number = 0;
+  protected harvestInterval: number = 5000; // 5 seconds in ms
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, "ice-drill");
@@ -56,7 +60,20 @@ export class IceDrill extends Building {
     this.outputText.setText(`Water: ${this.waterOutput}/min`);
   }
 
-  public update(): void {
-    // Ice drill specific update logic
+  public update(time: number): void {
+    // Check if it's time to harvest water
+    if (time - this.lastHarvestTime >= this.harvestInterval) {
+      // Calculate how much water to add (waterOutput is per minute, so divide by 60 and multiply by seconds passed)
+      const secondsPassed = (time - this.lastHarvestTime) / 1000;
+      const waterToAdd = Math.floor((this.waterOutput / 60) * secondsPassed);
+
+      if (waterToAdd > 0) {
+        // Add water to resources
+        ResourceManager.addResource("water", waterToAdd);
+
+        // Update last harvest time
+        this.lastHarvestTime = time;
+      }
+    }
   }
 }
