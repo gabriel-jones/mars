@@ -28,19 +28,20 @@ export class ResourceNode extends Phaser.GameObjects.Container {
 
     // Create the emoji text instead of orb graphic
     this.emojiText = scene.add
-      .text(0, 0, this.getResourceEmoji(), {
+      .text(0, 0, resource.emoji, {
         fontSize: "32px",
       })
       .setOrigin(0.5);
     this.add(this.emojiText);
 
     // Add a label showing the resource type
+    const labelText = `${resource.type} (${amount})`;
     this.label = scene.add
-      .text(0, 30, resource.type, {
+      .text(0, 30, labelText, {
         fontSize: "14px",
         color: "#FFFFFF",
-        stroke: "#000000",
-        strokeThickness: 3,
+        // stroke: "#000000",
+        // strokeThickness: 2,
         align: "center",
       })
       .setOrigin(0.5);
@@ -70,48 +71,6 @@ export class ResourceNode extends Phaser.GameObjects.Container {
     body.setVelocity(0, 0);
 
     scene.add.existing(this);
-  }
-
-  // Get emoji for resource type
-  private getResourceEmoji(): string {
-    switch (this.resource.type) {
-      // Life Support
-      case "oxygen":
-        return "💨"; // Wind emoji for oxygen
-      case "water":
-        return "💧"; // Water droplet
-      // Elements
-      case "silicon":
-        return "🔷"; // Blue diamond for silicon
-      case "sulphur":
-        return "🟡"; // Yellow circle for sulphur
-      // Metals
-      case "iron":
-        return "⚙️"; // Gear for iron
-      case "aluminium":
-        return "🥫"; // Can for aluminium
-      case "magnesium":
-        return "✨"; // Sparkles for magnesium
-      case "calcium":
-        return "🦴"; // Bone for calcium
-      case "titanium":
-        return "🔩"; // Nut and bolt for titanium
-      case "potassium":
-        return "🧪"; // Test tube for potassium
-      case "sodium":
-        return "🧂"; // Salt for sodium
-      // Food
-      case "carrots":
-        return "🥕"; // Carrot
-      case "tomatoes":
-        return "🍅"; // Tomato
-      case "potatoes":
-        return "🥔"; // Potato
-      case "beans":
-        return "🫘"; // Beans
-      default:
-        return "❓"; // Question mark for unknown resources
-    }
   }
 
   public getAmount(): number {

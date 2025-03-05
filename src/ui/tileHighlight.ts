@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { TILE_SIZE } from "./constants";
+import { TILE_SIZE } from "../constants";
 
 // Create tile highlight
 export function createTileHighlight(

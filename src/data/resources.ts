@@ -25,6 +25,7 @@ export interface Resource {
   type: ResourceType;
   category?: ResourceCategory;
   name: string;
+  emoji: string;
 }
 
 export interface ResourceCount {
@@ -43,32 +44,38 @@ export const RESOURCE_DEFINITIONS: Resource[] = [
     type: "carrots",
     category: "food",
     name: "Carrots",
+    emoji: "🥕",
   },
   {
     type: "tomatoes",
     category: "food",
     name: "Tomatoes",
+    emoji: "🍅",
   },
   {
     type: "potatoes",
     category: "food",
     name: "Potatoes",
+    emoji: "🥔",
   },
   {
     type: "beans",
     category: "food",
     name: "Beans",
+    emoji: "🫘",
   },
   // Elements
   {
     type: "silicon",
     category: "elements",
     name: "Silicon",
+    emoji: "🧱",
   },
   {
     type: "sulphur",
     category: "elements",
     name: "Sulphur",
+    emoji: "🟡",
   },
 
   // Metals
@@ -76,47 +83,56 @@ export const RESOURCE_DEFINITIONS: Resource[] = [
     type: "iron",
     category: "metals",
     name: "Iron",
+    emoji: "🔘",
   },
   {
     type: "aluminium",
     category: "metals",
     name: "Aluminium",
+    emoji: "🔩",
   },
   {
     type: "magnesium",
     category: "metals",
     name: "Magnesium",
+    emoji: "✨",
   },
   {
     type: "calcium",
     category: "metals",
     name: "Calcium",
+    emoji: "🦴",
   },
   {
     type: "titanium",
     category: "metals",
     name: "Titanium",
+    emoji: "🔩",
   },
   {
     type: "potassium",
     category: "metals",
     name: "Potassium",
+    emoji: "🧪",
   },
   {
     type: "sodium",
     category: "metals",
     name: "Sodium",
+    emoji: "🧂",
   },
   // Life Support
   {
     type: "water",
     category: "life-support",
     name: "Water",
+    emoji: "💧",
   },
   {
     type: "oxygen",
     category: "life-support",
     name: "Oxygen",
+    emoji: "🅾️",
   },
 ];
 

@@ -4,7 +4,7 @@ import {
   setupControls,
   updatePlayerMovement,
 } from "../entities/player";
-import { createTileHighlight, updateTileHighlight } from "../ui";
+import { createTileHighlight, updateTileHighlight } from "../ui/tileHighlight";
 import { gameState } from "../state";
 import { BuildMenu } from "../ui/buildMenu";
 import { ResourceDisplay } from "../ui/resourceDisplay";
@@ -189,7 +189,7 @@ export class MainScene extends Phaser.Scene {
         x,
         y,
         RESOURCE_DEFINITIONS.find((x) => x.type === "potatoes")!,
-        1000 + Math.floor(Math.random() * 1000)
+        Phaser.Math.Between(10, 50)
       );
       this.resourceNodes.push(waterNode);
     }
