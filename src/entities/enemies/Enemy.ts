@@ -22,7 +22,7 @@ interface TargetObject extends Phaser.GameObjects.GameObject {
 // Base Enemy class
 export abstract class Enemy extends Agent {
   protected enemyState: EnemyState;
-  protected enemyType: EnemyType;
+  public enemyType: EnemyType;
   protected target: TargetObject | null = null;
   protected speed: number;
   protected attackRange: number;
@@ -32,6 +32,7 @@ export abstract class Enemy extends Agent {
   protected stateText: Phaser.GameObjects.Text;
   protected label: Phaser.GameObjects.Text;
   protected preferredShootingDistance: number; // Distance at which enemies prefer to stop and shoot
+  public isEnemy: boolean = true; // Flag to identify this as an enemy for collision detection
 
   constructor(
     scene: Phaser.Scene,
@@ -332,7 +333,11 @@ export abstract class Enemy extends Agent {
 
   // Update the state text
   protected updateStateText(): void {
-    this.stateText.setText(this.enemyState.toUpperCase());
+    if (this.stateText) {
+      this.stateText.setText(
+        `${this.enemyState.toUpperCase()} (${this.health}/${this.maxHealth})`
+      );
+    }
   }
 
   // Handle death
@@ -390,4 +395,36 @@ export abstract class Enemy extends Agent {
 
   // Get enemy name (to be implemented by subclasses)
   public abstract getEnemyName(): string;
+
+  // Take damage and show visual feedback
+  public damage(amount: number): void {
+    // Call the parent takeDamage method
+    this.takeDamage(amount);
+
+    // Show damage feedback (flash red or green based on enemy type)
+    if (this.sprite instanceof Phaser.Physics.Arcade.Sprite) {
+      // Use green tint for UFOs, red for others
+      const tintColor = this.enemyType === "ufo" ? 0x00ff00 : 0xff0000;
+      this.sprite.setTint(tintColor);
+
+      // Reset tint after a short delay
+      this.scene.time.delayedCall(100, () => {
+        if (
+          this.sprite instanceof Phaser.Physics.Arcade.Sprite &&
+          this.isAlive()
+        ) {
+          this.sprite.clearTint();
+        }
+      });
+    }
+
+    // Update health display
+    this.updateStateText();
+
+    console.log(
+      `Enemy ${this.getEnemyName()} (${
+        this.enemyType
+      }) took ${amount} damage. Health: ${this.health}/${this.maxHealth}`
+    );
+  }
 }

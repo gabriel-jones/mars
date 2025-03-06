@@ -26,10 +26,12 @@ import { BuildingManager, Building as BuildingData } from "../data/buildings";
 import { ResourceManager } from "../data/resources";
 import { Blueprint } from "../entities/buildings/Blueprint";
 import { Enemy, Alien } from "../entities/enemies";
+import { ToolInventoryDisplay } from "../ui/toolInventoryDisplay";
 
 export class MainScene extends Phaser.Scene {
   private actionMenu: ActionMenu;
   private resourceDisplay: ResourceDisplay;
+  private toolInventoryDisplay: ToolInventoryDisplay;
   private fpsText: Phaser.GameObjects.Text;
   private uiCamera: Phaser.Cameras.Scene2D.Camera;
   private resourceNodes: ResourceNode[] = [];
@@ -57,6 +59,17 @@ export class MainScene extends Phaser.Scene {
     // Player
     this.load.image("player", "assets/player.png");
 
+    // Tools - try both SVG and PNG versions
+    this.load.image("assault-rifle", "assets/assault-rifle.png");
+    this.load.svg("assault-rifle", "assets/assault-rifle.svg");
+    this.load.svg("assault-rifle-icon", "assets/assault-rifle-icon.svg");
+
+    // Bullet
+    this.load.image("bullet", "assets/bullet.png");
+
+    // Fallback images for tools (in case SVG loading fails)
+    this.load.image("assault-rifle-fallback", "assets/player.png"); // Using player as fallback
+
     // Buildings
     this.load.image("habitat", "assets/habitat.png");
     this.load.image("solar-panel", "assets/solar-panel.png");
@@ -78,7 +91,7 @@ export class MainScene extends Phaser.Scene {
     this.load.image("alien", "assets/alien.png");
 
     // Particles
-    this.load.image("flare", "assets/flare-2.png"); // Particle effect for mining
+    this.load.image("flare", "assets/flare-2.png"); // Make sure this is loaded for muzzle flash and blood effects
 
     // Create a small 8x8 dust texture programmatically
     const dustTexture = this.textures.createCanvas("dust-particle", 8, 8);
@@ -144,6 +157,13 @@ export class MainScene extends Phaser.Scene {
     // Create UI elements
     gameState.highlightRect = createTileHighlight(this);
     gameState.currentTilePos = { x: -1, y: -1 };
+
+    // Make sure physics is enabled
+    this.physics.world.enable([this.player.getSprite()]);
+
+    // Set up physics debug if needed
+    this.physics.world.createDebugGraphic();
+    this.physics.world.debugGraphic.setVisible(false); // Set to true to see physics bodies
 
     // Create a separate camera for UI elements that doesn't move
     this.uiCamera = this.cameras.add(
@@ -213,6 +233,38 @@ export class MainScene extends Phaser.Scene {
     // Store current tile position in registry for robot panel to access
     this.registry.set("player", gameState.player);
     this.registry.set("currentTilePos", gameState.currentTilePos);
+
+    // Create tool inventory display
+    console.log("Creating tool inventory display");
+    this.toolInventoryDisplay = new ToolInventoryDisplay(
+      this,
+      this.player.getToolInventory()
+    );
+
+    console.log("Tool inventory display created:", this.toolInventoryDisplay);
+    console.log(
+      "Tool inventory container:",
+      this.toolInventoryDisplay.getContainer()
+    );
+
+    // Make sure the tool inventory display is not ignored by the UI camera
+    // and is ignored by the main camera
+    this.cameras.main.ignore(this.toolInventoryDisplay.getContainer());
+
+    // Make sure the UI camera doesn't ignore the tool inventory display
+    // We need to explicitly tell the UI camera to include the tool inventory display
+    // by not adding it to the ignore list
+    this.uiCamera.ignore([gameState.player, gameState.groundLayer]);
+
+    // Handle window resize events
+    this.scale.on("resize", this.handleResize, this);
+
+    // Log the creation of UI elements
+    console.log("UI elements created:", {
+      actionMenu: !!this.actionMenu,
+      resourceDisplay: !!this.resourceDisplay,
+      toolInventoryDisplay: !!this.toolInventoryDisplay,
+    });
   }
 
   update(time: number, delta: number) {
@@ -288,6 +340,20 @@ export class MainScene extends Phaser.Scene {
 
     // Update registry values
     this.registry.set("currentTilePos", gameState.currentTilePos);
+
+    // Update tool inventory display with the selected tool index
+    if (this.toolInventoryDisplay && this.player) {
+      const selectedIndex = this.player.getToolInventory().getSelectedTool()
+        ? this.player
+            .getToolInventory()
+            .getAllTools()
+            .findIndex(
+              (tool) =>
+                tool === this.player.getToolInventory().getSelectedTool()
+            )
+        : -1;
+      this.toolInventoryDisplay.updateSelection(selectedIndex);
+    }
   }
 
   private handleItemPlaced(itemName: string, x: number, y: number) {
@@ -824,6 +890,9 @@ export class MainScene extends Phaser.Scene {
 
   // Clean up resources when the scene is destroyed
   shutdown() {
+    // Remove event listeners
+    this.scale.off("resize", this.handleResize, this);
+
     // Clean up player dust effects
     if (this.player) {
       // Player class handles its own cleanup
@@ -834,6 +903,11 @@ export class MainScene extends Phaser.Scene {
     // Clean up the resource display
     if (this.resourceDisplay) {
       this.resourceDisplay.destroy();
+    }
+
+    // Clean up tool inventory display
+    if (this.toolInventoryDisplay) {
+      this.toolInventoryDisplay.destroy();
     }
 
     // Clean up other resources as needed
@@ -877,10 +951,12 @@ export class MainScene extends Phaser.Scene {
 
   // Create enemies
   private createEnemies(): void {
-    // Create UFO enemies at random positions around the map
-    const enemyCount = 5;
+    // Create UFO and Alien enemies at random positions around the map
+    const ufoCount = 3;
+    const alienCount = 3;
 
-    for (let i = 0; i < enemyCount; i++) {
+    // Create UFOs
+    for (let i = 0; i < ufoCount; i++) {
       // Generate random position at the edges of the map
       let x, y;
       const mapWidth = this.map.widthInPixels;
@@ -913,18 +989,23 @@ export class MainScene extends Phaser.Scene {
       }
 
       // Create a UFO enemy
-      const ufo = new Alien(
-        this,
-        x,
-        y,
-        80, // maxHealth
-        70 + Phaser.Math.Between(-10, 10), // speed with slight variation
-        120, // attackRange
-        15, // attackDamage
-        1500 // attackCooldown
-      );
+      try {
+        const ufo = new Alien(
+          this,
+          x,
+          y,
+          80, // maxHealth
+          70 + Phaser.Math.Between(-10, 10), // speed with slight variation
+          120, // attackRange
+          15, // attackDamage
+          1500 // attackCooldown
+        );
 
-      this.enemies.push(ufo);
+        this.enemies.push(ufo);
+        console.log(`Created UFO at ${x}, ${y}`);
+      } catch (error) {
+        console.error("Error creating UFO:", error);
+      }
     }
 
     // Add enemies to gameState
@@ -941,9 +1022,26 @@ export class MainScene extends Phaser.Scene {
 
       // Update the enemy
       enemy.update(time, delta);
+
+      // Remove dead enemies
+      if (!enemy.isAlive()) {
+        console.log(`Enemy died: ${enemy.getEnemyName()}`);
+        enemy.destroy();
+        this.enemies.splice(i, 1);
+      }
     }
 
     // Update gameState.enemies
     gameState.enemies = this.enemies;
+  }
+
+  // Handle window resize events
+  private handleResize(gameSize: Phaser.Structs.Size): void {
+    console.log("Window resized:", gameSize.width, gameSize.height);
+
+    // Update tool inventory display
+    if (this.toolInventoryDisplay) {
+      this.toolInventoryDisplay.resize();
+    }
   }
 }

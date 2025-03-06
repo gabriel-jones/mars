@@ -33,7 +33,21 @@ export class Alien extends Enemy {
     // Set a random starting point for the hover effect
     this.hoverOffset = Math.random() * Math.PI * 2;
 
-    this.sprite.setDisplaySize(TILE_SIZE, TILE_SIZE);
+    // Set up the sprite for proper collision detection
+    if (this.sprite instanceof Phaser.Physics.Arcade.Sprite) {
+      this.sprite.setDisplaySize(TILE_SIZE, TILE_SIZE);
+      this.sprite.setSize(TILE_SIZE * 0.8, TILE_SIZE * 0.8); // Slightly smaller hitbox than visual size
+
+      // Check if body exists before accessing its properties
+      if (this.sprite.body) {
+        this.sprite.body.setOffset(TILE_SIZE * 0.1, TILE_SIZE * 0.1); // Center the hitbox
+
+        // Make sure the physics body is enabled
+        this.sprite.body.enable = true;
+      }
+
+      console.log(`Alien created at ${x}, ${y} with physics body enabled`);
+    }
   }
 
   public update(time: number, delta: number): void {

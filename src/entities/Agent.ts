@@ -147,6 +147,19 @@ export abstract class Agent {
     }
   }
 
+  // Clean up all resources
+  public destroy(): void {
+    this.cleanupDustEffects();
+    this.cleanupShadowEffects();
+
+    // Destroy the sprite if it's not already part of a container
+    if (this.sprite instanceof Phaser.Physics.Arcade.Sprite) {
+      this.sprite.destroy();
+    } else if (this.sprite instanceof Phaser.GameObjects.Container) {
+      this.sprite.destroy();
+    }
+  }
+
   // Abstract method to be implemented by subclasses
   protected abstract onDeath(): void;
 
