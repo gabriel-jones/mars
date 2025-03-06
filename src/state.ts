@@ -1,6 +1,8 @@
 import Phaser from "phaser";
 import { Building } from "./data/buildings";
 import { ResourceCount } from "./data/resources";
+import { Robot } from "./entities/robots";
+import { Enemy } from "./entities/enemies";
 
 // Game state interface
 interface GameState {
@@ -23,6 +25,8 @@ interface GameState {
     };
   };
   buildings?: Building[]; // Add buildings array to store all placed buildings
+  robots: Robot[]; // Add robots array for enemies to target
+  enemies: Enemy[]; // Add enemies array
   resources: {
     inventory: ResourceCount[];
     events: Phaser.Events.EventEmitter;
@@ -31,6 +35,8 @@ interface GameState {
 
 // Initialize empty game state
 export const gameState = {
+  robots: [],
+  enemies: [],
   resources: {
     inventory: [],
     events: new Phaser.Events.EventEmitter(),

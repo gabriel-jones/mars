@@ -1,0 +1,9 @@
+---
+description: When defining large numbers, use underscores in between thousands eg 1000000 would be 1_000_000
+globs: 
+---
+
+# Your rule content
+
+- You can @ files here
+- You can use markdown but dont have to

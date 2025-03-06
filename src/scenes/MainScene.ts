@@ -4,6 +4,7 @@ import {
   setupControls,
   updatePlayerMovement,
   cleanupPlayerDustEffects,
+  Player,
 } from "../entities/player";
 import { createTileHighlight, updateTileHighlight } from "../ui/tileHighlight";
 import { gameState } from "../state";
@@ -23,8 +24,8 @@ import { JobManager, JobType, Job } from "../entities/robots/JobManager";
 import { TerrainFeature, TerrainFeatureType } from "../entities/TerrainFeature";
 import { BuildingManager, Building as BuildingData } from "../data/buildings";
 import { ResourceManager } from "../data/resources";
-import { BUILDING_DEFINITIONS } from "../data/buildings";
 import { Blueprint } from "../entities/buildings/Blueprint";
+import { Enemy, Alien } from "../entities/enemies";
 
 export class MainScene extends Phaser.Scene {
   private actionMenu: ActionMenu;
@@ -42,6 +43,8 @@ export class MainScene extends Phaser.Scene {
   private optimuses: Optimus[] = [];
   private buildings: Building[] = [];
   private blueprints: Blueprint[] = [];
+  private enemies: Enemy[] = [];
+  private player: Player;
 
   constructor() {
     super({ key: "MainScene" });
@@ -70,6 +73,10 @@ export class MainScene extends Phaser.Scene {
     this.load.image("optimus", "assets/optimus.png");
     this.load.image("mining-drone", "assets/mining-drone.png");
 
+    // Enemies
+    this.load.image("ufo", "assets/ufo.png");
+    this.load.image("alien", "assets/alien.png");
+
     // Particles
     this.load.image("flare", "assets/flare-2.png"); // Particle effect for mining
 
@@ -91,6 +98,26 @@ export class MainScene extends Phaser.Scene {
       dustTexture.refresh();
     }
 
+    // Create a shadow texture programmatically
+    const shadowTexture = this.textures.createCanvas("shadow", 64, 32);
+    if (shadowTexture) {
+      const shadowContext = shadowTexture.getContext();
+
+      // Create a pixelated oval shadow
+      shadowContext.fillStyle = "rgba(255, 255, 255, 1)";
+
+      // Draw a MASSIVE pixelated oval (64x32 pixels)
+      shadowContext.fillRect(0, 8, 64, 16);
+      shadowContext.fillRect(8, 4, 48, 24);
+      shadowContext.fillRect(16, 0, 32, 32);
+
+      // Update the texture
+      shadowTexture.refresh();
+      console.log("Shadow texture created successfully - MASSIVE SIZE");
+    } else {
+      console.error("Failed to create shadow texture");
+    }
+
     // Other
     this.load.svg("bulldozer", "assets/bulldozer.svg");
   }
@@ -101,16 +128,18 @@ export class MainScene extends Phaser.Scene {
 
     // Create terrain
     const { map, groundLayer } = createTerrain(this);
+    this.map = map;
     gameState.map = map;
     gameState.groundLayer = groundLayer;
 
     // Create player
-    gameState.player = createPlayer(this);
+    this.player = createPlayer(this);
+    gameState.player = this.player.getSprite() as Phaser.Physics.Arcade.Sprite;
 
     // Setup controls
-    const { cursors, wasdKeys } = setupControls(this);
-    gameState.cursors = cursors;
-    gameState.wasdKeys = wasdKeys;
+    const controls = setupControls(this);
+    gameState.cursors = controls.cursors;
+    gameState.wasdKeys = controls.wasdKeys;
 
     // Create UI elements
     gameState.highlightRect = createTileHighlight(this);
@@ -178,6 +207,9 @@ export class MainScene extends Phaser.Scene {
     // Create robots
     this.createRobots();
 
+    // Create enemies
+    this.createEnemies();
+
     // Store current tile position in registry for robot panel to access
     this.registry.set("player", gameState.player);
     this.registry.set("currentTilePos", gameState.currentTilePos);
@@ -189,12 +221,23 @@ export class MainScene extends Phaser.Scene {
 
     // Update player movement
     if (gameState.player) {
-      updatePlayerMovement(
-        gameState.player,
-        gameState.cursors,
-        gameState.wasdKeys,
-        time
-      );
+      if (this.player) {
+        // Use the new Player class update method
+        this.player.update(time, delta);
+
+        // Log shadow update for debugging
+        if (time % 1000 < 20) {
+          console.log("Player update called, shadows should be updating");
+        }
+      } else {
+        // Fallback to the old function for backward compatibility
+        updatePlayerMovement(
+          gameState.player,
+          gameState.cursors,
+          gameState.wasdKeys,
+          time
+        );
+      }
     }
 
     // Update tile highlight
@@ -239,6 +282,9 @@ export class MainScene extends Phaser.Scene {
     if (time % 10000 < 100) {
       JobManager.getInstance().cleanupCompletedJobs();
     }
+
+    // Update enemies
+    this.updateEnemies(time, delta);
 
     // Update registry values
     this.registry.set("currentTilePos", gameState.currentTilePos);
@@ -652,7 +698,9 @@ export class MainScene extends Phaser.Scene {
   // Update all robots
   private updateRobots(): void {
     // Update all robots
-    this.robots.forEach((robot) => robot.update());
+    this.robots.forEach((robot) =>
+      robot.update(this.time.now, this.game.loop.delta)
+    );
 
     // Check if we need to create more Optimus robots
     if (this.optimuses.length < 2) {
@@ -688,12 +736,21 @@ export class MainScene extends Phaser.Scene {
   public addRobot(robot: Robot): void {
     this.robots.push(robot);
 
-    // Also add to the specific type array
+    // Add to gameState for enemies to target
+    gameState.robots = this.robots;
+
+    // If it's a mining drone, add it to the mining drones array
     if (robot instanceof MiningDrone) {
-      this.miningDrones.push(robot);
-    } else if (robot instanceof Optimus) {
-      this.optimuses.push(robot);
+      this.miningDrones.push(robot as MiningDrone);
     }
+
+    // If it's an optimus, add it to the optimuses array
+    if (robot instanceof Optimus) {
+      this.optimuses.push(robot as Optimus);
+    }
+
+    // Update the robots list in the action menu
+    this.updateRobotsListInMenu();
   }
 
   // Update all buildings in the game
@@ -768,7 +825,9 @@ export class MainScene extends Phaser.Scene {
   // Clean up resources when the scene is destroyed
   shutdown() {
     // Clean up player dust effects
-    if (gameState.player) {
+    if (this.player) {
+      // Player class handles its own cleanup
+    } else if (gameState.player) {
       cleanupPlayerDustEffects(gameState.player);
     }
 
@@ -814,5 +873,77 @@ export class MainScene extends Phaser.Scene {
 
     // Update the robots list in the menu
     this.actionMenu.updateRobotsList(robotsInfo);
+  }
+
+  // Create enemies
+  private createEnemies(): void {
+    // Create UFO enemies at random positions around the map
+    const enemyCount = 5;
+
+    for (let i = 0; i < enemyCount; i++) {
+      // Generate random position at the edges of the map
+      let x, y;
+      const mapWidth = this.map.widthInPixels;
+      const mapHeight = this.map.heightInPixels;
+      const margin = 200; // Keep enemies away from the center initially
+
+      // Randomly choose which edge to spawn on
+      const edge = Phaser.Math.Between(0, 3);
+
+      switch (edge) {
+        case 0: // Top edge
+          x = Phaser.Math.Between(margin, mapWidth - margin);
+          y = Phaser.Math.Between(margin, margin * 2);
+          break;
+        case 1: // Right edge
+          x = Phaser.Math.Between(mapWidth - margin * 2, mapWidth - margin);
+          y = Phaser.Math.Between(margin, mapHeight - margin);
+          break;
+        case 2: // Bottom edge
+          x = Phaser.Math.Between(margin, mapWidth - margin);
+          y = Phaser.Math.Between(mapHeight - margin * 2, mapHeight - margin);
+          break;
+        case 3: // Left edge
+          x = Phaser.Math.Between(margin, margin * 2);
+          y = Phaser.Math.Between(margin, mapHeight - margin);
+          break;
+        default:
+          x = margin;
+          y = margin;
+      }
+
+      // Create a UFO enemy
+      const ufo = new Alien(
+        this,
+        x,
+        y,
+        80, // maxHealth
+        70 + Phaser.Math.Between(-10, 10), // speed with slight variation
+        120, // attackRange
+        15, // attackDamage
+        1500 // attackCooldown
+      );
+
+      this.enemies.push(ufo);
+    }
+
+    // Add enemies to gameState
+    gameState.enemies = this.enemies;
+
+    console.log(`Created ${this.enemies.length} enemies`);
+  }
+
+  // Update enemies
+  private updateEnemies(time: number, delta: number): void {
+    // Update each enemy
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const enemy = this.enemies[i];
+
+      // Update the enemy
+      enemy.update(time, delta);
+    }
+
+    // Update gameState.enemies
+    gameState.enemies = this.enemies;
   }
 }

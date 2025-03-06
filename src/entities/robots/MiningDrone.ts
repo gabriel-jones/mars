@@ -48,7 +48,7 @@ export class MiningDrone extends Robot {
     );
 
     // Set the robot's depth to ensure it renders above dust particles
-    this.setDepth(10);
+    this.container.setDepth(10);
 
     // Configure Mars-appropriate dust effects
     this.configureDustEffects(scene);
@@ -57,21 +57,17 @@ export class MiningDrone extends Robot {
   // Configure Mars-appropriate dust effects
   private configureDustEffects(scene: Phaser.Scene): void {
     // Override the default dust effects with Mars-appropriate colors
-    this.dustEffects = new DustEffects(scene, this, {
+    this.initDustEffects({
       dustColor: 0xd2b48c, // Tan color for Mars dust
       dustSize: 5, // Reduced from 8
       dustAlpha: 0.75, // Reduced from 0.85
-      dustCount: 14, // Reduced from 16
-      dustInterval: 70, // Increased from 60 to spawn less frequently
-      dustLifetime: 1000, // Reduced from 1200
-      workingDustColor: 0xd2b48c, // Tan color for Mars dust
-      workingDustSize: 6, // Reduced from 9
-      workingDustAlpha: 0.85, // Reduced from 0.95
-      workingDustCount: 18, // Reduced from 24
-      movementDustColor: 0xc19a6b, // Darker tan for movement dust
-      movementDustSize: 5, // Reduced from 8
-      movementDustAlpha: 0.8, // Reduced from 0.9
-      movementDustCount: 25, // Reduced from 35
+      dustCount: 12, // Increased from 10
+      dustInterval: 70, // Reduced from 100
+      dustLifetime: 800, // Reduced from 1000
+      movementDustColor: 0xd2b48c,
+      movementDustSize: 4,
+      movementDustAlpha: 0.7,
+      movementDustCount: 8,
     });
   }
 
@@ -91,12 +87,13 @@ export class MiningDrone extends Robot {
     this.resourceType = type;
   }
 
-  public update(): void {
+  // Update the mining drone
+  public update(time: number, delta: number): void {
     // Update the state text
     this.updateStateText();
 
     // Update dust effects
-    this.updateDustEffects(this.scene.time.now);
+    this.updateDustEffects(time);
 
     // If we're idle and don't have a pattern, generate one and start mining
     if (this.robotState === RobotState.IDLE && !this.patternGenerated) {
@@ -167,13 +164,15 @@ export class MiningDrone extends Robot {
 
   // Return to the mining station
   private returnToStation(): void {
-    console.log("Returning to station");
-    this.robotState = RobotState.MOVING;
+    // Set state to RETURNING
+    this.robotState = RobotState.RETURNING;
     this.updateStateText();
 
     // Start dust effects when moving
-    this.dustEffects.start();
-    this.dustEffects.startMovementDust();
+    if (this.dustEffects) {
+      this.dustEffects.start();
+      this.dustEffects.startMovementDust();
+    }
 
     console.log(
       `Returning to station at (${this.miningStation.x}, ${this.miningStation.y})`
@@ -181,8 +180,8 @@ export class MiningDrone extends Robot {
 
     // Calculate distance to mining station
     const distance = Phaser.Math.Distance.Between(
-      this.x,
-      this.y,
+      this.container.x,
+      this.container.y,
       this.miningStation.x,
       this.miningStation.y
     );
@@ -193,14 +192,16 @@ export class MiningDrone extends Robot {
 
     // Use tweens for consistent movement
     this.scene.tweens.add({
-      targets: this,
+      targets: this.container,
       x: this.miningStation.x,
       y: this.miningStation.y,
       duration: duration,
       ease: "Linear",
       onComplete: () => {
         this.stopMoving();
-        this.dustEffects.stopMovementDust();
+        if (this.dustEffects) {
+          this.dustEffects.stopMovementDust();
+        }
         this.robotState = RobotState.IDLE;
         this.updateStateText();
         console.log("Returned to station, going to next mining point");
@@ -265,13 +266,15 @@ export class MiningDrone extends Robot {
     this.updateStateText();
 
     // Start dust effects when moving
-    this.dustEffects.start();
-    this.dustEffects.startMovementDust();
+    if (this.dustEffects) {
+      this.dustEffects.start();
+      this.dustEffects.startMovementDust();
+    }
 
     // Calculate distance to target
     const distance = Phaser.Math.Distance.Between(
-      this.x,
-      this.y,
+      this.container.x,
+      this.container.y,
       point.x,
       point.y
     );
@@ -281,7 +284,7 @@ export class MiningDrone extends Robot {
 
     // Use tweens for smoother movement
     this.scene.tweens.add({
-      targets: this,
+      targets: this.container,
       x: point.x,
       y: point.y,
       duration: duration,
@@ -289,7 +292,9 @@ export class MiningDrone extends Robot {
       onComplete: () => {
         console.log(`Reached mining point (${point.x}, ${point.y})`);
         // Stop movement dust when we reach the target
-        this.dustEffects.stopMovementDust();
+        if (this.dustEffects) {
+          this.dustEffects.stopMovementDust();
+        }
 
         // Start mining immediately
         this.startMining();
@@ -402,8 +407,8 @@ export class MiningDrone extends Robot {
 
     for (const container of processorContainers) {
       const distance = Phaser.Math.Distance.Between(
-        this.x,
-        this.y,
+        this.container.x,
+        this.container.y,
         container.x,
         container.y
       );
@@ -431,13 +436,18 @@ export class MiningDrone extends Robot {
 
     this.showingWarning = true;
     this.warningText = this.scene.add
-      .text(0, -55, "No processor!", {
-        fontSize: "12px",
+      .text(0, -60, "⚠️ INVENTORY FULL", {
+        fontSize: "14px",
         color: "#FF0000",
-        align: "center",
+        fontStyle: "bold",
+        backgroundColor: "#FFFF00",
+        padding: {
+          x: 5,
+          y: 2,
+        },
       })
       .setOrigin(0.5);
-    this.add(this.warningText);
+    this.container.add(this.warningText);
 
     // Make it blink
     this.scene.tweens.add({
@@ -473,7 +483,7 @@ export class MiningDrone extends Robot {
 
       // Create a subtle pulsing scale animation on the container
       this.miningIndicatorTween = this.scene.tweens.add({
-        targets: this,
+        targets: this.container,
         scaleX: { from: 1, to: 1.05 }, // Very subtle
         scaleY: { from: 1, to: 1.05 }, // Very subtle
         duration: 300,
@@ -497,7 +507,7 @@ export class MiningDrone extends Robot {
     }
 
     // Reset scale
-    this.setScale(1);
+    this.container.setScale(1);
   }
 
   // Start mining at current location
@@ -516,8 +526,10 @@ export class MiningDrone extends Robot {
     this.showMiningIndicator();
 
     // Explicitly activate working dust effects
-    this.dustEffects.start();
-    this.dustEffects.showWorkingDust();
+    if (this.dustEffects) {
+      this.dustEffects.start();
+      this.dustEffects.showWorkingDust();
+    }
   }
 
   // Stop mining operation
@@ -530,7 +542,9 @@ export class MiningDrone extends Robot {
     this.hideMiningIndicator();
 
     // Explicitly stop working dust effects
-    this.dustEffects.hideWorkingDust();
+    if (this.dustEffects) {
+      this.dustEffects.hideWorkingDust();
+    }
 
     // Don't stop all dust effects here as we might be moving next
   }
@@ -538,7 +552,7 @@ export class MiningDrone extends Robot {
   // Get resource richness at current position
   private getResourceRichnessAtCurrentPosition(): number {
     // Use the imported getResourceRichnessAt function
-    return getResourceRichnessAt(this.x, this.y);
+    return getResourceRichnessAt(this.container.x, this.container.y);
   }
 
   // Clean up resources when destroyed

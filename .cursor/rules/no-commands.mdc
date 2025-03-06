@@ -1,0 +1,9 @@
+---
+description: NEVER run shell commands in the composer, because this interrupts the agent and I am testing the code with hot reload anyways so no need to do it to run the app.
+globs: 
+---
+
+# Your rule content
+
+- You can @ files here
+- You can use markdown but dont have to

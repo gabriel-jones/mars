@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { TILE_SIZE, ROBOT_VELOCITY, DUST_COLOR } from "../../constants";
 import { ResourceNode } from "../resourceNode";
 import { DustEffects } from "../../effects/DustEffects";
+import { Agent } from "../Agent";
 
 // Robot states
 export enum RobotState {
@@ -16,8 +17,7 @@ export enum RobotState {
 export type RobotType = "optimus" | "mining-drone";
 
 // Base Robot class
-export abstract class Robot extends Phaser.GameObjects.Container {
-  protected sprite: Phaser.GameObjects.Sprite;
+export abstract class Robot extends Agent {
   protected robotState: RobotState;
   protected target: Phaser.Math.Vector2 | null = null;
   protected homePosition: Phaser.Math.Vector2;
@@ -26,27 +26,35 @@ export abstract class Robot extends Phaser.GameObjects.Container {
   protected stateText: Phaser.GameObjects.Text;
   protected carriedResource: ResourceNode | null = null;
   protected carriedResourceSprite: Phaser.GameObjects.Text | null = null;
-  protected dustEffects: DustEffects;
+  protected container: Phaser.GameObjects.Container;
 
   constructor(
     scene: Phaser.Scene,
     x: number,
     y: number,
     robotType: RobotType,
-    speed: number = 100
+    speed: number = 100,
+    maxHealth: number = 100
   ) {
-    super(scene, x, y);
+    // Create the container for the robot
+    const container = new Phaser.GameObjects.Container(scene, x, y);
+
+    // Call the parent constructor with the container
+    super(scene, container, maxHealth);
+
+    // Store the container reference
+    this.container = container;
 
     // Set home position
     this.homePosition = new Phaser.Math.Vector2(x, y);
 
     // Create the robot sprite
-    this.sprite = scene.add
+    const sprite = scene.add
       .sprite(0, 0, robotType)
       .setOrigin(0.5)
       .setDisplaySize(TILE_SIZE, TILE_SIZE)
       .setDepth(5);
-    this.add(this.sprite);
+    container.add(sprite);
 
     // Add a label showing the robot type
     this.label = scene.add
@@ -56,7 +64,7 @@ export abstract class Robot extends Phaser.GameObjects.Container {
         align: "center",
       })
       .setOrigin(0.5);
-    this.add(this.label);
+    container.add(this.label);
 
     // Add state text
     this.stateText = scene.add
@@ -67,7 +75,7 @@ export abstract class Robot extends Phaser.GameObjects.Container {
       })
       .setAlpha(0.75)
       .setOrigin(0.5);
-    this.add(this.stateText);
+    container.add(this.stateText);
 
     // Set initial state
     this.robotState = RobotState.IDLE;
@@ -76,12 +84,12 @@ export abstract class Robot extends Phaser.GameObjects.Container {
     this.speed = speed;
 
     // Add physics to the robot
-    scene.physics.world.enable(this);
-    const body = this.body as Phaser.Physics.Arcade.Body;
+    scene.physics.world.enable(container);
+    const body = container.body as Phaser.Physics.Arcade.Body;
     body.setCollideWorldBounds(true);
 
-    // Create dust effects
-    this.dustEffects = new DustEffects(scene, this, {
+    // Initialize dust effects
+    this.initDustEffects({
       dustColor: DUST_COLOR,
       dustSize: 5,
       dustAlpha: 0.6,
@@ -91,107 +99,82 @@ export abstract class Robot extends Phaser.GameObjects.Container {
       movementDustColor: DUST_COLOR,
       movementDustSize: 4,
       movementDustAlpha: 0.7,
-      movementDustCount: 16,
+      movementDustCount: 8,
     });
+
+    // Initialize shadow effects
+    this.initShadowEffects();
 
     // Add to scene
-    scene.add.existing(this);
+    scene.add.existing(container);
   }
 
-  // Abstract methods that derived classes must implement
+  // Abstract methods to be implemented by subclasses
   protected abstract getRobotNameInternal(): string;
-  public abstract update(): void;
+  public abstract update(time: number, delta: number): void;
 
-  // Move robot to a target position
+  // Move the robot to a target position
   protected moveToTarget(target: Phaser.Math.Vector2): void {
-    if (!target) return;
-
+    // Set the target
     this.target = target;
 
-    // If we're already in the MOVING state, don't change it
-    if (
-      this.robotState !== RobotState.MOVING &&
-      this.robotState !== RobotState.RETURNING &&
-      this.robotState !== RobotState.CARRYING
-    ) {
-      // If carrying a resource, set state to CARRYING, otherwise MOVING
-      this.robotState = this.carriedResource
-        ? RobotState.CARRYING
-        : RobotState.MOVING;
-      this.updateStateText();
-    }
-
-    // Start dust effects when moving
-    this.dustEffects.start();
-    this.dustEffects.startMovementDust();
-
-    console.log(`Moving to target (${target.x}, ${target.y})`);
-
-    // Calculate distance to target
-    const distance = Phaser.Math.Distance.Between(
-      this.x,
-      this.y,
-      target.x,
-      target.y
+    // Calculate direction to target
+    const direction = new Phaser.Math.Vector2(
+      target.x - this.container.x,
+      target.y - this.container.y
     );
 
-    // Calculate duration based on distance and player velocity
-    // This ensures robots move at a speed similar to the player
-    const duration = (distance / ROBOT_VELOCITY) * 1000; // Convert to milliseconds
+    // Normalize the direction vector
+    direction.normalize();
 
-    // Use tweens for all movement for consistency
-    this.scene.tweens.add({
-      targets: this,
-      x: target.x,
-      y: target.y,
-      duration: duration,
-      ease: "Linear",
-      onComplete: () => {
-        console.log(`Reached target (${target.x}, ${target.y})`);
-        this.stopMoving();
+    // Calculate velocity
+    const velocityX = direction.x * this.speed;
+    const velocityY = direction.y * this.speed;
 
-        // Call onReachTarget to allow derived classes to handle target reached events
-        this.onReachTarget();
+    // Apply velocity to the container
+    const body = this.container.body as Phaser.Physics.Arcade.Body;
+    body.setVelocity(velocityX, velocityY);
 
-        // If we're returning, we need to handle deposit logic in the update method
-        // Otherwise, we can transition to IDLE
-        if (this.robotState !== RobotState.RETURNING) {
-          this.robotState = this.carriedResource
-            ? RobotState.CARRYING
-            : RobotState.IDLE;
-          this.updateStateText();
-        }
-      },
-    });
+    // Update state
+    this.robotState = RobotState.MOVING;
+    this.updateStateText();
+
+    // Start dust effects
+    if (this.dustEffects) {
+      this.dustEffects.start();
+      this.dustEffects.startMovementDust();
+    }
   }
 
-  // Method to be overridden by derived classes to handle target reached events
+  // Called when the robot reaches its target
   protected onReachTarget(): void {
-    // Base implementation does nothing
-    // Derived classes can override this to add custom behavior
+    // Override in subclasses
   }
 
   // Check if the robot has reached its target
   protected hasReachedTarget(): boolean {
     if (!this.target) return false;
 
+    // Calculate distance to target
     const distance = Phaser.Math.Distance.Between(
-      this.x,
-      this.y,
+      this.container.x,
+      this.container.y,
       this.target.x,
       this.target.y
     );
 
-    return distance < 5; // Close enough to consider "reached"
+    // Check if close enough to target
+    return distance < 5;
   }
 
   // Stop the robot's movement
   protected stopMoving(): void {
-    const body = this.body as Phaser.Physics.Arcade.Body;
+    // Stop physics body
+    const body = this.container.body as Phaser.Physics.Arcade.Body;
     body.setVelocity(0, 0);
 
-    // Stop dust effects when not moving
-    if (this.robotState !== RobotState.WORKING) {
+    // Stop dust effects
+    if (this.dustEffects) {
       this.dustEffects.stop();
       this.dustEffects.stopMovementDust();
     }
@@ -199,99 +182,113 @@ export abstract class Robot extends Phaser.GameObjects.Container {
 
   // Update the state text
   protected updateStateText(): void {
-    if (this.carriedResource) {
-      this.stateText.setText(`${this.robotState.toUpperCase()} (CARRYING)`);
-    } else {
-      this.stateText.setText(this.robotState.toUpperCase());
-    }
+    this.stateText.setText(this.robotState.toUpperCase());
   }
 
   // Return to home position
   protected returnHome(): void {
+    this.moveToTarget(this.homePosition);
     this.robotState = RobotState.RETURNING;
     this.updateStateText();
-    this.moveToTarget(this.homePosition);
   }
 
-  // Set up carrying a resource
+  // Set carried resource
   protected setCarriedResource(
     resource: ResourceNode | null,
     emoji: string = ""
   ): void {
-    // Clear any existing carried resource
+    this.carriedResource = resource;
+
+    // Remove existing carried resource sprite
     if (this.carriedResourceSprite) {
       this.carriedResourceSprite.destroy();
       this.carriedResourceSprite = null;
     }
 
-    this.carriedResource = resource;
-
-    // If we have a resource to carry, create a visual representation
-    if (resource && emoji) {
+    // If resource is provided, create a new sprite
+    if (resource) {
       this.carriedResourceSprite = this.scene.add
-        .text(0, -10, emoji, {
+        .text(0, 15, emoji, {
           fontSize: "24px",
         })
         .setOrigin(0.5);
-      this.add(this.carriedResourceSprite);
+      this.container.add(this.carriedResourceSprite);
 
-      // Update the state text to show we're carrying something
+      // Update state
+      this.robotState = RobotState.CARRYING;
       this.updateStateText();
     }
   }
 
   // Clear carried resource
   protected clearCarriedResource(): void {
+    this.carriedResource = null;
+
+    // Remove carried resource sprite
     if (this.carriedResourceSprite) {
       this.carriedResourceSprite.destroy();
       this.carriedResourceSprite = null;
     }
-
-    this.carriedResource = null;
-    this.updateStateText();
   }
 
-  // Update dust effects
+  // Update dust and shadow effects
   protected updateDustEffects(time: number): void {
-    if (this.dustEffects) {
-      this.dustEffects.update(time);
+    super.updateDustEffects(time);
 
-      // If the robot is moving, show movement dust
-      if (
-        this.robotState === RobotState.MOVING ||
-        this.robotState === RobotState.RETURNING
-      ) {
-        this.dustEffects.startMovementDust();
-      } else {
-        this.dustEffects.stopMovementDust();
-      }
-
-      // If the robot is working, show working dust
-      if (this.robotState === RobotState.WORKING) {
-        this.dustEffects.showWorkingDust();
-      } else {
-        this.dustEffects.hideWorkingDust();
-      }
-    }
+    // Update shadow effects
+    this.updateShadowEffects();
   }
 
-  // Clean up resources when destroyed
+  // Handle death
+  protected onDeath(): void {
+    console.log(`${this.getRobotName()} has been destroyed!`);
+
+    // Stop dust effects
+    if (this.dustEffects) {
+      this.dustEffects.stop();
+      this.dustEffects.stopMovementDust();
+    }
+
+    // Clean up shadow effects
+    this.cleanupShadowEffects();
+
+    // Stop movement
+    this.stopMoving();
+
+    // Set alpha to indicate destruction
+    this.container.setAlpha(0.5);
+
+    // You might want to trigger an explosion effect or animation here
+  }
+
+  // Destroy the robot
   public destroy(fromScene?: boolean): void {
-    if (this.dustEffects) {
-      this.dustEffects.destroy();
+    // Clean up dust effects
+    this.cleanupDustEffects();
+
+    // Clean up shadow effects
+    this.cleanupShadowEffects();
+
+    // Clean up carried resource
+    this.clearCarriedResource();
+
+    // Remove from scene
+    if (this.container) {
+      this.container.destroy();
     }
-    super.destroy(fromScene);
   }
 
-  // Public accessor methods
+  // Get robot state
   public getRobotState(): string {
     return this.robotState;
   }
 
+  // Get carried resource
   public getCarriedResource(): ResourceNode | null {
     return this.carriedResource;
   }
 
+  // Get robot name
   public getRobotName(): string {
     return this.getRobotNameInternal();
   }

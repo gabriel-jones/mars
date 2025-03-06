@@ -283,7 +283,7 @@ export class MiningStation extends Building {
 
     // Update the linked drone if it exists
     if (this.linkedDrone) {
-      this.linkedDrone.update();
+      this.linkedDrone.update(this.scene.time.now, this.scene.game.loop.delta);
     }
   }
 

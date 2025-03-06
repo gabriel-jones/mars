@@ -356,43 +356,32 @@ export class Optimus extends Robot {
   }
 
   // Drop the currently carried resource back to the ground
-  public dropResource(): void {
-    if (!this.carriedResource) return;
+  private dropResource(): void {
+    // If we're not carrying anything, do nothing
+    if (this.resourceAmount <= 0) return;
 
-    console.log(
-      `Robot ${this.robotId} dropping ${this.resourceAmount} ${this.resourceType}`
-    );
+    console.log(`Dropping ${this.resourceAmount} ${this.resourceType}`);
 
-    // Create a new resource node at the robot's position
+    // Get the resource object from the resource type
     const resource = ResourceManager.getResource(
       this.resourceType as ResourceType
     );
-    if (resource && this.resourceAmount > 0) {
+
+    if (resource) {
+      // Create a new resource node at our position
       new ResourceNode(
         this.scene,
-        this.x,
-        this.y,
+        this.container.x,
+        this.container.y,
         resource,
         this.resourceAmount
       );
     }
 
-    // Clear the carried resource
-    if (this.carriedResource) {
-      this.carriedResource.destroy();
-      this.carriedResource = null;
-    }
-
-    // Clear the carried resource sprite
-    this.clearCarriedResource();
-
-    // Reset resource information
+    // Clear our carried resource
     this.resourceAmount = 0;
     this.resourceType = "";
-
-    // Update state
-    this.robotState = RobotState.IDLE;
-    this.updateStateText();
+    this.clearCarriedResource();
   }
 
   // Deliver the carried resource to a target node
@@ -432,8 +421,8 @@ export class Optimus extends Robot {
   private wanderAroundHome(): void {
     // Check if the robot is already too far from home
     const distanceFromHome = Phaser.Math.Distance.Between(
-      this.x,
-      this.y,
+      this.container.x,
+      this.container.y,
       this.homePosition.x,
       this.homePosition.y
     );
@@ -467,12 +456,13 @@ export class Optimus extends Robot {
     this.wanderTimer = this.scene.time.now + nextInterval;
   }
 
-  public update(): void {
+  // Update the optimus robot
+  public update(time: number, delta: number): void {
     // Update state text
     this.updateStateText();
 
     // Update dust effects
-    this.updateDustEffects(this.scene.time.now);
+    this.updateDustEffects(time);
 
     // Check if current job is completed or cancelled
     if (this.currentJob && this.carriedResource) {
@@ -574,10 +564,15 @@ export class Optimus extends Robot {
           // Create a new resource node with the remaining resources
           const resource = ResourceManager.getResource(resourceType);
           if (resource && remainingAmount > 0) {
+            console.log(
+              `Dropping ${remainingAmount} ${resource} that didn't fit`
+            );
+
+            // Create a new resource node with the remaining resources
             new ResourceNode(
               this.scene,
-              this.x,
-              this.y,
+              this.container.x,
+              this.container.y,
               resource,
               remainingAmount
             );
