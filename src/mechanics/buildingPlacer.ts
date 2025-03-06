@@ -12,6 +12,7 @@ import { TerrainFeatureType } from "../entities/TerrainFeature";
 import { gameState } from "../state";
 import { TILE_SIZE } from "../constants";
 import { MiningStation, MINING_RADIUS } from "../entities/buildings";
+import { TerrainFeature } from "../entities/TerrainFeature";
 
 export class BuildingPlacer {
   private scene: Phaser.Scene;
@@ -127,11 +128,23 @@ export class BuildingPlacer {
   }
 
   private setupSingleTilePlacement() {
+    // Get the building definition to access tileSize
+    const buildingDef = BUILDING_DEFINITIONS.find(
+      (item) => item.buildingType === this.selectedItem
+    );
+
+    if (!buildingDef) return;
+
+    // Get the tile size of the building
+    const tileWidth = buildingDef.tileSize?.width || 1;
+    const tileHeight = buildingDef.tileSize?.height || 1;
+
     // Create a placement sprite that follows the cursor
     this.placementSprite = this.scene.add
       .sprite(0, 0, this.selectedItem!)
       .setAlpha(0.7)
-      .setDisplaySize(TILE_SIZE, TILE_SIZE);
+      .setDisplaySize(TILE_SIZE * tileWidth, TILE_SIZE * tileHeight)
+      .setOrigin(0.5, 0.5); // Center the sprite
   }
 
   private setupRangeSelection() {
@@ -253,13 +266,31 @@ export class BuildingPlacer {
   ) {
     if (!this.placementSprite || !this.selectedItem) return;
 
-    // Position the sprite at the center of the tile
-    const tileCenter = this.map.tileToWorldXY(tileX, tileY);
-    if (!tileCenter) return;
+    // Get the building definition to access tileSize
+    const buildingDef = BUILDING_DEFINITIONS.find(
+      (item) => item.buildingType === this.selectedItem
+    );
 
+    if (!buildingDef) return;
+
+    // Get the tile size of the building
+    const tileWidth = buildingDef.tileSize?.width || 1;
+    const tileHeight = buildingDef.tileSize?.height || 1;
+
+    // Get the top-left corner of the tile
+    const tileTopLeft = this.map.tileToWorldXY(tileX, tileY);
+    if (!tileTopLeft) return;
+
+    // For multi-tile buildings, we need to position the sprite so that its center
+    // is at the center of the area covered by the building, but the mouse is at the top-left tile
+    const offsetX = ((tileWidth - 1) * TILE_SIZE) / 2;
+    const offsetY = ((tileHeight - 1) * TILE_SIZE) / 2;
+
+    // Position the sprite with the top-left corner at the mouse position
+    // and the center offset based on the building's size
     this.placementSprite.setPosition(
-      tileCenter.x + TILE_SIZE / 2,
-      tileCenter.y + TILE_SIZE / 2
+      tileTopLeft.x + TILE_SIZE / 2 + offsetX,
+      tileTopLeft.y + TILE_SIZE / 2 + offsetY
     );
 
     // Check if placement is valid
@@ -274,11 +305,11 @@ export class BuildingPlacer {
       let miningAreaOverlap = false;
       if (this.placementValid) {
         // Only check for overlap if other placement conditions are valid
-        const worldX = tileCenter.x + TILE_SIZE / 2;
-        const worldY = tileCenter.y + TILE_SIZE / 2;
+        const centerX = tileTopLeft.x + TILE_SIZE / 2;
+        const centerY = tileTopLeft.y + TILE_SIZE / 2;
         miningAreaOverlap = BuildingManager.wouldMiningAreaOverlap(
-          worldX,
-          worldY,
+          centerX,
+          centerY,
           MINING_RADIUS
         );
       }
@@ -331,8 +362,8 @@ export class BuildingPlacer {
 
       MiningStation.showPlacementPreview(
         this.scene,
-        tileCenter.x + TILE_SIZE / 2,
-        tileCenter.y + TILE_SIZE / 2,
+        tileTopLeft.x + TILE_SIZE / 2,
+        tileTopLeft.y + TILE_SIZE / 2,
         this.placementValid
       );
     }
@@ -345,12 +376,11 @@ export class BuildingPlacer {
       this.placementValid &&
       this.scene.time.now - this.lastPlacementTime > 300
     ) {
-      this.placeConstructionItem(
-        tileX,
-        tileY,
-        tileCenter.x + TILE_SIZE / 2,
-        tileCenter.y + TILE_SIZE / 2
-      );
+      // Use the exact same position as the preview
+      const exactX = tileTopLeft.x + TILE_SIZE / 2 + offsetX;
+      const exactY = tileTopLeft.y + TILE_SIZE / 2 + offsetY;
+
+      this.placeConstructionItem(tileX, tileY, exactX, exactY);
     }
   }
 
@@ -365,11 +395,22 @@ export class BuildingPlacer {
       return;
     }
 
+    // Get the building definition to access minimum tileSize
+    const buildingDef = BUILDING_DEFINITIONS.find(
+      (item) => item.buildingType === this.selectedItem
+    );
+
+    if (!buildingDef) return;
+
+    // Get the minimum tile size of the building (default to 1x1)
+    const minTileWidth = buildingDef.tileSize?.width || 1;
+    const minTileHeight = buildingDef.tileSize?.height || 1;
+
     // Get the current pointer state
     const pointerIsDown = this.scene.input.activePointer.isDown;
 
     try {
-      // If not dragging, just show a single tile preview
+      // If not dragging, just show a single tile preview with minimum size
       if (!pointerIsDown && !this.rangeStartTile) {
         const worldX = this.map.tileToWorldX(tileX)!;
         const worldY = this.map.tileToWorldY(tileY)!;
@@ -377,8 +418,9 @@ export class BuildingPlacer {
         // Safely update the preview position and size
         if (this.rangePreview) {
           this.rangePreview.setPosition(worldX, worldY);
-          this.rangePreview.width = TILE_SIZE;
-          this.rangePreview.height = TILE_SIZE;
+          this.rangePreview.width = TILE_SIZE * minTileWidth;
+          this.rangePreview.height = TILE_SIZE * minTileHeight;
+          this.rangePreview.setOrigin(0, 0); // Set origin to top-left
         }
 
         // Check if placement is valid at this position
@@ -556,34 +598,10 @@ export class BuildingPlacer {
       return;
     }
 
-    // Check if player has enough resources
-    if (!ResourceManager.hasResources(this.selectedBuildingDef.cost)) {
-      console.log("Not enough resources");
+    // We no longer check if player has enough resources or deduct them
+    // Resources will be delivered to the blueprint by robots
 
-      // Show error message
-      const errorText = this.scene.add
-        .text(this.scene.cameras.main.width / 2, 100, "Not enough resources!", {
-          fontSize: "18px",
-          color: "#ff0000",
-        })
-        .setOrigin(0.5)
-        .setScrollFactor(0)
-        .setDepth(100);
-
-      // Remove error message after 2 seconds
-      this.scene.time.delayedCall(2000, () => {
-        errorText.destroy();
-      });
-
-      return;
-    }
-
-    console.log("All checks passed, placing habitat");
-
-    // Use the resources
-    this.selectedBuildingDef.cost.forEach((cost) => {
-      ResourceManager.useResource(cost.type, cost.amount);
-    });
+    console.log("All checks passed, placing habitat blueprint");
 
     // Calculate world position for the top-left corner
     const worldX = this.map.tileToWorldX(startX)! + TILE_SIZE / 2;
@@ -602,15 +620,17 @@ export class BuildingPlacer {
         height: height,
       },
       placedAt: Date.now(),
+      isBlueprint: true, // Mark as blueprint
     };
 
     // Add to building manager
     BuildingManager.addBuilding(building);
-    console.log("Building added to BuildingManager");
+    console.log("Building blueprint added to BuildingManager");
 
     // Call the callback to handle the actual placement in the main scene
-    this.onItemPlaced(this.selectedItem, worldX, worldY);
-    console.log("onItemPlaced callback called");
+    // We pass 'blueprint-' + this.selectedItem to indicate this is a blueprint
+    this.onItemPlaced("blueprint-" + this.selectedItem, worldX, worldY);
+    console.log("onItemPlaced callback called for blueprint");
 
     // Emit the event
     this.scene.events.emit("habitatPlaced", { startX, startY, width, height });
@@ -622,17 +642,36 @@ export class BuildingPlacer {
   }
 
   private isPlacementValid(tileX: number, tileY: number): boolean {
-    // Check if the tile is already occupied
-    if (BuildingManager.isTileOccupied(tileX, tileY)) {
-      return false;
-    }
+    if (!this.selectedItem) return false;
 
-    // Get the selected building definition
-    const selectedItemDef = BUILDING_DEFINITIONS.find(
+    // Find the building definition
+    const buildingDef = BUILDING_DEFINITIONS.find(
       (item) => item.buildingType === this.selectedItem
     );
 
-    if (!selectedItemDef) return false;
+    if (!buildingDef) return false;
+
+    // Get the tile size of the building
+    const tileWidth = buildingDef.tileSize?.width || 1;
+    const tileHeight = buildingDef.tileSize?.height || 1;
+
+    // Check if all tiles are valid ground tiles
+    for (let x = tileX; x < tileX + tileWidth; x++) {
+      for (let y = tileY; y < tileY + tileHeight; y++) {
+        // Get the tile at this position
+        const tile = this.map.getTileAt(x, y);
+
+        // If there's no tile, it's not valid
+        if (!tile) {
+          return false;
+        }
+
+        // Check if the tile is already occupied
+        if (BuildingManager.isTileOccupied(x, y)) {
+          return false;
+        }
+      }
+    }
 
     // For mining stations, check if the mining area would overlap with existing mining stations
     if (this.selectedItem === "mining-station") {
@@ -643,40 +682,31 @@ export class BuildingPlacer {
       const worldX = tileCenter.x + TILE_SIZE / 2;
       const worldY = tileCenter.y + TILE_SIZE / 2;
 
+      console.log(
+        `Checking mining area overlap at world coordinates: (${worldX}, ${worldY})`
+      );
+
       // Check for mining area overlap using the MINING_RADIUS constant from MiningStation
       if (
         BuildingManager.wouldMiningAreaOverlap(worldX, worldY, MINING_RADIUS)
       ) {
+        console.log(`Mining area overlap detected in isPlacementValid`);
         return false;
       }
     }
 
-    // Check placement requirements if they exist
-    if (
-      selectedItemDef.placementRequirements &&
-      selectedItemDef.placementRequirements.onlyOn
-    ) {
-      // Check if this tile has an ice deposit
-      const tileHasIceDeposit =
-        gameState.tileData &&
-        gameState.tileData[`${tileX},${tileY}`] &&
-        gameState.tileData[`${tileX},${tileY}`].hasIceDeposit;
+    // Check if the building has specific placement requirements
+    if (buildingDef.placementRequirements?.onlyOn) {
+      // Use TerrainFeature's static methods to check for features at this tile
+      const hasRequiredFeature = buildingDef.placementRequirements.onlyOn.some(
+        (requiredType) => {
+          return TerrainFeature.hasTileFeatureType(tileX, tileY, requiredType);
+        }
+      );
 
-      // If the building requires an ice deposit but the tile doesn't have one
-      if (
-        selectedItemDef.placementRequirements.onlyOn.includes(
-          TerrainFeatureType.IceDeposit
-        ) &&
-        !tileHasIceDeposit
-      ) {
+      if (!hasRequiredFeature) {
         return false;
       }
-    }
-
-    // Check if the tile is a valid ground tile
-    const tile = this.map.getTileAt(tileX, tileY);
-    if (!tile) {
-      return false;
     }
 
     return true;
@@ -697,52 +727,58 @@ export class BuildingPlacer {
 
     if (!buildingDef) return;
 
-    // Check if player has enough resources
-    const canAfford = ResourceManager.hasResources(buildingDef.cost);
-    if (!canAfford) {
-      // Show a message that player can't afford this
-      const errorText = this.scene.add
-        .text(this.scene.cameras.main.width / 2, 100, "Not enough resources!", {
-          fontSize: "24px",
-          color: "#ff0000",
-        })
-        .setOrigin(0.5)
-        .setScrollFactor(0)
-        .setDepth(100);
+    // Get the tile size of the building
+    const tileWidth = buildingDef.tileSize?.width || 1;
+    const tileHeight = buildingDef.tileSize?.height || 1;
 
-      // Fade out and destroy after 2 seconds
-      this.scene.tweens.add({
-        targets: errorText,
-        alpha: 0,
-        duration: 1000,
-        delay: 1000,
-        onComplete: () => {
-          errorText.destroy();
-        },
-      });
-
-      return;
-    }
-
-    // Deduct resources
-    buildingDef.cost.forEach((cost) => {
-      ResourceManager.useResource(cost.type, cost.amount);
-    });
+    // We no longer check if player has enough resources or deduct them
+    // Resources will be delivered to the blueprint by robots
 
     // Clean up any mining station preview
     if (this.selectedItem === "mining-station") {
       MiningStation.cleanupPreview();
     }
 
-    // Call the callback to create the actual building
-    this.onItemPlaced(this.selectedItem, worldX, worldY);
+    // Get the top-left corner of the tile
+    const tileTopLeft = this.map.tileToWorldXY(tileX, tileY);
+    if (!tileTopLeft) return;
 
-    // Add to building manager
+    // For multi-tile buildings, we need to position the sprite so that its center
+    // is at the center of the area covered by the building, but the mouse is at the top-left tile
+    const offsetX = ((tileWidth - 1) * TILE_SIZE) / 2;
+    const offsetY = ((tileHeight - 1) * TILE_SIZE) / 2;
+
+    // Calculate the exact position where the preview is shown
+    const exactX = tileTopLeft.x + TILE_SIZE / 2 + offsetX;
+    const exactY = tileTopLeft.y + TILE_SIZE / 2 + offsetY;
+
+    // Call the callback to create a blueprint at the exact position of the preview
+    // We pass 'blueprint-' + this.selectedItem to indicate this is a blueprint
+    this.onItemPlaced("blueprint-" + this.selectedItem, exactX, exactY);
+
+    // Create an array of tiles that this building occupies
+    const occupiedTiles = [];
+    for (let x = tileX; x < tileX + tileWidth; x++) {
+      for (let y = tileY; y < tileY + tileHeight; y++) {
+        occupiedTiles.push({ x, y });
+      }
+    }
+
+    // Add to building manager with a special blueprint flag
     BuildingManager.addBuilding({
       type: this.selectedItem,
       displayName: buildingDef.name,
-      position: { x: worldX, y: worldY },
+      position:
+        this.selectedItem === "mining-station"
+          ? { x: exactX, y: exactY } // Store world coordinates for mining stations
+          : { x: tileX, y: tileY }, // Store tile coordinates for other buildings
       placedAt: Date.now(),
+      size: { width: tileWidth, height: tileHeight },
+      tiles: occupiedTiles,
+      placementRequirements: buildingDef.placementRequirements,
+      tileWidth: tileWidth,
+      tileHeight: tileHeight,
+      isBlueprint: true, // Mark as blueprint
     });
 
     // Clean up placement objects
@@ -839,15 +875,38 @@ export class BuildingPlacer {
 
         // Create a red tile highlight if it doesn't exist
         if (!this.rangePreview) {
-          const tile = this.map.getTileAt(tileX, tileY);
+          // Get the building's size
+          const width = building.tileWidth || 1;
+          const height = building.tileHeight || 1;
+
+          // Get the top-left corner of the building
+          let startX = tileX;
+          let startY = tileY;
+
+          // If the building has tiles array, find the top-left corner
+          if (building.tiles && building.tiles.length > 0) {
+            const minX = Math.min(...building.tiles.map((t) => t.x));
+            const minY = Math.min(...building.tiles.map((t) => t.y));
+            startX = minX;
+            startY = minY;
+          } else if (building.size) {
+            // For legacy buildings with size property
+            startX = building.position.x;
+            startY = building.position.y;
+          }
+
+          // Get the tile at the top-left corner
+          const tile = this.map.getTileAt(startX, startY);
           if (tile && tile.pixelX !== undefined && tile.pixelY !== undefined) {
             const worldX = tile.pixelX;
             const worldY = tile.pixelY;
+
+            // Create a rectangle that covers the entire building
             this.rangePreview = this.scene.add.rectangle(
-              worldX + TILE_SIZE / 2,
-              worldY + TILE_SIZE / 2,
-              TILE_SIZE,
-              TILE_SIZE,
+              worldX + (width * TILE_SIZE) / 2,
+              worldY + (height * TILE_SIZE) / 2,
+              width * TILE_SIZE,
+              height * TILE_SIZE,
               0xff0000,
               0.3
             );
@@ -856,12 +915,33 @@ export class BuildingPlacer {
           }
         } else {
           // Update the position of the existing highlight
-          const tile = this.map.getTileAt(tileX, tileY);
+          // Get the building's size
+          const width = building.tileWidth || 1;
+          const height = building.tileHeight || 1;
+
+          // Get the top-left corner of the building
+          let startX = tileX;
+          let startY = tileY;
+
+          // If the building has tiles array, find the top-left corner
+          if (building.tiles && building.tiles.length > 0) {
+            const minX = Math.min(...building.tiles.map((t) => t.x));
+            const minY = Math.min(...building.tiles.map((t) => t.y));
+            startX = minX;
+            startY = minY;
+          } else if (building.size) {
+            // For legacy buildings with size property
+            startX = building.position.x;
+            startY = building.position.y;
+          }
+
+          const tile = this.map.getTileAt(startX, startY);
           if (tile && tile.pixelX !== undefined && tile.pixelY !== undefined) {
             this.rangePreview.setPosition(
-              tile.pixelX + TILE_SIZE / 2,
-              tile.pixelY + TILE_SIZE / 2
+              tile.pixelX + (width * TILE_SIZE) / 2,
+              tile.pixelY + (height * TILE_SIZE) / 2
             );
+            this.rangePreview.setSize(width * TILE_SIZE, height * TILE_SIZE);
             this.rangePreview.setVisible(true);
           }
         }

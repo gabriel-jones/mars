@@ -7,7 +7,7 @@ import {
 } from "../entities/player";
 import { createTileHighlight, updateTileHighlight } from "../ui/tileHighlight";
 import { gameState } from "../state";
-import { BuildMenu } from "../ui/buildMenu";
+import { ActionMenu } from "../ui/actionMenu";
 import { ResourceDisplay } from "../ui/resourceDisplay";
 import { createMarsTileset, createTerrain } from "../terrain";
 import { ResourceNode } from "../entities/resourceNode";
@@ -19,25 +19,29 @@ import { Optimus, MiningDrone, Robot } from "../entities/robots";
 import { BuildingFactory } from "../entities/buildings";
 import { BuildingType } from "../data/buildings";
 import { Building } from "../entities/buildings/Building";
-import { JobManager } from "../entities/robots/JobManager";
+import { JobManager, JobType, Job } from "../entities/robots/JobManager";
 import { TerrainFeature, TerrainFeatureType } from "../entities/TerrainFeature";
 import { BuildingManager, Building as BuildingData } from "../data/buildings";
 import { ResourceManager } from "../data/resources";
+import { BUILDING_DEFINITIONS } from "../data/buildings";
+import { Blueprint } from "../entities/buildings/Blueprint";
 
 export class MainScene extends Phaser.Scene {
-  private buildMenu: BuildMenu;
+  private actionMenu: ActionMenu;
   private resourceDisplay: ResourceDisplay;
+  private fpsText: Phaser.GameObjects.Text;
   private uiCamera: Phaser.Cameras.Scene2D.Camera;
   private resourceNodes: ResourceNode[] = [];
   private terrainFeatures: TerrainFeature[] = [];
   private spawnPoint: Phaser.Math.Vector2;
   private map: Phaser.Tilemaps.Tilemap;
   private tileGroup: Phaser.GameObjects.Group | null = null;
-  private fpsText: Phaser.GameObjects.Text;
   private starship: Starship;
   private robots: Robot[] = [];
   private miningDrones: MiningDrone[] = [];
   private optimuses: Optimus[] = [];
+  private buildings: Building[] = [];
+  private blueprints: Blueprint[] = [];
 
   constructor() {
     super({ key: "MainScene" });
@@ -67,7 +71,25 @@ export class MainScene extends Phaser.Scene {
     this.load.image("mining-drone", "assets/mining-drone.png");
 
     // Particles
-    this.load.image("flare", "assets/flare.png"); // Particle effect for mining
+    this.load.image("flare", "assets/flare-2.png"); // Particle effect for mining
+
+    // Create a small 8x8 dust texture programmatically
+    const dustTexture = this.textures.createCanvas("dust-particle", 8, 8);
+    if (dustTexture) {
+      const dustContext = dustTexture.getContext();
+
+      // Create a radial gradient for a soft dust particle
+      const gradient = dustContext.createRadialGradient(4, 4, 0, 4, 4, 4);
+      gradient.addColorStop(0, "rgba(255, 255, 255, 1)");
+      gradient.addColorStop(0.5, "rgba(255, 255, 255, 0.5)");
+      gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+
+      dustContext.fillStyle = gradient;
+      dustContext.fillRect(0, 0, 8, 8);
+
+      // Update the texture
+      dustTexture.refresh();
+    }
 
     // Other
     this.load.svg("bulldozer", "assets/bulldozer.svg");
@@ -120,10 +142,8 @@ export class MainScene extends Phaser.Scene {
     this.cameras.main.startFollow(gameState.player, true);
 
     // Create build menu with map reference and UI camera
-    this.buildMenu = new BuildMenu(
-      this,
-      gameState.map,
-      this.handleItemPlaced.bind(this)
+    this.actionMenu = new ActionMenu(this, gameState.map, (itemName, x, y) =>
+      this.handleItemPlaced(itemName, x, y)
     );
 
     // Create resource display
@@ -187,44 +207,263 @@ export class MainScene extends Phaser.Scene {
       );
     }
 
+    // Update UI elements
+    this.actionMenu.update();
+
+    // Update the robots list if the panel is open
+    if (this.actionMenu.isRobotsPanelOpen) {
+      this.updateRobotsListInMenu();
+    }
+
     // Update resource display
     this.resourceDisplay.update();
 
-    // Update build menu
-    this.buildMenu.update();
+    // Update all robots
+    this.updateRobots();
+
+    // Update all buildings
+    this.updateBuildings(time, delta);
+
+    // Update all blueprints
+    this.updateBlueprints(time, delta);
 
     // Update resource node physics
     this.updateResourceNodePhysics();
 
-    // Update robots
-    this.updateRobots();
-
-    // Update buildings
-    this.updateBuildings();
-
-    // Update registry values
-    this.registry.set("currentTilePos", gameState.currentTilePos);
+    // Periodically check for resource delivery jobs (every 2 seconds)
+    if (time % 2000 < 20) {
+      this.createResourceDeliveryJobs();
+    }
 
     // Clean up completed jobs every 10 seconds
     if (time % 10000 < 100) {
       JobManager.getInstance().cleanupCompletedJobs();
     }
+
+    // Update registry values
+    this.registry.set("currentTilePos", gameState.currentTilePos);
   }
 
   private handleItemPlaced(itemName: string, x: number, y: number) {
-    // Create the building using the factory
-    const building = BuildingFactory.createBuilding(
-      this,
-      x,
-      y,
-      itemName as BuildingType
-    );
+    // Convert world coordinates to tile coordinates for logging
+    const tileX = Math.floor(x / TILE_SIZE);
+    const tileY = Math.floor(y / TILE_SIZE);
+
+    // Check if this is a blueprint request
+    if (itemName.startsWith("blueprint-")) {
+      // Extract the actual building type from the blueprint request
+      const buildingType = itemName.replace("blueprint-", "") as BuildingType;
+
+      console.log(
+        `Creating blueprint for ${buildingType} at (${tileX}, ${tileY})`
+      );
+
+      // Create a blueprint using the factory
+      const blueprint = BuildingFactory.createBlueprint(
+        this,
+        x,
+        y,
+        buildingType
+      );
+
+      // Add to our blueprints list
+      this.blueprints.push(blueprint);
+
+      console.log(
+        `Placed blueprint for ${buildingType} at tile (${tileX}, ${tileY}) with size ${blueprint.tileWidth}x${blueprint.tileHeight}`
+      );
+    } else {
+      // This branch should only be used for direct building placement (not through the build menu)
+      console.log(
+        `Creating actual building ${itemName} at (${tileX}, ${tileY})`
+      );
+
+      // Create the actual building using the factory with the provided position
+      const building = BuildingFactory.createBuilding(
+        this,
+        x,
+        y,
+        itemName as BuildingType
+      );
+
+      // Add to our buildings list
+      this.buildings.push(building);
+
+      console.log(
+        `Placed ${itemName} at tile (${tileX}, ${tileY}) with size ${building.tileWidth}x${building.tileHeight}`
+      );
+    }
+  }
+
+  // Update all blueprints and check if any are complete
+  private updateBlueprints(time: number, delta: number): void {
+    // Update all blueprints
+    for (let i = this.blueprints.length - 1; i >= 0; i--) {
+      const blueprint = this.blueprints[i];
+      blueprint.update(time, delta);
+
+      // Check if the blueprint is complete and should be converted to a real building
+      if (blueprint.isComplete()) {
+        // Get the building type and position
+        const buildingType = blueprint.buildingType;
+        const x = blueprint.x;
+        const y = blueprint.y;
+
+        // Remove the blueprint
+        blueprint.destroy();
+        this.blueprints.splice(i, 1);
+
+        // Create the actual building
+        const building = BuildingFactory.createBuilding(
+          this,
+          x,
+          y,
+          buildingType
+        );
+
+        // Add to our buildings list
+        this.buildings.push(building);
+
+        console.log(
+          `Blueprint complete! Created ${buildingType} at (${x}, ${y})`
+        );
+      }
+    }
+
+    // Periodically check for resource delivery jobs (every 5 seconds)
+    if (time % 5000 < 20) {
+      this.createResourceDeliveryJobs();
+    }
+  }
+
+  // Create resource delivery jobs for blueprints
+  private createResourceDeliveryJobs(): void {
+    // Skip if no blueprints
+    if (this.blueprints.length === 0) return;
 
     console.log(
-      `Placed ${itemName} at tile (${Math.floor(x / 64)}, ${Math.floor(
-        y / 64
-      )})`
+      `Checking for resource delivery jobs for ${this.blueprints.length} blueprints`
     );
+
+    // Get the job manager
+    const jobManager = JobManager.getInstance();
+
+    // Get existing delivery jobs to avoid creating duplicates
+    const existingDeliveryJobs = Array.from(
+      jobManager.getAllJobs().values()
+    ).filter(
+      (job) =>
+        (job as Job).type === JobType.DELIVER_RESOURCE &&
+        !(job as Job).completed
+    ) as Job[];
+
+    // Skip if we already have active delivery jobs
+    if (existingDeliveryJobs.length >= this.optimuses.length) {
+      console.log(
+        `Already have ${existingDeliveryJobs.length} active delivery jobs, skipping`
+      );
+      return;
+    }
+
+    // Get all resource nodes
+    const resourceNodes = ResourceNode.getAllNodes();
+    console.log(`Found ${resourceNodes.length} resource nodes`);
+
+    // Group resource nodes by type
+    const nodesByType: { [key: string]: ResourceNode[] } = {};
+    resourceNodes.forEach((node) => {
+      const resourceType = node.getResource().type;
+      if (!nodesByType[resourceType]) {
+        nodesByType[resourceType] = [];
+      }
+      nodesByType[resourceType].push(node);
+    });
+
+    // Log available resource types
+    console.log("Available resource types:", Object.keys(nodesByType));
+
+    // Check each blueprint for needed resources
+    for (const blueprint of this.blueprints) {
+      console.log(`Checking blueprint for ${blueprint.buildingType}`);
+
+      // Get the required resources for this blueprint
+      const requiredResources = blueprint.getRequiredResources();
+      console.log(
+        `Blueprint requires ${requiredResources.length} resource types`
+      );
+
+      // For each required resource
+      for (const req of requiredResources) {
+        console.log(
+          `Checking resource ${req.type}: ${req.current}/${req.amount}`
+        );
+
+        // Skip if we already have enough
+        if (req.current >= req.amount) {
+          console.log(`Already have enough ${req.type}`);
+          continue;
+        }
+
+        // Check if there's already a job for this blueprint and resource type
+        const existingJob = existingDeliveryJobs.find(
+          (job) => job.blueprint === blueprint && job.resourceType === req.type
+        );
+
+        if (existingJob) {
+          console.log(`Already have a job for ${req.type} to this blueprint`);
+          continue;
+        }
+
+        // Find resource nodes of this type
+        const nodes = nodesByType[req.type] || [];
+        console.log(`Found ${nodes.length} nodes of type ${req.type}`);
+
+        // Skip if no nodes of this type
+        if (nodes.length === 0) {
+          console.log(`No nodes of type ${req.type} available`);
+          continue;
+        }
+
+        // Find a node that isn't already part of a job
+        const availableNode = nodes.find(
+          (node) => !jobManager.isNodeInJob(node)
+        );
+
+        // Skip if no available nodes
+        if (!availableNode) {
+          console.log(`No available nodes of type ${req.type} (all in use)`);
+          continue;
+        }
+
+        // Calculate how much we need
+        const amountNeeded = req.amount - req.current;
+
+        // Calculate how much we can get from this node
+        const amountAvailable = Math.min(
+          availableNode.getAmount(),
+          amountNeeded
+        );
+
+        // Skip if node is empty
+        if (amountAvailable <= 0) {
+          console.log(`Node of type ${req.type} is empty`);
+          continue;
+        }
+
+        console.log(`Creating delivery job for ${amountAvailable} ${req.type}`);
+
+        // Create a resource delivery job
+        jobManager.createResourceDeliveryJob(
+          availableNode,
+          blueprint,
+          req.type,
+          amountAvailable
+        );
+
+        // Only create one job at a time to avoid overwhelming the system
+        return;
+      }
+    }
   }
 
   private addResourceNodesNearSpawn(): void {
@@ -458,12 +697,12 @@ export class MainScene extends Phaser.Scene {
   }
 
   // Update all buildings in the game
-  private updateBuildings(): void {
+  private updateBuildings(time: number, delta: number): void {
     // Get all buildings from the BuildingManager
     const buildings = BuildingManager.getBuildings();
 
     // Debug log the buildings
-    if (this.time.now % 5000 < 20) {
+    if (time % 5000 < 20) {
       // Log every ~5 seconds
       console.log(`BuildingManager has ${buildings.length} buildings:`);
       buildings.forEach((b, index) => {
@@ -479,7 +718,7 @@ export class MainScene extends Phaser.Scene {
       .filter((child) => child instanceof Building);
 
     // Debug log if we have any regolith processors
-    if (this.time.now % 5000 < 20) {
+    if (time % 5000 < 20) {
       const processors = buildingInstances.filter(
         (child) => child.constructor.name === "RegolithProcessor"
       );
@@ -493,7 +732,7 @@ export class MainScene extends Phaser.Scene {
           `Directly updating RegolithProcessor at (${processor.x}, ${processor.y})`
         );
         // Call the update method using bracket notation to avoid TypeScript errors
-        (processor as any).update(this.time.now);
+        (processor as any).update(time);
       });
     }
 
@@ -511,10 +750,7 @@ export class MainScene extends Phaser.Scene {
       );
 
       // Debug log if we found the building instance
-      if (
-        buildingData.type === "regolith-processor" &&
-        this.time.now % 5000 < 20
-      ) {
+      if (buildingData.type === "regolith-processor" && time % 5000 < 20) {
         console.log(
           `Looking for RegolithProcessor at (${expectedX}, ${expectedY})`
         );
@@ -524,7 +760,7 @@ export class MainScene extends Phaser.Scene {
       // If we found the building instance, update it
       if (buildingInstance) {
         // Call the update method using bracket notation to avoid TypeScript errors
-        (buildingInstance as any).update(this.time.now);
+        (buildingInstance as any).update(time);
       }
     });
   }
@@ -542,5 +778,41 @@ export class MainScene extends Phaser.Scene {
     }
 
     // Clean up other resources as needed
+  }
+
+  private updateRobotsListInMenu() {
+    // Get all robots and their information
+    const robotsInfo = this.robots.map((robot) => {
+      let carrying = "";
+
+      // Check if the robot is an Optimus
+      if (robot instanceof Optimus) {
+        // Get the resource type and amount if carrying something
+        if (robot.getCarriedResource()) {
+          const resourceType = robot.getResourceType();
+          const resourceAmount = robot.getResourceAmount();
+          carrying = `${resourceType} (${resourceAmount})`;
+        }
+      }
+
+      // Check if the robot is a MiningDrone
+      if (robot instanceof MiningDrone) {
+        // Get the resource type and amount if carrying something
+        const resourceAmount = robot.getResourceAmount();
+        if (resourceAmount > 0) {
+          carrying = `${robot.getResourceType()} (${resourceAmount})`;
+        }
+      }
+
+      return {
+        name: robot.getRobotName(),
+        type: robot instanceof Optimus ? "optimus" : "mining-drone",
+        state: robot.getRobotState(),
+        carrying: carrying,
+      };
+    });
+
+    // Update the robots list in the menu
+    this.actionMenu.updateRobotsList(robotsInfo);
   }
 }

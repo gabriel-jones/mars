@@ -1,10 +1,13 @@
 import { ResourceNode } from "../resourceNode";
+import { ResourceType } from "../../data/resources";
+import { Blueprint } from "../buildings/Blueprint";
 
 // Define job types
 export enum JobType {
   MERGE_STACKS = "merge_stacks",
   WORK_MACHINE = "work_machine",
   BUILD = "build",
+  DELIVER_RESOURCE = "deliver_resource", // New job type for resource delivery
   // Add more job types as needed
 }
 
@@ -18,6 +21,10 @@ export interface Job {
   position?: Phaser.Math.Vector2;
   completed: boolean;
   workDuration: number; // Duration in milliseconds for this job
+  // Additional properties for resource delivery
+  resourceType?: ResourceType;
+  resourceAmount?: number;
+  blueprint?: Blueprint;
   // Add more properties as needed for different job types
 }
 
@@ -94,6 +101,40 @@ export class JobManager {
     return job;
   }
 
+  // Create a new resource delivery job
+  public createResourceDeliveryJob(
+    sourceNode: ResourceNode,
+    blueprint: Blueprint,
+    resourceType: ResourceType,
+    resourceAmount: number
+  ): Job {
+    const jobId = `job_${this.nextJobId++}`;
+    const job: Job = {
+      id: jobId,
+      type: JobType.DELIVER_RESOURCE,
+      sourceNode,
+      position: new Phaser.Math.Vector2(blueprint.x, blueprint.y),
+      completed: false,
+      workDuration: 0, // No work duration for delivery tasks
+      resourceType,
+      resourceAmount,
+      blueprint,
+    };
+
+    this.jobs.set(jobId, job);
+    console.log(
+      `Created new resource delivery job: ${jobId} for ${resourceAmount} ${resourceType}`
+    );
+    return job;
+  }
+
+  // Find resource delivery jobs for blueprints
+  public findResourceDeliveryJobs(): Job[] {
+    // This will be implemented in the MainScene to scan for blueprints and resource nodes
+    // and create delivery jobs as needed
+    return [];
+  }
+
   // Assign a job to a robot
   public assignJob(jobId: string, robotId: string): boolean {
     const job = this.jobs.get(jobId);
@@ -122,22 +163,48 @@ export class JobManager {
       return;
     }
 
+    const robotId = job.assignedRobotId;
     job.completed = true;
-    console.log(`Completed job ${jobId}`);
+    job.assignedRobotId = undefined; // Clear the robot assignment
+
+    console.log(
+      `Job ${jobId} of type ${job.type} marked as completed by robot ${robotId}`
+    );
   }
 
   // Get all available jobs (not assigned and not completed)
-  public getAvailableJobs(): Job[] {
-    const availableJobs: Job[] = [];
-    this.jobs.forEach((job) => {
-      if (!job.assignedRobotId && !job.completed) {
-        availableJobs.push(job);
+  public getAvailableJobs(preferredJobTypes?: JobType[]): Job[] {
+    const availableJobs = Array.from(this.jobs.values()).filter(
+      (job) => !job.assignedRobotId && !job.completed
+    );
+
+    // If preferred job types are specified, prioritize those
+    if (preferredJobTypes && preferredJobTypes.length > 0) {
+      // First, get jobs of preferred types
+      const preferredJobs = availableJobs.filter((job) =>
+        preferredJobTypes.includes(job.type)
+      );
+
+      // If we found preferred jobs, return those
+      if (preferredJobs.length > 0) {
+        return preferredJobs;
       }
-    });
+    }
+
     return availableJobs;
   }
 
-  // Get all jobs assigned to a specific robot
+  // Get a job by its ID
+  public getJobById(jobId: string): Job | undefined {
+    return this.jobs.get(jobId);
+  }
+
+  // Get all jobs (both available and assigned)
+  public getAllJobs(): Map<string, Job> {
+    return this.jobs;
+  }
+
+  // Get jobs assigned to a specific robot
   public getJobsForRobot(robotId: string): Job[] {
     const robotJobs: Job[] = [];
     this.jobs.forEach((job) => {
@@ -212,7 +279,7 @@ export class JobManager {
   }
 
   // Check if a node is already part of a job
-  private isNodeInJob(node: ResourceNode): boolean {
+  public isNodeInJob(node: ResourceNode): boolean {
     let isInJob = false;
     this.jobs.forEach((job) => {
       if (
@@ -229,9 +296,17 @@ export class JobManager {
   // Clean up completed jobs
   public cleanupCompletedJobs(): void {
     const jobsToRemove: string[] = [];
+    const jobTypes: { [key: string]: number } = {};
+
     this.jobs.forEach((job, jobId) => {
       if (job.completed) {
         jobsToRemove.push(jobId);
+
+        // Track job types for logging
+        if (!jobTypes[job.type]) {
+          jobTypes[job.type] = 0;
+        }
+        jobTypes[job.type]++;
       }
     });
 
@@ -240,7 +315,14 @@ export class JobManager {
     });
 
     if (jobsToRemove.length > 0) {
-      console.log(`Cleaned up ${jobsToRemove.length} completed jobs`);
+      // Create a summary of job types that were cleaned up
+      const typeSummary = Object.entries(jobTypes)
+        .map(([type, count]) => `${type}: ${count}`)
+        .join(", ");
+
+      console.log(
+        `Cleaned up ${jobsToRemove.length} completed jobs (${typeSummary})`
+      );
     }
   }
 }

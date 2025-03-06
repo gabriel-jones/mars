@@ -230,7 +230,17 @@ export class ResourceDisplay {
       if (display) {
         const resource = ResourceManager.getResource(item.type);
         if (resource) {
-          display.setText(`${resource.name}: ${item.amount}`);
+          // Add safety check to ensure the text object is valid before updating
+          if (display.scene && display.active) {
+            try {
+              display.setText(`${resource.name}: ${item.amount}`);
+            } catch (error) {
+              console.warn(
+                `Error updating resource display for ${resource.name}:`,
+                error
+              );
+            }
+          }
         }
       }
     });
@@ -244,23 +254,30 @@ export class ResourceDisplay {
         const headerText = container.getAt(1) as Phaser.GameObjects.Text;
 
         // Add null check before calling setText
-        if (headerText) {
-          // Calculate total for this category
-          let categoryTotal = 0;
-          inventory.forEach((item: any) => {
-            // Skip top level resources since they're shown separately
-            if (TOP_LEVEL_RESOURCES.includes(item.type)) {
-              return;
-            }
+        if (headerText && headerText.scene && headerText.active) {
+          try {
+            // Calculate total for this category
+            let categoryTotal = 0;
+            inventory.forEach((item: any) => {
+              // Skip top level resources since they're shown separately
+              if (TOP_LEVEL_RESOURCES.includes(item.type)) {
+                return;
+              }
 
-            const resource = ResourceManager.getResource(item.type);
-            if (resource && resource.category === category) {
-              categoryTotal += item.amount;
-            }
-          });
+              const resource = ResourceManager.getResource(item.type);
+              if (resource && resource.category === category) {
+                categoryTotal += item.amount;
+              }
+            });
 
-          // Update header text with total
-          headerText.setText(`${category}: ${categoryTotal}`);
+            // Update the header text with the category total
+            headerText.setText(`${category.toUpperCase()} (${categoryTotal})`);
+          } catch (error) {
+            console.warn(
+              `Error updating category total for ${category}:`,
+              error
+            );
+          }
         }
       }
     });

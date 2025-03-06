@@ -99,7 +99,7 @@ export abstract class Robot extends Phaser.GameObjects.Container {
   }
 
   // Abstract methods that derived classes must implement
-  protected abstract getRobotName(): string;
+  protected abstract getRobotNameInternal(): string;
   public abstract update(): void;
 
   // Move robot to a target position
@@ -281,5 +281,18 @@ export abstract class Robot extends Phaser.GameObjects.Container {
       this.dustEffects.destroy();
     }
     super.destroy(fromScene);
+  }
+
+  // Public accessor methods
+  public getRobotState(): string {
+    return this.robotState;
+  }
+
+  public getCarriedResource(): ResourceNode | null {
+    return this.carriedResource;
+  }
+
+  public getRobotName(): string {
+    return this.getRobotNameInternal();
   }
 }

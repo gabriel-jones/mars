@@ -75,8 +75,16 @@ export class MiningDrone extends Robot {
     });
   }
 
-  protected getRobotName(): string {
+  protected getRobotNameInternal(): string {
     return "Mining Drone";
+  }
+
+  public getResourceType(): string {
+    return this.resourceType;
+  }
+
+  public getResourceAmount(): number {
+    return this.resourceAmount;
   }
 
   public setResourceType(type: ResourceType): void {
@@ -84,16 +92,8 @@ export class MiningDrone extends Robot {
   }
 
   public update(): void {
-    // Update state text with resource info if carrying resources
-    if (this.resourceAmount > 0) {
-      this.stateText.setText(
-        `${this.robotState.toUpperCase()} (${this.resourceAmount}/${
-          this.maxResourceCapacity
-        })`
-      );
-    } else {
-      this.updateStateText();
-    }
+    // Update the state text
+    this.updateStateText();
 
     // Update dust effects
     this.updateDustEffects(this.scene.time.now);
@@ -103,14 +103,17 @@ export class MiningDrone extends Robot {
       console.log("Idle drone, generating mining pattern");
       this.generateSnakePattern();
       this.moveToNextPatternPoint();
+      return; // Skip the rest of the update to avoid state conflicts
     }
 
-    // Check if we're mining and if mining is complete
+    // Check if mining is complete
     if (
       this.robotState === RobotState.WORKING &&
       this.scene.time.now >= this.miningCompleteTime
     ) {
-      // Mining complete, collect resources
+      console.log("Mining complete");
+      this.stopMining();
+
       // Get the mining yield from the mining station
       const stationYield = this.miningStation.getMiningYield();
 
@@ -134,37 +137,37 @@ export class MiningDrone extends Robot {
 
       // Check if we've reached capacity
       if (this.resourceAmount >= this.maxResourceCapacity) {
-        console.log("Reached capacity, returning to station");
+        console.log("Reached capacity, looking for a processor");
         this.resourceAmount = this.maxResourceCapacity; // Cap at max
-        this.returnToStation();
+
+        // Find the nearest regolith processor
+        const processor = this.findNearestRegolithProcessor();
+        if (processor) {
+          console.log(
+            `Found processor at (${processor.x}, ${processor.y}), moving to it`
+          );
+          // Move to the processor
+          this.moveToTarget(new Phaser.Math.Vector2(processor.x, processor.y));
+          this.robotState = RobotState.RETURNING;
+        } else {
+          console.warn("No processor found, showing warning");
+          this.showWarning();
+
+          // Don't return to station, just continue mining from current position
+          // But we're full, so we can't mine more. Just go idle until a processor is built.
+          this.robotState = RobotState.IDLE;
+          this.updateStateText();
+        }
       } else {
         // Move to next point in the pattern
         this.moveToNextPatternPoint();
-      }
-    }
-
-    // Find the nearest regolith processor if we're full
-    if (
-      this.resourceAmount >= this.maxResourceCapacity &&
-      this.robotState !== RobotState.RETURNING
-    ) {
-      const processor = this.findNearestRegolithProcessor();
-      if (processor) {
-        this.robotState = RobotState.RETURNING;
-        this.updateStateText();
-        this.moveToTarget(new Phaser.Math.Vector2(processor.x, processor.y));
-        this.clearWarning();
-      } else {
-        // No processor found, go idle and show warning
-        this.robotState = RobotState.IDLE;
-        this.updateStateText();
-        this.showWarning();
       }
     }
   }
 
   // Return to the mining station
   private returnToStation(): void {
+    console.log("Returning to station");
     this.robotState = RobotState.MOVING;
     this.updateStateText();
 
@@ -202,10 +205,9 @@ export class MiningDrone extends Robot {
         this.updateStateText();
         console.log("Returned to station, going to next mining point");
 
-        // Continue mining at the next pattern point
-        if (this.patternGenerated && this.snakePattern.length > 0) {
-          this.moveToNextPatternPoint();
-        }
+        // Reset the pattern so we generate a new one
+        this.patternGenerated = false;
+        this.snakePattern = [];
       },
     });
   }
@@ -254,41 +256,11 @@ export class MiningDrone extends Robot {
     this.patternDirection = 1; // Reset to forward direction
   }
 
-  // Move to the next point in the snake pattern
-  private moveToNextPatternPoint(): void {
-    if (!this.patternGenerated || this.snakePattern.length === 0) {
-      this.generateSnakePattern();
-      if (this.snakePattern.length === 0) {
-        // Still no pattern points, return to station
-        this.returnToStation();
-        return;
-      }
-    }
+  // Custom method to move to a mining point without using the base class's moveToTarget
+  private moveToMiningPoint(point: Phaser.Math.Vector2): void {
+    console.log(`Moving to mining point (${point.x}, ${point.y})`);
 
-    // If we've reached the end of the pattern, reverse direction
-    if (
-      this.currentPatternIndex >= this.snakePattern.length - 1 &&
-      this.patternDirection === 1
-    ) {
-      this.patternDirection = -1;
-    } else if (this.currentPatternIndex <= 0 && this.patternDirection === -1) {
-      this.patternDirection = 1;
-    }
-
-    // Get the next point in the pattern
-    const nextPoint = this.snakePattern[this.currentPatternIndex];
-
-    // Update the index for next time
-    this.currentPatternIndex += this.patternDirection;
-
-    // Ensure index stays within bounds
-    this.currentPatternIndex = Phaser.Math.Clamp(
-      this.currentPatternIndex,
-      0,
-      this.snakePattern.length - 1
-    );
-
-    // Move to the next point
+    // Set state to MOVING
     this.robotState = RobotState.MOVING;
     this.updateStateText();
 
@@ -300,42 +272,86 @@ export class MiningDrone extends Robot {
     const distance = Phaser.Math.Distance.Between(
       this.x,
       this.y,
-      nextPoint.x,
-      nextPoint.y
+      point.x,
+      point.y
     );
 
     // Calculate duration based on distance and robot velocity
     const duration = (distance / ROBOT_VELOCITY) * 1000; // Convert to milliseconds
 
-    console.log(`Moving to mining point (${nextPoint.x}, ${nextPoint.y})`);
-
     // Use tweens for smoother movement
     this.scene.tweens.add({
       targets: this,
-      x: nextPoint.x,
-      y: nextPoint.y,
+      x: point.x,
+      y: point.y,
       duration: duration,
       ease: "Linear",
       onComplete: () => {
-        console.log(`Reached mining point (${nextPoint.x}, ${nextPoint.y})`);
+        console.log(`Reached mining point (${point.x}, ${point.y})`);
         // Stop movement dust when we reach the target
         this.dustEffects.stopMovementDust();
 
-        // Only start mining if we're still in the MOVING state
-        // This prevents issues if the state was changed during movement
-        if (this.robotState === RobotState.MOVING) {
-          // Start mining when we reach the tile
-          this.startMining();
-        } else {
-          console.log(
-            `Not starting mining because state is ${this.robotState}`
-          );
-        }
+        // Start mining immediately
+        this.startMining();
       },
     });
+  }
 
-    // Stop any existing mining effects
-    this.stopMining();
+  private moveToNextPatternPoint(): void {
+    console.log(
+      "moveToNextPatternPoint called, current state:",
+      this.robotState
+    );
+
+    if (!this.patternGenerated || this.snakePattern.length === 0) {
+      console.log("No pattern exists, generating new one");
+      this.generateSnakePattern();
+      if (this.snakePattern.length === 0) {
+        // Still no pattern points, go idle instead of returning to station
+        console.log("No pattern points available, going idle");
+        this.robotState = RobotState.IDLE;
+        this.updateStateText();
+        return;
+      }
+    }
+
+    // If we've reached the end of the pattern, reverse direction
+    if (
+      this.currentPatternIndex >= this.snakePattern.length - 1 &&
+      this.patternDirection === 1
+    ) {
+      this.patternDirection = -1;
+      console.log("Reached end of pattern, reversing direction");
+    } else if (this.currentPatternIndex <= 0 && this.patternDirection === -1) {
+      this.patternDirection = 1;
+      console.log("Reached start of pattern, reversing direction");
+    }
+
+    // Get the next point in the pattern
+    const nextPoint = this.snakePattern[this.currentPatternIndex];
+    if (!nextPoint) {
+      console.error("No valid point found at index", this.currentPatternIndex);
+      this.robotState = RobotState.IDLE;
+      this.updateStateText();
+      return;
+    }
+
+    console.log(
+      `Next pattern point: (${nextPoint.x}, ${nextPoint.y}), index: ${this.currentPatternIndex}`
+    );
+
+    // Update the index for next time
+    this.currentPatternIndex += this.patternDirection;
+
+    // Ensure index stays within bounds
+    this.currentPatternIndex = Phaser.Math.Clamp(
+      this.currentPatternIndex,
+      0,
+      this.snakePattern.length - 1
+    );
+
+    // Use our custom method to move to the mining point
+    this.moveToMiningPoint(nextPoint);
   }
 
   // Find the nearest regolith processor
@@ -343,38 +359,58 @@ export class MiningDrone extends Robot {
     // Get all buildings from the BuildingManager
     const buildings = (window as any).gameState?.buildings || [];
 
+    // First, find all regolith processor buildings
+    const processorBuildings = buildings.filter(
+      (building: any) => building.type === "regolith-processor"
+    );
+
+    if (processorBuildings.length === 0) {
+      console.log("No regolith processor buildings found in BuildingManager");
+      return null;
+    }
+
+    console.log(
+      `Found ${processorBuildings.length} regolith processor buildings in BuildingManager`
+    );
+
+    // Get all container objects in the scene
+    const allContainers = this.scene.children
+      .getAll()
+      .filter(
+        (child) => child instanceof Phaser.GameObjects.Container
+      ) as Phaser.GameObjects.Container[];
+
+    // Find containers that have the addRegolith method (RegolithProcessor instances)
+    const processorContainers = allContainers.filter(
+      (container) =>
+        typeof (container as any).addRegolith === "function" &&
+        typeof (container as any).canAcceptRegolith === "function"
+    );
+
+    if (processorContainers.length === 0) {
+      console.log("No RegolithProcessor containers found in scene");
+      return null;
+    }
+
+    console.log(
+      `Found ${processorContainers.length} RegolithProcessor containers in scene`
+    );
+
+    // Find the nearest processor container
     let nearestProcessor: Phaser.GameObjects.Container | null = null;
     let shortestDistance = Infinity;
 
-    // Find the nearest regolith processor
-    for (const building of buildings) {
-      if (building.type === "regolith-processor") {
-        const distance = Phaser.Math.Distance.Between(
-          this.x,
-          this.y,
-          building.position.x,
-          building.position.y
-        );
+    for (const container of processorContainers) {
+      const distance = Phaser.Math.Distance.Between(
+        this.x,
+        this.y,
+        container.x,
+        container.y
+      );
 
-        if (distance < shortestDistance) {
-          // Find the actual processor game object
-          const processor = this.scene.children
-            .getAll()
-            .find(
-              (child) =>
-                child instanceof Phaser.GameObjects.Container &&
-                (child as Phaser.GameObjects.Container).x ===
-                  building.position.x &&
-                (child as Phaser.GameObjects.Container).y ===
-                  building.position.y &&
-                (child as any).addRegolith
-            ) as Phaser.GameObjects.Container | undefined;
-
-          if (processor) {
-            nearestProcessor = processor;
-            shortestDistance = distance;
-          }
-        }
+      if (distance < shortestDistance) {
+        nearestProcessor = container;
+        shortestDistance = distance;
       }
     }
 
@@ -383,7 +419,7 @@ export class MiningDrone extends Robot {
         `Found nearest processor at (${nearestProcessor.x}, ${nearestProcessor.y}), distance: ${shortestDistance}`
       );
     } else {
-      console.log("No regolith processor found");
+      console.log("No suitable regolith processor found");
     }
 
     return nearestProcessor;
@@ -519,6 +555,8 @@ export class MiningDrone extends Robot {
 
   // When the robot reaches its target
   protected onReachTarget(): void {
+    console.log("onReachTarget called, state:", this.robotState);
+
     // If we're in the MOVING state and following a pattern, start mining
     if (this.robotState === RobotState.MOVING && this.patternGenerated) {
       console.log("onReachTarget: Starting mining");
@@ -529,53 +567,120 @@ export class MiningDrone extends Robot {
 
       // Find the processor we've reached
       const processor = this.findNearestRegolithProcessor();
-      if (
-        processor &&
-        (processor as any).addRegolith &&
-        (processor as any).canAcceptRegolith()
-      ) {
-        // Deposit the regolith
-        (processor as any).addRegolith(this.resourceAmount);
-        console.log(`Deposited ${this.resourceAmount} regolith at processor`);
+      if (processor) {
+        console.log(`Found processor at (${processor.x}, ${processor.y})`);
 
-        // Reset our resource amount
-        this.resourceAmount = 0;
+        try {
+          // Check if it has the required methods
+          const canAccept =
+            typeof (processor as any).canAcceptRegolith === "function";
+          const canAdd = typeof (processor as any).addRegolith === "function";
 
-        // Important: Don't set the state here, as the base Robot class will set it to IDLE
-        // in the moveToTarget onComplete callback. Instead, we'll directly call moveToNextPatternPoint
-        // which will set the state to MOVING and continue the mining process.
-        console.log("After depositing, continuing mining pattern");
-
-        // Instead of resetting the pattern, continue mining from where we left off
-        if (this.patternGenerated && this.snakePattern.length > 0) {
-          console.log("Continuing mining pattern after processor drop-off");
-          // Use a small delay to ensure the state transition happens after the base class has finished
-          this.scene.time.delayedCall(100, () => {
-            this.moveToNextPatternPoint();
-          });
-        } else {
-          // Only generate a new pattern if we don't have one
           console.log(
-            "No pattern exists, generating new one after processor drop-off"
+            `Processor methods check - canAcceptRegolith: ${canAccept}, addRegolith: ${canAdd}`
           );
-          this.patternGenerated = false;
-          // Use a small delay to ensure the state transition happens after the base class has finished
-          this.scene.time.delayedCall(100, () => {
+
+          if (canAccept && canAdd && (processor as any).canAcceptRegolith()) {
+            // Deposit the regolith
+            (processor as any).addRegolith(this.resourceAmount);
+            console.log(
+              `Deposited ${this.resourceAmount} regolith at processor`
+            );
+
+            // Reset our resource amount
+            this.resourceAmount = 0;
+
+            // IMPORTANT: Set the state to MOVING to prevent the base class from setting it to IDLE
+            this.robotState = RobotState.MOVING;
+            this.updateStateText();
+
+            console.log("After depositing, continuing mining pattern");
+
+            // Instead of using a delay, immediately continue the pattern
+            if (this.patternGenerated && this.snakePattern.length > 0) {
+              console.log("Continuing mining pattern after processor drop-off");
+              this.moveToNextPatternPoint();
+            } else {
+              // Only generate a new pattern if we don't have one
+              console.log(
+                "No pattern exists, generating new one after processor drop-off"
+              );
+              this.patternGenerated = false;
+              this.generateSnakePattern();
+              this.moveToNextPatternPoint();
+            }
+          } else {
+            console.error(
+              "Processor cannot accept regolith or missing required methods"
+            );
+            this.showWarning();
+
+            // Set state to MOVING to prevent going idle
+            this.robotState = RobotState.MOVING;
+            this.updateStateText();
+
+            // Don't return to station, just continue mining from current position
+            if (this.patternGenerated && this.snakePattern.length > 0) {
+              console.log("Continuing mining pattern after processor error");
+              this.moveToNextPatternPoint();
+            } else {
+              console.log("Generating new pattern after processor error");
+              this.patternGenerated = false;
+              this.generateSnakePattern();
+              this.moveToNextPatternPoint();
+            }
+          }
+        } catch (error) {
+          console.error("Error interacting with processor:", error);
+          this.showWarning();
+
+          // Set state to MOVING to prevent going idle
+          this.robotState = RobotState.MOVING;
+          this.updateStateText();
+
+          // Don't return to station, just continue mining from current position
+          if (this.patternGenerated && this.snakePattern.length > 0) {
+            console.log("Continuing mining pattern after processor error");
+            this.moveToNextPatternPoint();
+          } else {
+            console.log("Generating new pattern after processor error");
+            this.patternGenerated = false;
             this.generateSnakePattern();
             this.moveToNextPatternPoint();
-          });
+          }
         }
       } else {
-        console.log("Failed to deposit regolith: No valid processor found");
+        console.error("No processor found at target location");
         this.showWarning();
+
+        // Set state to MOVING to prevent going idle
+        this.robotState = RobotState.MOVING;
+        this.updateStateText();
+
+        // Don't return to station, just continue mining from current position
+        if (this.patternGenerated && this.snakePattern.length > 0) {
+          console.log("Continuing mining pattern after no processor found");
+          this.moveToNextPatternPoint();
+        } else {
+          console.log("Generating new pattern after no processor found");
+          this.patternGenerated = false;
+          this.generateSnakePattern();
+          this.moveToNextPatternPoint();
+        }
       }
-    } else {
-      console.log(
-        "onReachTarget: Not starting mining. State:",
-        this.robotState,
-        "patternGenerated:",
-        this.patternGenerated
+    }
+  }
+
+  // Override the updateStateText method to include resource amount
+  protected updateStateText(): void {
+    if (this.resourceAmount > 0) {
+      this.stateText.setText(
+        `${this.robotState.toUpperCase()} (${this.resourceAmount}/${
+          this.maxResourceCapacity
+        })`
       );
+    } else {
+      this.stateText.setText(`${this.robotState.toUpperCase()}`);
     }
   }
 }

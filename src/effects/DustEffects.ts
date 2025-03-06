@@ -2,33 +2,33 @@ import * as Phaser from "phaser";
 
 export class DustEffects {
   private scene: Phaser.Scene;
-  private dustGraphics: Phaser.GameObjects.Graphics[] = [];
+  private dustParticles: Phaser.GameObjects.Sprite[] = [];
   private lastPosition: Phaser.Math.Vector2;
   private entity: Phaser.GameObjects.GameObject;
   private isActive: boolean = false;
   private dustInterval: number = 100; // Decreased from 150 to spawn more frequently
   private lastDustTime: number = 0;
-  private dustSize: number = 5; // Reduced from 7
+  private dustSize: number = 1.0; // Scale for the 8x8 dust texture
   private dustColor: number = 0xcccccc;
   private dustAlpha: number = 0.7; // Reduced from 0.8
   private dustLifetime: number = 1000; // Increased from 800 ms
   private dustCount: number = 12; // Increased from 8
 
   // Working dust effect properties
-  private workingDustGraphics: Phaser.GameObjects.Graphics[] = [];
+  private workingDustParticles: Phaser.GameObjects.Sprite[] = [];
   private isWorkingDustVisible: boolean = false;
   private workingDustCount: number = 16; // Increased from 12
   private workingDustColor: number = 0xd2b48c;
   private workingDustAlpha: number = 0.8; // Reduced from 0.9
-  private workingDustSize: number = 5; // Reduced from 6
+  private workingDustSize: number = 1.0; // Scale for the 8x8 dust texture
 
   // Movement dust effect properties
-  private movementDustGraphics: Phaser.GameObjects.Graphics[] = [];
+  private movementDustParticles: Phaser.GameObjects.Sprite[] = [];
   private isMovementDustVisible: boolean = false;
   private movementDustCount: number = 30; // Increased from 20
   private movementDustColor: number = 0xd2b48c;
   private movementDustAlpha: number = 0.75; // Reduced from 0.85
-  private movementDustSize: number = 4; // Reduced from 6
+  private movementDustSize: number = 0.8; // Scale for the 8x8 dust texture
 
   constructor(
     scene: Phaser.Scene,
@@ -88,59 +88,63 @@ export class DustEffects {
       this.movementDustCount = options.movementDustCount;
 
     // Create dust graphics pools
-    this.createDustGraphics();
-    this.createWorkingDustGraphics();
-    this.createMovementDustGraphics();
+    this.createDustParticles();
+    this.createWorkingDustParticles();
+    this.createMovementDustParticles();
   }
 
-  private createDustGraphics(): void {
-    // Create a pool of dust graphics
+  private createDustParticles(): void {
+    // Create a pool of dust particles
     for (let i = 0; i < this.dustCount; i++) {
-      const graphics = this.scene.add.graphics();
-      graphics.setVisible(false);
-      graphics.setDepth(5);
-      this.dustGraphics.push(graphics);
+      const particle = this.scene.add.sprite(0, 0, "dust-particle");
+      particle.setVisible(false);
+      particle.setDepth(5);
+      particle.setScale(this.dustSize);
+      particle.setTint(this.dustColor);
+      this.dustParticles.push(particle);
     }
   }
 
-  private createWorkingDustGraphics(): void {
+  private createWorkingDustParticles(): void {
     // Create working dust particles
     for (let i = 0; i < this.workingDustCount; i++) {
-      const graphics = this.scene.add.graphics();
+      const particle = this.scene.add.sprite(0, 0, "dust-particle");
 
       // Set initial position (will be updated when shown)
-      graphics.x = (this.entity as any).x || 0;
-      graphics.y = (this.entity as any).y || 0;
+      particle.x = (this.entity as any).x || 0;
+      particle.y = (this.entity as any).y || 0;
 
-      // Draw a small circle
-      graphics.fillStyle(this.workingDustColor, this.workingDustAlpha);
-      graphics.fillCircle(0, 0, this.workingDustSize);
+      // Set appearance
+      particle.setScale(this.workingDustSize);
+      particle.setTint(this.workingDustColor);
+      particle.setAlpha(this.workingDustAlpha);
 
       // Hide initially
-      graphics.visible = false;
+      particle.visible = false;
 
       // Set depth to be below the entity
-      graphics.setDepth(5);
+      particle.setDepth(5);
 
       // Add to array
-      this.workingDustGraphics.push(graphics);
+      this.workingDustParticles.push(particle);
     }
   }
 
-  private createMovementDustGraphics(): void {
+  private createMovementDustParticles(): void {
     // Create movement dust particles
     for (let i = 0; i < this.movementDustCount; i++) {
-      const graphics = this.scene.add.graphics();
-      graphics.x = (this.entity as any).x || 0;
-      graphics.y = (this.entity as any).y || 0;
-      graphics.fillStyle(this.movementDustColor, this.movementDustAlpha);
-      graphics.fillCircle(0, 0, this.movementDustSize);
-      graphics.visible = false;
+      const particle = this.scene.add.sprite(0, 0, "dust-particle");
+      particle.x = (this.entity as any).x || 0;
+      particle.y = (this.entity as any).y || 0;
+      particle.setScale(this.movementDustSize);
+      particle.setTint(this.movementDustColor);
+      particle.setAlpha(this.movementDustAlpha);
+      particle.visible = false;
 
       // Set depth to be below the entity
-      graphics.setDepth(5);
+      particle.setDepth(5);
 
-      this.movementDustGraphics.push(graphics);
+      this.movementDustParticles.push(particle);
     }
   }
 
@@ -193,46 +197,37 @@ export class DustEffects {
   }
 
   private createDustPuff(x: number, y: number): void {
-    // Get an available dust graphic
-    const availableGraphics = this.dustGraphics.filter((g) => !g.visible);
-    if (availableGraphics.length === 0) return;
+    // Get an available dust particle
+    const availableParticles = this.dustParticles.filter((p) => !p.visible);
+    if (availableParticles.length === 0) return;
 
-    // Get a random dust graphic
-    const graphics =
-      availableGraphics[Math.floor(Math.random() * availableGraphics.length)];
+    // Get a random dust particle
+    const particle =
+      availableParticles[Math.floor(Math.random() * availableParticles.length)];
 
     // Position slightly behind the entity with some randomness
     const angle = Math.random() * Math.PI * 2;
-    const distance = this.dustSize + Math.random() * this.dustSize; // Reduced from 1.5
+    const distance = 5 + Math.random() * 5; // Adjusted for dust texture
     const dustX = x - Math.cos(angle) * distance;
     const dustY = y - Math.sin(angle) * distance;
 
-    // Reset and draw the dust with a larger size
-    graphics.clear();
-    graphics.fillStyle(this.dustColor, this.dustAlpha);
-
-    // Draw a larger circle with a slight glow effect
-    const actualSize = this.dustSize + Math.random() * 2; // Reduced from 3
-    graphics.fillCircle(0, 0, actualSize);
-
-    // Add a subtle glow effect
-    graphics.fillStyle(this.dustColor, this.dustAlpha * 0.3); // Reduced from 0.4
-    graphics.fillCircle(0, 0, actualSize * 1.3); // Reduced from 1.5
-
-    graphics.setPosition(dustX, dustY);
-    graphics.setVisible(true);
-    graphics.setAlpha(this.dustAlpha);
-    graphics.setScale(1.1); // Reduced from 1.2
+    // Set the particle properties
+    const actualSize = this.dustSize + Math.random() * 0.3;
+    particle.setPosition(dustX, dustY);
+    particle.setVisible(true);
+    particle.setAlpha(this.dustAlpha);
+    particle.setScale(actualSize);
+    particle.setTint(this.dustColor);
 
     // Animate the dust with a longer duration and more dramatic scaling
     this.scene.tweens.add({
-      targets: graphics,
+      targets: particle,
       alpha: 0,
-      scale: 0.4, // Increased from 0.3
+      scale: actualSize * 0.4,
       duration: this.dustLifetime,
       ease: "Sine.easeOut",
       onComplete: () => {
-        graphics.setVisible(false);
+        particle.setVisible(false);
       },
     });
   }
@@ -244,198 +239,153 @@ export class DustEffects {
     this.isWorkingDustVisible = true;
 
     // Update positions and show graphics
-    this.workingDustGraphics.forEach((graphics) => {
+    this.workingDustParticles.forEach((particle) => {
       const entityX = (this.entity as any).x;
       const entityY = (this.entity as any).y;
 
-      if (!entityX || !entityY) return;
+      if (entityX === undefined || entityY === undefined) return;
 
-      // Calculate random position around the entity
-      const angle = Math.random() * Math.PI * 2;
-      const distance = 8 + Math.random() * 12; // Random distance between 8-20
-
-      // Set position
-      graphics.x = entityX + Math.cos(angle) * distance;
-      graphics.y = entityY + Math.sin(angle) * distance;
-
-      // Make visible
-      graphics.visible = true;
-      graphics.alpha = this.workingDustAlpha;
-      graphics.scaleX = 1;
-      graphics.scaleY = 1;
-
-      // Create animation
-      this.scene.tweens.add({
-        targets: graphics,
-        alpha: 0,
-        scaleX: 2,
-        scaleY: 2,
-        x: graphics.x + Math.cos(angle) * 15, // Move outward more
-        y: graphics.y + Math.sin(angle) * 15 + 8, // Move outward and down more
-        duration: 400 + Math.random() * 300, // Faster animation
-        onComplete: () => {
-          if (this.isWorkingDustVisible) {
-            // Reset and start again if still working
-            this.resetAndAnimateWorkingDustGraphic(graphics);
-          }
-        },
-      });
+      this.resetAndAnimateWorkingDustParticle(particle);
     });
   }
 
-  // Reset and animate a single working dust graphic
-  private resetAndAnimateWorkingDustGraphic(
-    graphics: Phaser.GameObjects.Graphics
+  private resetAndAnimateWorkingDustParticle(
+    particle: Phaser.GameObjects.Sprite
   ): void {
-    if (!this.isWorkingDustVisible) return;
-
     const entityX = (this.entity as any).x;
     const entityY = (this.entity as any).y;
 
-    if (!entityX || !entityY) return;
+    if (entityX === undefined || entityY === undefined) return;
 
-    const newAngle = Math.random() * Math.PI * 2;
-    const newDistance = 8 + Math.random() * 12;
+    // Random position around the entity
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 10 + Math.random() * 15; // Adjusted for dust texture
+    const particleX = entityX + Math.cos(angle) * distance;
+    const particleY = entityY + Math.sin(angle) * distance;
 
-    // Update position to current entity position
-    graphics.x = entityX + Math.cos(newAngle) * newDistance;
-    graphics.y = entityY + Math.sin(newAngle) * newDistance;
-    graphics.alpha = this.workingDustAlpha;
-    graphics.scaleX = 1;
-    graphics.scaleY = 1;
+    // Set initial properties
+    particle.setPosition(particleX, particleY);
+    particle.setScale(this.workingDustSize * (0.7 + Math.random() * 0.6));
+    particle.setAlpha(this.workingDustAlpha * (0.7 + Math.random() * 0.3));
+    particle.setTint(this.workingDustColor);
+    particle.setVisible(true);
 
-    // Clear and redraw with current settings
-    graphics.clear();
-    graphics.fillStyle(this.workingDustColor, this.workingDustAlpha);
-    graphics.fillCircle(0, 0, this.workingDustSize);
-
-    // Animate
+    // Animate rising and fading
     this.scene.tweens.add({
-      targets: graphics,
+      targets: particle,
+      y: particleY - 20 - Math.random() * 15,
       alpha: 0,
-      scaleX: 2,
-      scaleY: 2,
-      x: graphics.x + Math.cos(newAngle) * 15,
-      y: graphics.y + Math.sin(newAngle) * 15 + 8,
-      duration: 400 + Math.random() * 300,
+      scale: particle.scale * 0.5,
+      duration: 1000 + Math.random() * 500,
+      ease: "Sine.easeOut",
       onComplete: () => {
         if (this.isWorkingDustVisible) {
-          this.resetAndAnimateWorkingDustGraphic(graphics);
+          this.resetAndAnimateWorkingDustParticle(particle);
+        } else {
+          particle.setVisible(false);
         }
       },
     });
   }
 
-  // Hide working dust graphics
   public hideWorkingDust(): void {
-    if (!this.isWorkingDustVisible) return;
-
     this.isWorkingDustVisible = false;
 
-    // Stop animations and hide graphics
-    this.workingDustGraphics.forEach((graphics) => {
-      this.scene.tweens.killTweensOf(graphics);
-      graphics.visible = false;
+    // Fade out all working dust particles
+    this.workingDustParticles.forEach((particle) => {
+      if (particle.visible) {
+        this.scene.tweens.add({
+          targets: particle,
+          alpha: 0,
+          duration: 300,
+          onComplete: () => {
+            particle.setVisible(false);
+          },
+        });
+      }
     });
   }
 
-  // Show movement dust behind the entity when moving
   private showMovementDust(): void {
-    // Get a random dust graphic from the pool
-    const availableGraphics = this.movementDustGraphics.filter(
-      (g) => !g.visible
+    // Get an available movement dust particle
+    const availableParticles = this.movementDustParticles.filter(
+      (p) => !p.visible
     );
+    if (availableParticles.length === 0) return;
 
-    if (availableGraphics.length === 0) return;
-
-    // Get a random dust graphic
-    const graphics =
-      availableGraphics[Math.floor(Math.random() * availableGraphics.length)];
+    // Get a random dust particle
+    const particle =
+      availableParticles[Math.floor(Math.random() * availableParticles.length)];
 
     const entityX = (this.entity as any).x;
     const entityY = (this.entity as any).y;
 
-    if (!entityX || !entityY) return;
+    if (entityX === undefined || entityY === undefined) return;
 
-    // Calculate position behind the entity
-    // Get direction vector from last position to current position
-    const directionX = entityX - this.lastPosition.x;
-    const directionY = entityY - this.lastPosition.y;
+    // Calculate direction of movement
+    const dx = entityX - this.lastPosition.x;
+    const dy = entityY - this.lastPosition.y;
+    const angle = Math.atan2(dy, dx) + Math.PI; // Opposite direction of movement
 
-    // Normalize and invert to get position behind the entity
-    const length = Math.sqrt(directionX * directionX + directionY * directionY);
-    if (length > 0) {
-      const normalizedX = -directionX / length;
-      const normalizedY = -directionY / length;
+    // Add some randomness to the angle
+    const randomAngle = angle + (Math.random() - 0.5) * 0.8; // Reduced from 1.0
 
-      // Add more randomness to the position for a wider dust trail
-      const offsetX = (Math.random() - 0.5) * 18; // Reduced from 25
-      const offsetY = (Math.random() - 0.5) * 18; // Reduced from 25
+    // Position behind the entity based on movement direction
+    const distance = 10 + Math.random() * 15; // Adjusted for dust texture
+    const dustX = entityX + Math.cos(randomAngle) * distance;
+    const dustY = entityY + Math.sin(randomAngle) * distance;
 
-      // Set position further behind the entity
-      graphics.x = entityX + normalizedX * 20 + offsetX; // Reduced from 30
-      graphics.y = entityY + normalizedY * 20 + offsetY; // Reduced from 30
+    // Set the particle properties
+    const actualSize = this.movementDustSize * (0.8 + Math.random() * 0.4);
+    particle.setPosition(dustX, dustY);
+    particle.setVisible(true);
+    particle.setAlpha(this.movementDustAlpha * (0.7 + Math.random() * 0.3));
+    particle.setScale(actualSize);
+    particle.setTint(this.movementDustColor);
 
-      // Clear any previous graphics and redraw
-      graphics.clear();
+    // Calculate movement perpendicular to the direction of travel
+    const perpAngle =
+      randomAngle + (Math.PI / 2) * (Math.random() > 0.5 ? 1 : -1);
+    const perpDistance = 5 + Math.random() * 10;
+    const targetX = dustX + Math.cos(perpAngle) * perpDistance;
+    const targetY = dustY + Math.sin(perpAngle) * perpDistance;
 
-      // Create a more visible dust cloud with layered circles
-      const baseSize = this.movementDustSize + Math.random() * 3; // Reduced from 5
-
-      // Draw main dust particle
-      graphics.fillStyle(this.movementDustColor, this.movementDustAlpha);
-      graphics.fillCircle(0, 0, baseSize);
-
-      // Add a subtle glow/halo effect
-      graphics.fillStyle(this.movementDustColor, this.movementDustAlpha * 0.5);
-      graphics.fillCircle(0, 0, baseSize * 1.3); // Reduced from 1.5
-
-      // Add a very faint outer glow
-      graphics.fillStyle(this.movementDustColor, this.movementDustAlpha * 0.2);
-      graphics.fillCircle(0, 0, baseSize * 1.8); // Reduced from 2.2
-
-      // Make visible and ensure depth is below entity
-      graphics.visible = true;
-      graphics.alpha = this.movementDustAlpha + 0.1; // Reduced from 0.15
-      graphics.scaleX = 1.2; // Reduced from 1.5
-      graphics.scaleY = 1.2; // Reduced from 1.5
-      graphics.setDepth(5); // Ensure depth is set correctly
-
-      // Create animation with longer duration and more dramatic effects
-      this.scene.tweens.add({
-        targets: graphics,
-        alpha: 0,
-        scaleX: 2.0, // Reduced from 3.0
-        scaleY: 2.0, // Reduced from 3.0
-        x: graphics.x + normalizedX * 15, // Reduced from 20
-        y: graphics.y + normalizedY * 15 + 8, // Reduced from 20+10
-        duration: 700 + Math.random() * 300, // Reduced from 800+400
-        onComplete: () => {
-          graphics.visible = false;
-        },
-      });
-    }
+    // Animate the dust
+    this.scene.tweens.add({
+      targets: particle,
+      x: targetX,
+      y: targetY,
+      alpha: 0,
+      scale: actualSize * 0.5,
+      duration: 500 + Math.random() * 300,
+      ease: "Sine.easeOut",
+      onComplete: () => {
+        particle.setVisible(false);
+      },
+    });
   }
 
-  // Enable movement dust
   public startMovementDust(): void {
     this.isMovementDustVisible = true;
   }
 
-  // Disable movement dust
   public stopMovementDust(): void {
     this.isMovementDustVisible = false;
-    // Don't hide existing dust particles - let them fade out naturally
-    // Removed call to hideMovementDust()
-  }
 
-  // Hide all movement dust particles - only used when destroying the effect
-  //   private hideMovementDust(): void {
-  //     this.movementDustGraphics.forEach((graphics) => {
-  //       this.scene.tweens.killTweensOf(graphics);
-  //       graphics.visible = false;
-  //     });
-  //   }
+    // Fade out all movement dust particles
+    this.movementDustParticles.forEach((particle) => {
+      if (particle.visible) {
+        this.scene.tweens.add({
+          targets: particle,
+          alpha: 0,
+          duration: 200,
+          onComplete: () => {
+            particle.setVisible(false);
+          },
+        });
+      }
+    });
+  }
 
   public start(): void {
     this.isActive = true;
@@ -446,13 +396,18 @@ export class DustEffects {
   }
 
   public destroy(): void {
-    // Clean up all dust graphics
-    this.dustGraphics.forEach((g) => g.destroy());
-    this.workingDustGraphics.forEach((g) => g.destroy());
-    this.movementDustGraphics.forEach((g) => g.destroy());
+    // Clean up all dust particles
+    [
+      ...this.dustParticles,
+      ...this.workingDustParticles,
+      ...this.movementDustParticles,
+    ].forEach((particle) => {
+      this.scene.tweens.killTweensOf(particle);
+      particle.destroy();
+    });
 
-    this.dustGraphics = [];
-    this.workingDustGraphics = [];
-    this.movementDustGraphics = [];
+    this.dustParticles = [];
+    this.workingDustParticles = [];
+    this.movementDustParticles = [];
   }
 }

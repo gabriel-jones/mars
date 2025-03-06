@@ -6,6 +6,7 @@ import {
   ResourceType,
 } from "../../data/resources";
 import { ResourceNode } from "../resourceNode";
+import { TILE_SIZE } from "../../constants";
 
 export class RegolithProcessor extends Building {
   private processingText: Phaser.GameObjects.Text;
@@ -22,19 +23,29 @@ export class RegolithProcessor extends Building {
     null;
   private isProcessing: boolean = false;
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, "regolith-processor");
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    tileWidth: number = 1,
+    tileHeight: number = 1
+  ) {
+    super(scene, x, y, "regolith-processor", tileWidth, tileHeight);
 
     console.log(`Creating RegolithProcessor at (${x}, ${y})`);
 
-    // Add processing text
-    this.processingText = scene.add.text(0, 40, this.getLabelText(), {
-      fontSize: "12px",
-      color: "#ffffff",
-      // backgroundColor: "#000000",
-      // padding: { x: 3, y: 2 },
-    });
-    this.processingText.setOrigin(0.5);
+    // Add processing text centered below the building
+    this.processingText = scene.add.text(
+      0,
+      (TILE_SIZE * tileHeight) / 2 + 10,
+      this.getLabelText(),
+      {
+        fontSize: "12px",
+        color: "#ffffff",
+        // backgroundColor: "#000000",
+      }
+    );
+    this.processingText.setOrigin(0.5, 0);
     this.add(this.processingText);
 
     // Initialize the last process time
@@ -42,6 +53,10 @@ export class RegolithProcessor extends Building {
 
     // Create smoke particle effect
     this.createSmokeEffect();
+
+    // Start with some regolith
+    this.regolithAmount = 10;
+    this.updateProcessingText();
 
     // Start processing immediately if we have regolith
     if (this.regolithAmount > 0) {
@@ -145,6 +160,11 @@ export class RegolithProcessor extends Building {
     const currentTime = time || this.scene.time.now;
     const timeSinceLastProcess = currentTime - this.lastProcessTime;
 
+    // Update smoke position if it exists
+    if (this.smokeParticles) {
+      this.smokeParticles.setPosition(this.x, this.y);
+    }
+
     // Debug logging
     if (currentTime % 5000 < 20) {
       // Log every ~5 seconds
@@ -173,11 +193,6 @@ export class RegolithProcessor extends Building {
       this.startSmokeEffect();
     } else if (this.regolithAmount <= 0 && this.isProcessing) {
       this.stopSmokeEffect();
-    }
-
-    // Update smoke position if the processor moves
-    if (this.smokeParticles && this.isProcessing) {
-      this.smokeParticles.setPosition(this.x, this.y);
     }
   }
 

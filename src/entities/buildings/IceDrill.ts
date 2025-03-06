@@ -10,8 +10,14 @@ export class IceDrill extends Building {
   protected lastHarvestTime: number = 0;
   protected harvestInterval: number = 5000; // 5 seconds in ms
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, "ice-drill");
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    tileWidth: number = 1,
+    tileHeight: number = 1
+  ) {
+    super(scene, x, y, "ice-drill", tileWidth, tileHeight);
 
     // Set initial values
     this.drillEfficiency = 0.8 + Math.random() * 0.4; // 0.8 to 1.2 efficiency
