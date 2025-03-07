@@ -6,6 +6,7 @@ import { JobManager, Job, JobType } from "./JobManager";
 import { Blueprint } from "../buildings/Blueprint";
 import { TILE_SIZE } from "../../constants";
 import { HealthBarRenderer } from "../../interfaces/Health";
+import { GrowZone } from "../buildings/GrowZone";
 
 // Optimus class - can perform tasks like a player
 export class Optimus extends Robot {
@@ -89,6 +90,16 @@ export class Optimus extends Robot {
     return this.resourceAmount;
   }
 
+  // Check if the robot is available for new jobs
+  public isAvailable(): boolean {
+    // Robot is available if it's idle and not currently assigned to a job
+    return (
+      this.robotState === RobotState.IDLE &&
+      this.currentJob === null &&
+      this.taskQueue.length === 0
+    );
+  }
+
   // Add a task to the queue
   public addTask(task: () => void): void {
     this.taskQueue.push(task);
@@ -149,189 +160,180 @@ export class Optimus extends Robot {
 
   // Look for available jobs
   private findAndAssignJob(): boolean {
-    // Skip if we already have a job
+    // Check if we already have a job
     if (this.currentJob) {
-      console.log(
-        `Robot ${this.robotId} already has job ${this.currentJob.id}, skipping job search`
-      );
-      return false;
+      return true;
     }
 
-    // Skip if we're not idle
-    if (this.robotState !== RobotState.IDLE) {
-      console.log(
-        `Robot ${this.robotId} is not idle (state: ${this.robotState}), skipping job search`
-      );
-      return false;
-    }
-
-    // Get the job manager instance
+    // Get the job manager
     const jobManager = JobManager.getInstance();
 
-    // Prioritize resource delivery jobs
-    const priorityJobTypes = [
-      JobType.DELIVER_RESOURCE,
+    // Define preferred job types based on robot type
+    const preferredJobTypes = [
       JobType.BUILD,
+      JobType.DELIVER_RESOURCE,
+      JobType.WATER_TILE,
+      JobType.PLANT_SEED,
+      JobType.HARVEST_CROP,
       JobType.MERGE_STACKS,
+      JobType.WORK_MACHINE,
     ];
 
-    // First check if there are any available jobs with priority for resource delivery
-    const availableJobs = jobManager.getAvailableJobs(priorityJobTypes);
+    // Get available jobs with our preferred types first
+    const availableJobs = jobManager.getAvailableJobs(preferredJobTypes);
 
-    if (availableJobs.length > 0) {
-      // Take the first available job
-      const job = availableJobs[0];
+    if (availableJobs.length === 0) {
+      return false;
+    }
 
-      // Assign the job to this robot
-      if (jobManager.assignJob(job.id, this.robotId)) {
-        this.currentJob = job;
+    // Find the closest job
+    let closestJob: Job | null = null;
+    let closestDistance = Number.MAX_SAFE_INTEGER;
 
-        console.log(
-          `Robot ${this.robotId} assigned to ${job.type} job ${job.id}`
+    for (const job of availableJobs) {
+      let jobPosition: Phaser.Math.Vector2 | null = null;
+
+      // Determine the position of the job based on its type
+      if (job.position) {
+        jobPosition = job.position;
+      } else if (job.targetNode) {
+        jobPosition = new Phaser.Math.Vector2(
+          job.targetNode.x,
+          job.targetNode.y
+        );
+      } else if (job.sourceNode) {
+        jobPosition = new Phaser.Math.Vector2(
+          job.sourceNode.x,
+          job.sourceNode.y
+        );
+      } else if (job.blueprint) {
+        jobPosition = new Phaser.Math.Vector2(job.blueprint.x, job.blueprint.y);
+      } else if (job.growZone && job.tileIndex !== undefined) {
+        // For farming jobs, get the position of the specific tile
+        const tiles = job.growZone.getTiles();
+        if (tiles[job.tileIndex]) {
+          jobPosition = new Phaser.Math.Vector2(
+            tiles[job.tileIndex].x,
+            tiles[job.tileIndex].y
+          );
+        }
+      }
+
+      if (jobPosition) {
+        const distance = Phaser.Math.Distance.Between(
+          this.container.x,
+          this.container.y,
+          jobPosition.x,
+          jobPosition.y
         );
 
-        // Process the job based on its type
-        switch (job.type) {
-          case JobType.MERGE_STACKS:
-            if (job.sourceNode && job.targetNode) {
-              console.log(
-                `Robot ${this.robotId} assigned to merge stacks job ${job.id}`
-              );
-
-              // Add tasks to pick up the source node and deliver to target
-              this.pickupResourceNode(job.sourceNode);
-              this.deliverResourceToNode(job.targetNode);
-            }
-            break;
-
-          case JobType.WORK_MACHINE:
-            if (job.targetNode) {
-              console.log(
-                `Robot ${this.robotId} assigned to work machine job ${job.id}`
-              );
-
-              // Move to the machine and work on it
-              this.addTask(() => {
-                this.targetResourceNode = job.targetNode as ResourceNode;
-                this.moveToTarget(
-                  new Phaser.Math.Vector2(job.targetNode!.x, job.targetNode!.y)
-                );
-              });
-            }
-            break;
-
-          case JobType.BUILD:
-            if (job.position) {
-              console.log(
-                `Robot ${this.robotId} assigned to build job ${job.id}`
-              );
-
-              // Move to the build location and work on it
-              this.addTask(() => {
-                this.moveToTarget(job.position!);
-              });
-            }
-            break;
-
-          case JobType.DELIVER_RESOURCE:
-            if (
-              job.sourceNode &&
-              job.position &&
-              job.blueprint &&
-              job.resourceType &&
-              job.resourceAmount
-            ) {
-              console.log(
-                `Robot ${this.robotId} assigned to deliver resource job ${job.id}`
-              );
-
-              // Add tasks to pick up the resource and deliver to blueprint
-              this.pickupResourceNode(job.sourceNode);
-              this.deliverResourceToBlueprint(
-                job.blueprint,
-                job.resourceType,
-                job.resourceAmount
-              );
-            }
-            break;
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestJob = job;
         }
-
-        return true;
       }
     }
 
-    // If no existing jobs, look for new merge stack jobs
-    jobManager.findMergeStackJobs();
+    if (closestJob) {
+      // Assign the job to this robot
+      if (jobManager.assignJob(closestJob.id, this.robotId)) {
+        this.currentJob = closestJob;
 
-    // Try again with newly created jobs
-    const newJobs = jobManager.getAvailableJobs();
-    if (newJobs.length > 0) {
-      const job = newJobs[0];
-
-      if (jobManager.assignJob(job.id, this.robotId)) {
-        this.currentJob = job;
+        console.log(
+          `Robot ${this.robotId} assigned to ${closestJob.type} job ${closestJob.id}`
+        );
 
         // Process the job based on its type
-        switch (job.type) {
+        switch (closestJob.type) {
           case JobType.MERGE_STACKS:
-            if (job.sourceNode && job.targetNode) {
+            if (closestJob.sourceNode && closestJob.targetNode) {
               console.log(
-                `Robot ${this.robotId} assigned to merge stacks job ${job.id}`
+                `Robot ${this.robotId} assigned to merge stacks job ${closestJob.id}`
               );
 
               // Add tasks to pick up the source node and deliver to target
-              this.pickupResourceNode(job.sourceNode);
-              this.deliverResourceToNode(job.targetNode);
+              this.pickupResourceNode(closestJob.sourceNode);
+              this.deliverResourceToNode(closestJob.targetNode);
             }
             break;
 
           case JobType.WORK_MACHINE:
-            if (job.targetNode) {
+            if (closestJob.targetNode) {
               console.log(
-                `Robot ${this.robotId} assigned to work machine job ${job.id}`
+                `Robot ${this.robotId} assigned to work machine job ${closestJob.id}`
               );
 
               // Move to the machine and work on it
               this.addTask(() => {
-                this.targetResourceNode = job.targetNode as ResourceNode;
+                this.targetResourceNode = closestJob.targetNode as ResourceNode;
                 this.moveToTarget(
-                  new Phaser.Math.Vector2(job.targetNode!.x, job.targetNode!.y)
+                  new Phaser.Math.Vector2(
+                    closestJob.targetNode!.x,
+                    closestJob.targetNode!.y
+                  )
                 );
               });
             }
             break;
 
           case JobType.BUILD:
-            if (job.position) {
+            if (closestJob.position) {
               console.log(
-                `Robot ${this.robotId} assigned to build job ${job.id}`
+                `Robot ${this.robotId} assigned to build job ${closestJob.id}`
               );
 
               // Move to the build location and work on it
               this.addTask(() => {
-                this.moveToTarget(job.position!);
+                this.moveToTarget(closestJob.position!);
               });
             }
             break;
 
           case JobType.DELIVER_RESOURCE:
             if (
-              job.sourceNode &&
-              job.position &&
-              job.blueprint &&
-              job.resourceType &&
-              job.resourceAmount
+              closestJob.sourceNode &&
+              closestJob.position &&
+              closestJob.blueprint &&
+              closestJob.resourceType &&
+              closestJob.resourceAmount
             ) {
               console.log(
-                `Robot ${this.robotId} assigned to deliver resource job ${job.id}`
+                `Robot ${this.robotId} assigned to deliver resource job ${closestJob.id}`
               );
 
               // Add tasks to pick up the resource and deliver to blueprint
-              this.pickupResourceNode(job.sourceNode);
+              this.pickupResourceNode(closestJob.sourceNode);
               this.deliverResourceToBlueprint(
-                job.blueprint,
-                job.resourceType,
-                job.resourceAmount
+                closestJob.blueprint,
+                closestJob.resourceType,
+                closestJob.resourceAmount
+              );
+            }
+            break;
+
+          case JobType.WATER_TILE:
+            if (closestJob.growZone && closestJob.tileIndex !== undefined) {
+              this.handleWaterTileJob(
+                closestJob.growZone,
+                closestJob.tileIndex
+              );
+            }
+            break;
+
+          case JobType.PLANT_SEED:
+            if (closestJob.growZone && closestJob.tileIndex !== undefined) {
+              this.handlePlantSeedJob(
+                closestJob.growZone,
+                closestJob.tileIndex
+              );
+            }
+            break;
+
+          case JobType.HARVEST_CROP:
+            if (closestJob.growZone && closestJob.tileIndex !== undefined) {
+              this.handleHarvestCropJob(
+                closestJob.growZone,
+                closestJob.tileIndex
               );
             }
             break;
@@ -777,51 +779,128 @@ export class Optimus extends Robot {
       }
     }
 
-    // If we're working, check if the task is complete
+    // Handle task completion
     if (
       this.robotState === RobotState.WORKING &&
-      this.scene.time.now >= this.taskCompleteTime
+      time >= this.taskCompleteTime &&
+      this.currentJob
     ) {
-      console.log(`Robot ${this.robotId} completed work task`);
+      // Task is complete, handle based on job type
+      switch (this.currentJob.type) {
+        case JobType.WATER_TILE:
+          if (
+            this.currentJob.growZone &&
+            this.currentJob.tileIndex !== undefined
+          ) {
+            // Water the tile
+            const success = this.currentJob.growZone.waterTile(
+              this.currentJob.tileIndex
+            );
+            console.log(
+              `Robot ${this.robotId} watered tile ${
+                this.currentJob.tileIndex
+              }: ${success ? "success" : "failed"}`
+            );
+          }
+          // Complete the job
+          JobManager.getInstance().completeJob(this.currentJob.id);
+          this.currentJob = null;
+          this.robotState = RobotState.IDLE;
+          this.updateStateText();
+          break;
 
-      // If we have a current job and we've completed the work, mark it as completed
-      if (
-        this.currentJob &&
-        (this.currentJob.type === JobType.WORK_MACHINE ||
-          this.currentJob.type === JobType.BUILD)
-      ) {
-        console.log(
-          `Robot ${this.robotId} completing job ${this.currentJob.id} of type ${this.currentJob.type}`
-        );
-        JobManager.getInstance().completeJob(this.currentJob.id);
+        case JobType.PLANT_SEED:
+          if (
+            this.currentJob.growZone &&
+            this.currentJob.tileIndex !== undefined
+          ) {
+            // Plant seeds in the tile
+            const success = this.currentJob.growZone.plantSeed(
+              this.currentJob.tileIndex
+            );
+            console.log(
+              `Robot ${this.robotId} planted seeds in tile ${
+                this.currentJob.tileIndex
+              }: ${success ? "success" : "failed"}`
+            );
+          }
+          // Complete the job
+          JobManager.getInstance().completeJob(this.currentJob.id);
+          this.currentJob = null;
+          this.robotState = RobotState.IDLE;
+          this.updateStateText();
+          break;
 
-        // Log the current job before clearing it
-        console.log(
-          `Robot ${this.robotId} clearing job reference after completion`
-        );
-        this.currentJob = null;
-      }
+        case JobType.HARVEST_CROP:
+          if (
+            this.currentJob.growZone &&
+            this.currentJob.tileIndex !== undefined
+          ) {
+            // Harvest the crop
+            const resourceType = this.currentJob.growZone.harvestTile(
+              this.currentJob.tileIndex
+            );
+            if (resourceType) {
+              // Add the harvested resource to the global inventory
+              ResourceManager.addResource(resourceType, 1);
+              console.log(
+                `Robot ${this.robotId} harvested ${resourceType} from tile ${this.currentJob.tileIndex}`
+              );
+            } else {
+              console.log(
+                `Robot ${this.robotId} failed to harvest from tile ${this.currentJob.tileIndex}`
+              );
+            }
+          }
+          // Complete the job
+          JobManager.getInstance().completeJob(this.currentJob.id);
+          this.currentJob = null;
+          this.robotState = RobotState.IDLE;
+          this.updateStateText();
+          break;
 
-      this.currentTask = null;
+        default:
+          console.log(`Robot ${this.robotId} completed work task`);
 
-      // Clear any target references
-      this.target = null;
-      this.targetResourceNode = null;
-      this.targetBlueprint = null;
+          // If we have a current job and we've completed the work, mark it as completed
+          if (
+            this.currentJob &&
+            (this.currentJob.type === JobType.WORK_MACHINE ||
+              this.currentJob.type === JobType.BUILD)
+          ) {
+            console.log(
+              `Robot ${this.robotId} completing job ${this.currentJob.id} of type ${this.currentJob.type}`
+            );
+            JobManager.getInstance().completeJob(this.currentJob.id);
 
-      // Set state to IDLE so the robot can take on new jobs
-      console.log(
-        `Robot ${this.robotId} transitioning to IDLE state after work completion`
-      );
-      this.robotState = RobotState.IDLE;
-      this.updateStateText();
+            // Log the current job before clearing it
+            console.log(
+              `Robot ${this.robotId} clearing job reference after completion`
+            );
+            this.currentJob = null;
+          }
 
-      // Return home if no more tasks
-      if (this.taskQueue.length === 0) {
-        console.log(
-          `Robot ${this.robotId} returning home after work completion`
-        );
-        this.returnHome();
+          this.currentTask = null;
+
+          // Clear any target references
+          this.target = null;
+          this.targetResourceNode = null;
+          this.targetBlueprint = null;
+
+          // Set state to IDLE so the robot can take on new jobs
+          console.log(
+            `Robot ${this.robotId} transitioning to IDLE state after work completion`
+          );
+          this.robotState = RobotState.IDLE;
+          this.updateStateText();
+
+          // Return home if no more tasks
+          if (this.taskQueue.length === 0) {
+            console.log(
+              `Robot ${this.robotId} returning home after work completion`
+            );
+            this.returnHome();
+          }
       }
     }
 
@@ -919,5 +998,83 @@ export class Optimus extends Robot {
 
     // Call parent onDeath if it exists
     super.onDeath();
+  }
+
+  // Handle watering a tile in a grow zone
+  private handleWaterTileJob(growZone: GrowZone, tileIndex: number): void {
+    const tiles = growZone.getTiles();
+    if (!tiles[tileIndex]) {
+      // Invalid tile index, complete the job
+      JobManager.getInstance().completeJob(this.currentJob!.id);
+      this.currentJob = null;
+      return;
+    }
+
+    const tile = tiles[tileIndex];
+    const targetPosition = new Phaser.Math.Vector2(tile.x, tile.y);
+
+    // Move to the tile
+    this.moveToTarget(targetPosition);
+
+    // Check if we've reached the target
+    if (this.hasReachedTarget()) {
+      // We've reached the tile, start watering
+      this.robotState = RobotState.WORKING;
+      this.updateStateText();
+      this.taskCompleteTime =
+        this.scene.time.now + this.currentJob!.workDuration;
+    }
+  }
+
+  // Handle planting seeds in a tile
+  private handlePlantSeedJob(growZone: GrowZone, tileIndex: number): void {
+    const tiles = growZone.getTiles();
+    if (!tiles[tileIndex]) {
+      // Invalid tile index, complete the job
+      JobManager.getInstance().completeJob(this.currentJob!.id);
+      this.currentJob = null;
+      return;
+    }
+
+    const tile = tiles[tileIndex];
+    const targetPosition = new Phaser.Math.Vector2(tile.x, tile.y);
+
+    // Move to the tile
+    this.moveToTarget(targetPosition);
+
+    // Check if we've reached the target
+    if (this.hasReachedTarget()) {
+      // We've reached the tile, start planting
+      this.robotState = RobotState.WORKING;
+      this.updateStateText();
+      this.taskCompleteTime =
+        this.scene.time.now + this.currentJob!.workDuration;
+    }
+  }
+
+  // Handle harvesting crops from a tile
+  private handleHarvestCropJob(growZone: GrowZone, tileIndex: number): void {
+    const tiles = growZone.getTiles();
+    if (!tiles[tileIndex]) {
+      // Invalid tile index, complete the job
+      JobManager.getInstance().completeJob(this.currentJob!.id);
+      this.currentJob = null;
+      return;
+    }
+
+    const tile = tiles[tileIndex];
+    const targetPosition = new Phaser.Math.Vector2(tile.x, tile.y);
+
+    // Move to the tile
+    this.moveToTarget(targetPosition);
+
+    // Check if we've reached the target
+    if (this.hasReachedTarget()) {
+      // We've reached the tile, start harvesting
+      this.robotState = RobotState.WORKING;
+      this.updateStateText();
+      this.taskCompleteTime =
+        this.scene.time.now + this.currentJob!.workDuration;
+    }
   }
 }

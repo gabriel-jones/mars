@@ -6,7 +6,11 @@ import {
   BuildingManager,
   Building as BuildingData,
 } from "../../data/buildings";
-import { ResourceType, ResourceManager } from "../../data/resources";
+import {
+  ResourceType,
+  ResourceManager,
+  RESOURCE_DEFINITIONS,
+} from "../../data/resources";
 import { TILE_SIZE } from "../../constants";
 import { JobManager, JobType } from "../robots/JobManager";
 import { HasHealth } from "../../interfaces/Health";
@@ -44,6 +48,8 @@ export class Blueprint extends Building implements HasHealth {
     options: any = {}
   ) {
     super(scene, x, y, buildingType, tileWidth, tileHeight, true);
+
+    // Store the building type
     this.buildingType = buildingType;
 
     // Store habitat-specific data if provided
@@ -72,17 +78,12 @@ export class Blueprint extends Building implements HasHealth {
       this.sprite.setAlpha(0.7);
     }
 
-    console.log(`Creating blueprint for ${buildingType} at (${x}, ${y})`);
-
     // Get building definition to determine resource requirements
     const buildingDef = BUILDING_DEFINITIONS.find(
       (def) => def.buildingType === buildingType
     );
 
     if (buildingDef) {
-      console.log(`Found building definition for ${buildingType}`);
-      console.log(`Resource requirements:`, buildingDef.cost);
-
       // Initialize required resources with current amount set to 0
       this.requiredResources = buildingDef.cost.map((cost) => ({
         type: cost.type,
@@ -95,12 +96,9 @@ export class Blueprint extends Building implements HasHealth {
         this.inventory[cost.type] = 0;
       });
 
-      console.log(`Initialized required resources:`, this.requiredResources);
-
       // Set building effort based on building type (default to 5 seconds)
       // Use a default value if buildEffort is not defined
       this.buildingEffort = (buildingDef as any).buildEffort || 5000;
-      console.log(`Building effort set to ${this.buildingEffort}ms`);
     } else {
       console.error(`Could not find building definition for ${buildingType}`);
     }
@@ -134,13 +132,10 @@ export class Blueprint extends Building implements HasHealth {
 
   // Add resources to the blueprint
   public addResource(type: ResourceType, amount: number): number {
-    console.log(`Blueprint.addResource called with ${amount} ${type}`);
-
     // Find the resource requirement
     const resourceReq = this.requiredResources.find((req) => req.type === type);
 
     if (!resourceReq) {
-      console.log(`Resource ${type} not needed for this blueprint`);
       return 0; // Resource not needed
     }
 
@@ -150,12 +145,7 @@ export class Blueprint extends Building implements HasHealth {
       resourceReq.amount - resourceReq.current
     );
 
-    console.log(
-      `Can add ${amountToAdd} of ${type} (current: ${resourceReq.current}, needed: ${resourceReq.amount})`
-    );
-
     if (amountToAdd <= 0) {
-      console.log(`Already have enough ${type}`);
       return 0; // Already have enough
     }
 
@@ -165,21 +155,16 @@ export class Blueprint extends Building implements HasHealth {
     // Also add to the inventory using the parent class method
     super.addResource(type, amountToAdd);
 
-    console.log(
-      `Added ${amountToAdd} ${type}, now have ${resourceReq.current}/${resourceReq.amount}`
-    );
-
     // Update the resource text
     this.updateResourceText();
 
     // Check if all resources are delivered
     const allDelivered = this.checkResourcesComplete();
-    console.log(`All resources delivered: ${allDelivered}`);
 
     return amountToAdd; // Return how much was actually added
   }
 
-  // Get the required resources for this blueprint
+  // Get the required resources
   public getRequiredResources(): {
     type: ResourceType;
     amount: number;
@@ -190,21 +175,12 @@ export class Blueprint extends Building implements HasHealth {
 
   // Check if all required resources have been delivered
   private checkResourcesComplete(): boolean {
-    console.log("Checking if all resources are delivered...");
-
-    // Log the current state of all resources
-    this.requiredResources.forEach((req) => {
-      console.log(`${req.type}: ${req.current}/${req.amount}`);
-    });
-
+    // Check if all required resources have been delivered
     const allDelivered = this.requiredResources.every(
       (req) => req.current >= req.amount
     );
 
-    console.log(`All resources delivered: ${allDelivered}`);
-
     if (allDelivered && !this.isBuilding) {
-      console.log("All resources delivered, starting building process");
       this.startBuilding();
     }
 
@@ -213,8 +189,6 @@ export class Blueprint extends Building implements HasHealth {
 
   // Start the building process
   private startBuilding(): void {
-    console.log(`Starting building process for ${this.buildingType}`);
-
     this.isBuilding = true;
     this.buildStartTime = this.scene.time.now;
 
@@ -222,13 +196,8 @@ export class Blueprint extends Building implements HasHealth {
     const jobManager = JobManager.getInstance();
     const position = new Phaser.Math.Vector2(this.x, this.y);
 
-    console.log(`Creating build job with effort: ${this.buildingEffort}ms`);
     const job = jobManager.createBuildJob(position, this.buildingEffort);
     this.buildingJob = job.id;
-
-    console.log(
-      `Started building ${this.buildingType} - job ID: ${job.id}, effort: ${this.buildingEffort}ms`
-    );
 
     // Update the progress bar to show 0% progress
     this.updateProgressBar();
@@ -246,135 +215,116 @@ export class Blueprint extends Building implements HasHealth {
 
     // Make sure the text is visible
     this.resourceText.setVisible(true);
-
-    console.log("Updated blueprint resource text:", text);
   }
 
   // Update the progress bar
   private updateProgressBar(): void {
+    // Clear the previous progress bar
     this.progressBar.clear();
 
-    // Position the progress bar just above the resource text
-    const barWidth = 80;
-    const barHeight = 10;
-    const barX = -barWidth / 2;
-
-    // Calculate the resource text height to position the progress bar just above it
-    const resourceTextHeight = this.resourceText.height;
-    const resourceTextY = (this.tileHeight * TILE_SIZE) / 2 + 10; // Same as in constructor
-
-    // Position the bar just above the resource text
-    const barY = resourceTextY - barHeight - 5;
-
-    // Draw background
-    this.progressBar.fillStyle(0x000000, 0.8);
-    this.progressBar.fillRect(barX, barY, barWidth, barHeight);
-
-    // Draw border
-    this.progressBar.lineStyle(2, 0xffffff, 1);
-    this.progressBar.strokeRect(barX, barY, barWidth, barHeight);
-
-    // Draw progress
-    this.progressBar.fillStyle(0x00ff00, 1);
-    this.progressBar.fillRect(
-      barX,
-      barY,
-      barWidth * this.buildProgress,
-      barHeight
-    );
-
-    // Make sure the progress bar is visible
-    this.progressBar.setVisible(true);
-    this.progressBar.setDepth(100); // Ensure it's on top
-  }
-
-  // Check if the blueprint is ready to be converted to a real building
-  public isComplete(): boolean {
-    return this.isBuilding && this.buildProgress >= 1;
-  }
-
-  // Update method called every frame
-  public update(time: number, delta: number): void {
-    // If building is in progress, update the progress
+    // Calculate progress if building is in progress
     if (this.isBuilding) {
-      const elapsed = time - this.buildStartTime;
-      const oldProgress = this.buildProgress;
-      this.buildProgress = Math.min(elapsed / this.buildingEffort, 1);
+      const currentTime = this.scene.time.now;
+      const elapsedTime = currentTime - this.buildStartTime;
+      this.buildProgress = Math.min(elapsedTime / this.buildingEffort, 1);
+    }
 
-      // Only log when progress changes significantly
-      if (
-        Math.floor(this.buildProgress * 100) !== Math.floor(oldProgress * 100)
-      ) {
-        console.log(
-          `Building progress: ${Math.floor(this.buildProgress * 100)}%`
-        );
-      }
+    // Draw the progress bar background
+    this.progressBar.fillStyle(0x000000, 0.8);
+    this.progressBar.fillRect(-50, 60, 100, 10);
 
+    // Draw the progress bar fill
+    this.progressBar.fillStyle(0x00ff00, 1);
+    this.progressBar.fillRect(-50, 60, 100 * this.buildProgress, 10);
+
+    // Make sure the progress bar is visible if building
+    this.progressBar.setVisible(this.isBuilding);
+  }
+
+  // Check if the blueprint is complete
+  public isComplete(): boolean {
+    return this.buildProgress >= 1;
+  }
+
+  // Update the blueprint
+  public update(time: number, delta: number): void {
+    // Update the progress bar if building is in progress
+    if (this.isBuilding) {
       this.updateProgressBar();
 
       // Check if building is complete
-      if (this.buildProgress >= 1) {
-        console.log(`Blueprint for ${this.buildingType} is complete!`);
-
-        // Handle habitat expansion completion
-        if (
-          this.buildingType === "habitat" &&
-          this.targetHabitatId &&
-          this.expansionTiles
-        ) {
-          console.log(
-            `Completing habitat expansion for ${this.targetHabitatId}`
-          );
-
-          // Expand the target habitat with the expansion tiles
-          const expanded = BuildingManager.expandHabitat(
-            this.targetHabitatId,
-            this.expansionTiles
-          );
-
-          if (expanded) {
-            // Emit an event to update the habitat visuals
-            this.scene.events.emit("habitatExpanded", {
-              habitatId: this.targetHabitatId,
-              newTiles: this.expansionTiles,
-            });
-
-            // Remove the expansion blueprint from the building manager
-            if (this.habitatId) {
-              const blueprintBuilding = BuildingManager.getBuildings().find(
-                (b: BuildingData) =>
-                  b.type === "habitat" && b.habitatId === this.habitatId
-              );
-
-              if (blueprintBuilding) {
-                const index =
-                  BuildingManager.getBuildings().indexOf(blueprintBuilding);
-                if (index !== -1) {
-                  BuildingManager.getBuildings().splice(index, 1);
-                }
-              }
-            }
-          }
-        }
-
-        // Emit the blueprint completed event
-        this.scene.events.emit("blueprintCompleted", {
-          type: this.buildingType,
-          x: this.x,
-          y: this.y,
-          tileWidth: this.tileWidth,
-          tileHeight: this.tileHeight,
-          habitatId: this.habitatId,
-          habitatTiles: this.habitatTiles,
-        });
+      if (this.isComplete()) {
+        this.completeBuilding();
       }
     }
   }
 
+  // Complete the building process
+  private completeBuilding(): void {
+    // Only proceed if we're actually building
+    if (!this.isBuilding) {
+      return;
+    }
+
+    // For habitat buildings, handle differently
+    if (this.buildingType === "habitat") {
+      // Create or expand a habitat
+      if (this.targetHabitatId) {
+        // This is an expansion to an existing habitat
+        BuildingManager.expandHabitat(
+          this.targetHabitatId,
+          this.expansionTiles || []
+        );
+      } else {
+        // This is a new habitat
+        // Create a new habitat building
+        const habitatBuilding = {
+          type: "habitat" as BuildingType,
+          displayName: "Habitat",
+          position: { x: this.x, y: this.y },
+          placedAt: Date.now(),
+          tiles: this.habitatTiles || [],
+          hasInventory: true,
+          inventory: {},
+        };
+
+        BuildingManager.addBuilding(habitatBuilding);
+      }
+    } else {
+      // Create a regular building
+      const building = {
+        type: this.buildingType,
+        displayName:
+          BUILDING_DEFINITIONS.find((b) => b.buildingType === this.buildingType)
+            ?.name || "Building",
+        position: { x: this.x, y: this.y },
+        placedAt: Date.now(),
+        tileWidth: this.tileWidth,
+        tileHeight: this.tileHeight,
+        hasInventory:
+          BUILDING_DEFINITIONS.find((b) => b.buildingType === this.buildingType)
+            ?.hasInventory || false,
+        inventory: {},
+      };
+
+      BuildingManager.addBuilding(building);
+
+      // Emit an event to create the actual building instance in the scene
+      this.scene.events.emit("buildingCreated", {
+        type: this.buildingType,
+        x: this.x,
+        y: this.y,
+        tileWidth: this.tileWidth,
+        tileHeight: this.tileHeight,
+      });
+    }
+
+    // Destroy the blueprint
+    this.destroy();
+  }
+
   // Destroy the blueprint and clean up resources
   public destroy(): void {
-    console.log(`Destroying blueprint for ${this.buildingType}`);
-
     // Cancel the building job if it exists
     if (this.buildingJob) {
       JobManager.getInstance().cancelJob(this.buildingJob);
@@ -398,6 +348,13 @@ export class Blueprint extends Building implements HasHealth {
   // Get the building type
   public getBuildingType(): BuildingType {
     return this.buildingType;
+  }
+
+  /**
+   * Get the sprite for this blueprint
+   */
+  public getSprite(): Phaser.GameObjects.Sprite {
+    return this.sprite;
   }
 
   /**

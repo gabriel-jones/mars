@@ -9,6 +9,12 @@ import { Blueprint } from "../entities/buildings/Blueprint";
 import { RESOURCE_DEFINITIONS, ResourceType } from "../data/resources";
 import { Tool } from "../entities/tools";
 import { JobManager } from "../entities/robots/JobManager";
+import {
+  GrowZone,
+  GrowthStage,
+  CropType,
+} from "../entities/buildings/GrowZone";
+import { RangeSelectionBuilding } from "../entities/buildings/RangeSelectionBuilding";
 
 // Define a type for selectable entities
 export type SelectableEntity =
@@ -270,21 +276,42 @@ export class DetailView {
     // Check buildings (including multi-tile buildings)
     if (scene.buildings) {
       for (const building of scene.buildings) {
-        // For multi-tile buildings, check if click is within the building's bounds
-        const buildingX = building.x;
-        const buildingY = building.y;
         const buildingWidth = building.tileWidth * TILE_SIZE;
         const buildingHeight = building.tileHeight * TILE_SIZE;
 
-        // Check if click is within the building's bounds
-        if (
-          x >= buildingX - buildingWidth / 2 &&
-          x <= buildingX + buildingWidth / 2 &&
-          y >= buildingY - buildingHeight / 2 &&
-          y <= buildingY + buildingHeight / 2
-        ) {
-          console.log("Building found:", building);
-          return building;
+        // Check if this is a RangeSelectionBuilding
+        const isRangeSelection = building instanceof RangeSelectionBuilding;
+
+        if (isRangeSelection) {
+          // For RangeSelectionBuilding, use the top-left corner
+          const tileGridX = Math.floor(building.x / TILE_SIZE);
+          const tileGridY = Math.floor(building.y / TILE_SIZE);
+
+          // Calculate the top-left corner of the building in world coordinates
+          const topLeftX = tileGridX * TILE_SIZE;
+          const topLeftY = tileGridY * TILE_SIZE;
+
+          // Check if click is within the building's bounds using the top-left corner
+          if (
+            x >= topLeftX &&
+            x <= topLeftX + buildingWidth &&
+            y >= topLeftY &&
+            y <= topLeftY + buildingHeight
+          ) {
+            console.log("RangeSelectionBuilding found:", building);
+            return building;
+          }
+        } else {
+          // For regular buildings, check if click is within the bounds centered on the building
+          if (
+            x >= building.x - buildingWidth / 2 &&
+            x <= building.x + buildingWidth / 2 &&
+            y >= building.y - buildingHeight / 2 &&
+            y <= building.y + buildingHeight / 2
+          ) {
+            console.log("Regular Building found:", building);
+            return building;
+          }
         }
       }
     }
@@ -292,18 +319,16 @@ export class DetailView {
     // Check blueprints (including multi-tile blueprints)
     if (scene.blueprints) {
       for (const blueprint of scene.blueprints) {
-        // For multi-tile blueprints, check if click is within the blueprint's bounds
-        const blueprintX = blueprint.x;
-        const blueprintY = blueprint.y;
         const blueprintWidth = blueprint.tileWidth * TILE_SIZE;
         const blueprintHeight = blueprint.tileHeight * TILE_SIZE;
 
-        // Check if click is within the blueprint's bounds
+        // For blueprints, always use the top-left corner approach
+        // since they're always positioned at their center
         if (
-          x >= blueprintX - blueprintWidth / 2 &&
-          x <= blueprintX + blueprintWidth / 2 &&
-          y >= blueprintY - blueprintHeight / 2 &&
-          y <= blueprintY + blueprintHeight / 2
+          x >= blueprint.x - blueprintWidth / 2 &&
+          x <= blueprint.x + blueprintWidth / 2 &&
+          y >= blueprint.y - blueprintHeight / 2 &&
+          y <= blueprint.y + blueprintHeight / 2
         ) {
           console.log("Blueprint found:", blueprint);
           return blueprint;
@@ -403,11 +428,49 @@ export class DetailView {
     let width = TILE_SIZE;
     let height = TILE_SIZE;
     let entityPosition = { x: 0, y: 0 };
+    let useTopLeftOrigin = false;
 
     if (entity instanceof Building || entity instanceof Blueprint) {
       width = entity.tileWidth * TILE_SIZE;
       height = entity.tileHeight * TILE_SIZE;
-      entityPosition = { x: entity.x, y: entity.y };
+
+      // Check if this is a RangeSelectionBuilding
+      const isRangeSelection = entity instanceof RangeSelectionBuilding;
+
+      if (isRangeSelection) {
+        // For RangeSelectionBuilding, use the top-left corner
+        const tileGridX = Math.floor(entity.x / TILE_SIZE);
+        const tileGridY = Math.floor(entity.y / TILE_SIZE);
+
+        // Calculate the top-left corner of the building in world coordinates
+        const topLeftX = tileGridX * TILE_SIZE;
+        const topLeftY = tileGridY * TILE_SIZE;
+
+        entityPosition = { x: topLeftX, y: topLeftY };
+        useTopLeftOrigin = true;
+
+        console.log(
+          `Creating selection highlight for RangeSelectionBuilding ${entity.constructor.name}:`
+        );
+      } else {
+        // For regular buildings, center the highlight on the building
+        entityPosition = { x: entity.x, y: entity.y };
+        useTopLeftOrigin = false;
+
+        console.log(
+          `Creating selection highlight for regular Building ${entity.constructor.name}:`
+        );
+      }
+
+      console.log(`  Entity position: (${entity.x}, ${entity.y})`);
+      console.log(
+        `  Entity dimensions: ${entity.tileWidth}x${entity.tileHeight} tiles`
+      );
+      console.log(
+        `  Highlight position: (${entityPosition.x}, ${entityPosition.y})`
+      );
+      console.log(`  Highlight dimensions: ${width}x${height} pixels`);
+      console.log(`  Using top-left origin: ${useTopLeftOrigin}`);
     } else if (entity instanceof Robot) {
       entityPosition = this.getRobotPosition(entity);
     } else {
@@ -428,8 +491,14 @@ export class DetailView {
     // Add stroke for better visibility
     this.selectionHighlight.setStrokeStyle(3, this.COLORS.highlight, 0.8);
 
-    // Center the highlight on the entity
-    this.selectionHighlight.setOrigin(0.5);
+    // Set the origin based on the entity type
+    if (useTopLeftOrigin) {
+      // For RangeSelectionBuilding, use top-left origin
+      this.selectionHighlight.setOrigin(0, 0);
+    } else {
+      // For other entities, center the highlight
+      this.selectionHighlight.setOrigin(0.5);
+    }
   }
 
   private updatePanelContent(): void {
@@ -690,7 +759,8 @@ export class DetailView {
 
       // Use the generic inventory interface
       if (
-        this.selectedEntity.getHasInventory &&
+        "getHasInventory" in this.selectedEntity &&
+        typeof this.selectedEntity.getHasInventory === "function" &&
         this.selectedEntity.getHasInventory()
       ) {
         hasInventory = true;
@@ -707,7 +777,8 @@ export class DetailView {
 
       // Use the generic inventory interface for blueprints too
       if (
-        this.selectedEntity.getHasInventory &&
+        "getHasInventory" in this.selectedEntity &&
+        typeof this.selectedEntity.getHasInventory === "function" &&
         this.selectedEntity.getHasInventory()
       ) {
         hasInventory = true;
@@ -929,67 +1000,172 @@ export class DetailView {
   private getBuildingProperties(
     building: Building
   ): { label: string; value: string }[] {
-    // Get the building type using any to access protected property
-    const buildingType = building.getBuildingType();
+    const properties: { label: string; value: string }[] = [];
 
-    const properties: { label: string; value: string }[] = [
-      { label: "Type", value: buildingType || "Unknown" },
-    ];
-
-    // Add size information for multi-tile buildings
-    if (building.tileWidth > 1 || building.tileHeight > 1) {
+    try {
+      // Add building type
       properties.push({
-        label: "Size",
-        value: `${building.tileWidth}x${building.tileHeight} tiles`,
+        label: "Type",
+        value: building.getBuildingType(),
       });
-    }
 
-    // Add specific properties based on building type
-    switch (buildingType) {
-      case "solar-panel":
-        properties.push({ label: "Energy Output", value: "25 units/min" });
-        properties.push({ label: "Status", value: "Operational" });
-        break;
+      // Add health information
+      if ("getHealth" in building && typeof building.getHealth === "function") {
+        properties.push({
+          label: "Health",
+          value: `${building.getHealth()} / ${building.getMaxHealth()}`,
+        });
+      }
 
-      case "mining-station":
-        properties.push({ label: "Yield", value: "10 units/min" });
-        properties.push({ label: "Energy Use", value: "15 units/min" });
-        properties.push({ label: "Robot Status", value: "Active" });
-        // Note: We'll handle inventory in the grid display
-        break;
+      // Add grow zone specific information
+      if (building.getBuildingType() === "grow-zone") {
+        // Check if the building is actually a GrowZone instance
+        if (building instanceof GrowZone) {
+          const growZone = building as GrowZone;
 
-      case "ice-drill":
-        properties.push({ label: "Water Output", value: "20 units/min" });
-        properties.push({ label: "Energy Use", value: "30 units/min" });
-        properties.push({ label: "Status", value: "Operational" });
-        break;
+          // Safely access methods with error handling
+          try {
+            // Add selected crop type
+            if (typeof growZone.getSelectedCropType === "function") {
+              const cropType = growZone.getSelectedCropType();
+              properties.push({
+                label: "Selected Crop",
+                value: cropType.charAt(0).toUpperCase() + cropType.slice(1),
+              });
+            } else {
+              console.error(
+                "GrowZone missing getSelectedCropType method:",
+                growZone
+              );
+              properties.push({
+                label: "Selected Crop",
+                value: "Unknown (Error)",
+              });
+            }
 
-      case "regolith-processor":
-        properties.push({ label: "Processing", value: "Regolith: 50" });
-        properties.push({ label: "Energy Use", value: "40 units/min" });
-        properties.push({ label: "Status", value: "Operational" });
-        break;
+            // Add yield information
+            if (
+              typeof growZone.getPotentialYield === "function" &&
+              typeof growZone.getCurrentYield === "function"
+            ) {
+              const potentialYield = growZone.getPotentialYield();
+              const currentYield = growZone.getCurrentYield();
 
-      case "habitat":
-        properties.push({ label: "Capacity", value: "4 colonists" });
-        properties.push({ label: "Oxygen Level", value: "95%" });
-        properties.push({ label: "Status", value: "Operational" });
-        break;
+              properties.push({
+                label: "Potential Yield",
+                value: `${potentialYield} units`,
+              });
 
-      case "landing-pad":
-        properties.push({ label: "Status", value: "Operational" });
+              properties.push({
+                label: "Current Yield",
+                value: `${currentYield} units`,
+              });
+            }
 
-        // Get starship status
-        const landingPad = building as any;
-        if (landingPad.getStarship) {
-          const starship = landingPad.getStarship();
+            // Add growth stage information
+            if (typeof growZone.getGrowthInfo === "function") {
+              try {
+                const growthInfo = growZone.getGrowthInfo();
+
+                properties.push({
+                  label: "Dry Tiles",
+                  value:
+                    growthInfo
+                      .find((info) => info.stage === GrowthStage.DRY)
+                      ?.count.toString() || "0",
+                });
+
+                properties.push({
+                  label: "Wet Tiles",
+                  value:
+                    growthInfo
+                      .find((info) => info.stage === GrowthStage.WET)
+                      ?.count.toString() || "0",
+                });
+
+                properties.push({
+                  label: "Growing Tiles",
+                  value:
+                    growthInfo
+                      .find((info) => info.stage === GrowthStage.GROWING)
+                      ?.count.toString() || "0",
+                });
+              } catch (error) {
+                console.error("Error getting growth info:", error);
+                properties.push({
+                  label: "Growth Stages",
+                  value: "Error retrieving data",
+                });
+              }
+            }
+
+            // Add growth progress
+            if (typeof growZone.getAverageGrowthProgress === "function") {
+              try {
+                const progress = growZone.getAverageGrowthProgress();
+                properties.push({
+                  label: "Growth Progress",
+                  value: `${Math.floor(progress * 100)}%`,
+                });
+              } catch (error) {
+                console.error("Error getting growth progress:", error);
+                properties.push({
+                  label: "Growth Progress",
+                  value: "Error retrieving data",
+                });
+              }
+            }
+
+            // Add time until next harvest
+            if (typeof growZone.getTimeUntilNextHarvest === "function") {
+              const timeUntilHarvest = growZone.getTimeUntilNextHarvest();
+              if (timeUntilHarvest > 0) {
+                properties.push({
+                  label: "Time Until Harvest",
+                  value: `${Math.ceil(timeUntilHarvest / 1000)} seconds`,
+                });
+              }
+            }
+          } catch (error) {
+            console.error("Error accessing GrowZone methods:", error);
+            properties.push({
+              label: "Error",
+              value: "Failed to access GrowZone data",
+            });
+          }
+        } else {
+          // Log an error if the building is not a GrowZone instance
+          console.error(
+            "Building has type 'grow-zone' but is not a GrowZone instance:",
+            building
+          );
+
+          // Add a fallback property
           properties.push({
-            label: "Starship Status",
-            value: starship.getState(),
+            label: "Type",
+            value: "Grow Zone (Error: Invalid instance)",
           });
-          properties.push({ label: "Fuel", value: "85%" });
         }
-        break;
+      }
+
+      // Add other building-specific properties here...
+
+      // Add inventory if the building has one
+      if (
+        "getInventory" in building &&
+        typeof building.getInventory === "function"
+      ) {
+        properties.push({
+          label: "Inventory",
+          value: "See below",
+        });
+      }
+    } catch (error) {
+      console.error("Error in getBuildingProperties:", error);
+      properties.push({
+        label: "Error",
+        value: "Failed to get building properties",
+      });
     }
 
     return properties;
@@ -1341,21 +1517,147 @@ export class DetailView {
 
   // Add action buttons based on the selected entity type
   private addActionButtons(): void {
-    // Only show action buttons for blueprints
-    if (!(this.selectedEntity instanceof Blueprint)) return;
+    // Handle blueprints
+    if (this.selectedEntity instanceof Blueprint) {
+      // Create cancel button for blueprints
+      const cancelButton = this.createActionButton(
+        "Cancel Blueprint",
+        () => this.cancelBlueprint(this.selectedEntity as Blueprint),
+        true // isDanger = true for red button
+      );
 
-    // Create cancel button for blueprints
-    const cancelButton = this.createActionButton(
-      "Cancel Blueprint",
-      () => this.cancelBlueprint(this.selectedEntity as Blueprint),
-      true // isDanger = true for red button
-    );
+      // Add button to container
+      this.actionButtonsContainer.add(cancelButton);
+      return;
+    }
 
-    // Add button to container
-    this.actionButtonsContainer.add(cancelButton);
+    // Handle grow zones
+    if (
+      this.selectedEntity instanceof Building &&
+      this.selectedEntity.getBuildingType() === "grow-zone"
+    ) {
+      const growZone = this.selectedEntity as GrowZone;
+      if (!growZone.setSelectedCropType) return;
 
-    // Set the container's size to match the button for proper layout calculations
-    this.actionButtonsContainer.setSize(160, 40);
+      // Create crop selection buttons
+      const crops: CropType[] = ["carrots", "tomatoes", "potatoes", "beans"];
+      const buttonWidth = 120;
+      const buttonSpacing = 10;
+      let xOffset = 0;
+
+      crops.forEach((crop, index) => {
+        const cropButton = this.createActionButton(
+          crop.charAt(0).toUpperCase() + crop.slice(1),
+          () => {
+            growZone.setSelectedCropType(crop);
+            this.updatePanelContent(); // Refresh the panel to show the new selection
+          },
+          false // Not a danger button
+        );
+
+        // Position the button
+        cropButton.setPosition(xOffset, 0);
+        xOffset += buttonWidth + buttonSpacing;
+
+        // Highlight the currently selected crop
+        if (
+          growZone.getSelectedCropType &&
+          growZone.getSelectedCropType() === crop
+        ) {
+          const buttonBg = cropButton.list[1] as Phaser.GameObjects.Rectangle;
+          buttonBg.setFillStyle(0x00aa00); // Green for selected crop
+        }
+
+        // Add button to container
+        this.actionButtonsContainer.add(cropButton);
+      });
+
+      // Add farming action buttons
+      const waterAllButton = this.createActionButton(
+        "Water All",
+        () => {
+          const wateredCount = growZone.waterAllTiles();
+          console.log(`Watered ${wateredCount} tiles`);
+          this.updatePanelContent(); // Refresh the panel
+        },
+        false // Not a danger button
+      );
+
+      const plantAllButton = this.createActionButton(
+        "Plant All",
+        () => {
+          const plantedCount = growZone.plantAllSeeds();
+          console.log(
+            `Planted ${plantedCount} tiles with ${growZone.getSelectedCropType()}`
+          );
+          this.updatePanelContent(); // Refresh the panel
+        },
+        false // Not a danger button
+      );
+
+      const harvestAllButton = this.createActionButton(
+        "Harvest All",
+        () => {
+          const harvested = growZone.harvestAllTiles();
+          const totalHarvested = Object.values(harvested).reduce(
+            (sum, count) => sum + count,
+            0
+          );
+          console.log(`Harvested ${totalHarvested} crops`);
+          this.updatePanelContent(); // Refresh the panel
+        },
+        false // Not a danger button
+      );
+
+      // Position the farming action buttons
+      waterAllButton.setPosition(0, 50);
+      plantAllButton.setPosition(130, 50);
+      harvestAllButton.setPosition(260, 50);
+
+      this.actionButtonsContainer.add(waterAllButton);
+      this.actionButtonsContainer.add(plantAllButton);
+      this.actionButtonsContainer.add(harvestAllButton);
+
+      // Add a test button for debugging
+      // Set to true to enable the test button, false to disable it
+      const showTestButton = true;
+
+      if (showTestButton) {
+        const testButton = this.createActionButton(
+          "Test Growth",
+          () => {
+            // Get all tiles and advance their growth stage
+            const tiles = growZone.getTiles();
+            tiles.forEach((tile, index) => {
+              if (tile.stage === GrowthStage.DRY) {
+                growZone.waterTile(index);
+              } else if (tile.stage === GrowthStage.WET) {
+                growZone.plantSeed(index);
+              } else if (tile.stage === GrowthStage.GROWING) {
+                // Force the tile to be ready
+                const tileObj = tiles[index];
+                if (tileObj) {
+                  tileObj.stage = GrowthStage.READY;
+                  tileObj.sprite.setTexture(
+                    `plant-${
+                      tileObj.cropType || growZone.getSelectedCropType()
+                    }`
+                  );
+                }
+              }
+            });
+            this.updatePanelContent(); // Refresh the panel
+          },
+          false // Not a danger button
+        );
+
+        // Position the test button below the other buttons
+        testButton.setPosition(0, 100);
+        this.actionButtonsContainer.add(testButton);
+      }
+
+      return;
+    }
   }
 
   // Cancel a blueprint

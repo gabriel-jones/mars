@@ -1,11 +1,9 @@
 import Phaser from "phaser";
-import { Building } from "./Building";
+import { RangeSelectionBuilding } from "./RangeSelectionBuilding";
 import { TILE_SIZE } from "../../constants";
 
-export class SolarPanel extends Building {
+export class SolarPanel extends RangeSelectionBuilding {
   protected energyOutput: number;
-  protected panelWidth: number;
-  protected panelHeight: number;
 
   constructor(
     scene: Phaser.Scene,
@@ -14,25 +12,30 @@ export class SolarPanel extends Building {
     width: number = 1,
     height: number = 1
   ) {
-    super(scene, x, y, "solar-panel");
-
-    this.panelWidth = width;
-    this.panelHeight = height;
+    // Use the solar-panel texture, not custom rendering
+    super(scene, x, y, "solar-panel", width, height, false, false);
 
     // Calculate energy output based on size
     this.energyOutput = width * height * 10; // 10 energy per tile
 
-    // Create a visual representation of the solar panel area
-    const panelArea = scene.add.rectangle(
-      0,
-      0, // Relative to container
-      width * 64, // Assuming 64 is the tile size
-      height * 64,
-      0xffff00,
-      0.1
+    console.log(
+      `SolarPanel constructor called with dimensions: ${width}x${height}`
     );
-    panelArea.setStrokeStyle(1, 0xffff00);
-    this.add(panelArea);
+  }
+
+  /**
+   * Create a sprite for a tile at the given position
+   * Override to customize the appearance of solar panel tiles
+   */
+  protected createTileSprite(
+    tileX: number,
+    tileY: number,
+    row: number,
+    col: number
+  ): Phaser.GameObjects.Sprite {
+    const tileSprite = this.scene.add.sprite(tileX, tileY, "solar-panel");
+    tileSprite.setDisplaySize(TILE_SIZE, TILE_SIZE);
+    return tileSprite;
   }
 
   protected getBuildingName(): string {
@@ -43,8 +46,12 @@ export class SolarPanel extends Building {
     return this.energyOutput;
   }
 
-  public update(): void {
+  public update(time: number, delta: number): void {
+    super.update(time, delta);
     // Solar panel specific update logic
     // Could update energy output based on time of day, etc.
   }
 }
+
+// Make the SolarPanel class available globally
+(window as any).SolarPanelClass = SolarPanel;

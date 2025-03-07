@@ -10,10 +10,16 @@ import { createTileHighlight, updateTileHighlight } from "../ui/tileHighlight";
 import { gameState } from "../state";
 import { ActionMenu } from "../ui/actionMenu";
 import { ResourceDisplay } from "../ui/resourceDisplay";
-import { createMarsTileset, createTerrain } from "../terrain";
+import { createTerrain } from "../terrain";
 import { ResourceNode } from "../entities/resourceNode";
 import { RESOURCE_DEFINITIONS, ResourceType } from "../data/resources";
-import { TILE_SIZE } from "../constants";
+import {
+  NUM_INITIAL_ENEMIES,
+  NUM_INITIAL_OPTIMUS,
+  TILE_SIZE,
+  MAP_WIDTH,
+  MAP_HEIGHT,
+} from "../constants";
 import { createFPS } from "../ui/fps";
 import { Starship } from "../entities/starship";
 import { Optimus, MiningDrone, Robot } from "../entities/robots";
@@ -34,6 +40,7 @@ import { HabitatManager } from "../mechanics/HabitatManager";
 import { JobManager as GameJobManager } from "../mechanics/JobManager";
 import { BlueprintManager } from "../mechanics/BlueprintManager";
 import { EnemyManager } from "../mechanics/EnemyManager";
+import { RobotManager } from "../mechanics/RobotManager";
 
 export class MainScene extends Phaser.Scene {
   private actionMenu: ActionMenu;
@@ -56,47 +63,72 @@ export class MainScene extends Phaser.Scene {
   private enemies: Enemy[] = [];
   private player: Player;
   private healthBarRenderer: HealthBarRenderer;
+  private shadowTexture: Phaser.Textures.CanvasTexture;
 
   // Manager instances
   private habitatManager: HabitatManager;
   private jobManager: GameJobManager;
   private blueprintManager: BlueprintManager;
   private enemyManager: EnemyManager;
+  private robotManager: RobotManager;
 
   constructor() {
     super({ key: "MainScene" });
   }
 
   preload() {
-    // Tileset
-    createMarsTileset(this);
+    // Resources
+    // this.load.image("iron", "assets/iron.png");
+    // this.load.image("silicon", "assets/silicon.png");
+    // this.load.image("titanium", "assets/titanium.png");
+    // this.load.image("aluminium", "assets/aluminium.png");
+    // this.load.image("water", "assets/water.png");
+    // this.load.image("oxygen", "assets/oxygen.png");
+    // this.load.image("food", "assets/food.png");
+    // this.load.image("carrots", "assets/carrots.png");
+    // this.load.image("tomatoes", "assets/tomatoes.png");
+    // this.load.image("potatoes", "assets/potatoes.png");
+    // this.load.image("beans", "assets/beans.png");
+
+    // Terrain textures
+    this.load.image("terrain-low", "assets/terrain-low.png");
+    this.load.image("terrain-medium", "assets/terrain-medium.png");
+    this.load.image("terrain-high", "assets/terrain-high.png");
 
     // Player
     this.load.image("player", "assets/player.png");
 
-    // Tools - try both SVG and PNG versions
-    this.load.image("assault-rifle", "assets/assault-rifle.png");
+    // Tools
+    // this.load.image("assault-rifle", "assets/assault-rifle.png");
     this.load.svg("assault-rifle", "assets/assault-rifle.svg");
     this.load.svg("assault-rifle-icon", "assets/assault-rifle-icon.svg");
 
     // Raygun for aliens
-    this.load.image("raygun", "assets/raygun.png");
     this.load.svg("raygun", "assets/raygun.svg");
-    this.load.image("raygun-fallback", "assets/assault-rifle.png"); // Fallback to assault rifle if raygun image is missing
 
     // Bullet
-    this.load.image("bullet", "assets/bullet.png");
-
-    // Fallback images for tools (in case SVG loading fails)
-    this.load.image("assault-rifle-fallback", "assets/player.png"); // Using player as fallback
+    // this.load.image("bullet", "assets/bullet.png");
 
     // Buildings
-    this.load.image("habitat", "assets/habitat.png");
+    this.load.image("habitat-wall", "assets/habitat-wall.png");
+    this.load.image("habitat-floor", "assets/habitat-floor.png");
+    this.load.image("habitat-airlock", "assets/habitat-airlock.png");
+    this.load.image("habitat", "assets/habitat-airlock.png");
     this.load.image("solar-panel", "assets/solar-panel.png");
     this.load.image("mining-station", "assets/mining-station.png");
     this.load.image("ice-drill", "assets/ice-drill.png");
     this.load.image("regolith-processor", "assets/regolith-processor.png");
     this.load.image("landing-pad", "assets/landing-pad.png");
+    this.load.image("grow-zone", "assets/farm-dry.png");
+
+    // Grow Zone Textures
+    this.load.image("farm-dry", "assets/farm-dry.png");
+    this.load.image("farm-wet", "assets/farm-wet.png");
+    this.load.image("plant-baby", "assets/plant-baby.png");
+    this.load.image("plant-carrots", "assets/plant-carrot.png");
+    this.load.image("plant-tomatoes", "assets/plant-tomato.png");
+    this.load.image("plant-potatoes", "assets/plant-potato.png");
+    this.load.image("plant-beans", "assets/plant-beans.png");
 
     // Starship
     this.load.image("starship", "assets/starship.png");
@@ -132,28 +164,27 @@ export class MainScene extends Phaser.Scene {
       dustTexture.refresh();
     }
 
-    // Create a shadow texture programmatically
-    const shadowTexture = this.textures.createCanvas("shadow", 64, 32);
-    if (shadowTexture) {
-      const shadowContext = shadowTexture.getContext();
-
-      // Create a pixelated oval shadow
-      shadowContext.fillStyle = "rgba(255, 255, 255, 1)";
-
-      // Draw a MASSIVE pixelated oval (64x32 pixels)
-      shadowContext.fillRect(0, 8, 64, 16);
-      shadowContext.fillRect(8, 4, 48, 24);
-      shadowContext.fillRect(16, 0, 32, 32);
-
-      // Update the texture
-      shadowTexture.refresh();
-      console.log("Shadow texture created successfully - MASSIVE SIZE");
-    } else {
+    // Create shadow texture for all entities
+    try {
+      const shadowTexture = this.textures.createCanvas("shadow", 64, 64);
+      if (shadowTexture) {
+        this.shadowTexture = shadowTexture;
+        const context = this.shadowTexture.getContext();
+        const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+        gradient.addColorStop(0, "rgba(0, 0, 0, 0.6)");
+        gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, 64, 64);
+        this.shadowTexture.refresh();
+      } else {
+        console.error("Failed to create shadow texture - null canvas returned");
+      }
+    } catch (error) {
       console.error("Failed to create shadow texture");
     }
 
     // Other
-    this.load.svg("bulldozer", "assets/bulldozer.svg");
+    this.load.image("bulldozer", "assets/bulldozer-mini.png");
   }
 
   create() {
@@ -165,12 +196,6 @@ export class MainScene extends Phaser.Scene {
 
     // Initialize managers early in the create method
     this.habitatManager = new HabitatManager(this, this.buildings);
-    this.jobManager = new GameJobManager(
-      this,
-      this.robots,
-      this.resourceNodes,
-      this.blueprints
-    );
     this.blueprintManager = new BlueprintManager(
       this,
       this.blueprints,
@@ -193,20 +218,96 @@ export class MainScene extends Phaser.Scene {
     // Initialize FPS counter
     this.fpsText = createFPS(this);
 
-    // Create terrain
+    // Create terrain with PNG textures
     const { map, groundLayer } = createTerrain(this);
     this.map = map;
     gameState.map = map;
     gameState.groundLayer = groundLayer;
 
-    // Create player
+    // The terrain is created with PNG textures in createTerrain
+
+    // Make sure the ground layer is invisible since we're using sprites
+    groundLayer.setVisible(false);
+
+    // Create resource display
+    this.resourceDisplay = new ResourceDisplay(this);
+
+    // Set world bounds based on the map dimensions
+    this.physics.world.setBounds(
+      0,
+      0,
+      MAP_WIDTH * TILE_SIZE,
+      MAP_HEIGHT * TILE_SIZE
+    );
+
+    // Set the spawn point to the true center of the map
+    this.spawnPoint = new Phaser.Math.Vector2(
+      (MAP_WIDTH * TILE_SIZE) / 2,
+      (MAP_HEIGHT * TILE_SIZE) / 2
+    );
+
+    console.log("Spawn point set to:", {
+      x: this.spawnPoint.x,
+      y: this.spawnPoint.y,
+      mapWidth: MAP_WIDTH,
+      mapHeight: MAP_HEIGHT,
+      tileSize: TILE_SIZE,
+    });
+
+    // Update the spawn point in the enemy manager
+    if (this.enemyManager) {
+      this.enemyManager.updateSpawnPoint(this.spawnPoint);
+
+      // Create enemies using the enemy manager
+      this.enemyManager.createEnemies(NUM_INITIAL_ENEMIES);
+    } else {
+      console.error("EnemyManager is not initialized!");
+    }
+
+    // Create a landing pad near the spawn point
+    const landingPadOffset = 100; // Reduced distance from spawn point (was 200)
+    const landingPadX = this.spawnPoint.x + landingPadOffset;
+    const landingPadY = this.spawnPoint.y + landingPadOffset; // Changed to be below the spawn point instead of above
+
+    console.log("Creating landing pad at:", {
+      x: landingPadX,
+      y: landingPadY,
+      spawnPointX: this.spawnPoint.x,
+      spawnPointY: this.spawnPoint.y,
+      offset: landingPadOffset,
+    });
+
+    // Create the landing pad
+    const initialLandingPad = BuildingFactory.createBuilding(
+      this,
+      landingPadX,
+      landingPadY,
+      "landing-pad"
+    ) as LandingPad;
+
+    // Add to buildings list
+    this.buildings.push(initialLandingPad);
+
+    // Store a reference to the starship
+    this.starship = initialLandingPad.getStarship();
+
+    // Center the main camera on the spawn point and set appropriate bounds
+    this.cameras.main.setBounds(
+      0,
+      0,
+      MAP_WIDTH * TILE_SIZE,
+      MAP_HEIGHT * TILE_SIZE
+    );
+    this.cameras.main.centerOn(this.spawnPoint.x, this.spawnPoint.y);
+
+    // Create player after the spawn point is set
     this.player = createPlayer(this);
     gameState.player = this.player.getSprite() as Phaser.Physics.Arcade.Sprite;
 
     // Add health bar to player
     const playerHealthBar = this.healthBarRenderer.createHealthBar(
       this.player as any, // Type cast to bypass type checking
-      -30
+      -40 // Offset Y (above the player)
     );
     this.player.setHealthBar(playerHealthBar);
 
@@ -246,66 +347,31 @@ export class MainScene extends Phaser.Scene {
     // Make the UI camera ignore game world objects
     this.uiCamera.ignore([gameState.player, gameState.groundLayer]);
 
-    // Set the main camera to follow the player but ignore UI
-    this.cameras.main.setBounds(
-      0,
-      0,
-      (this.game.config.width as number) * 2,
-      (this.game.config.height as number) * 2
-    );
+    // Set the main camera to follow the player
     this.cameras.main.startFollow(gameState.player, true);
-    this.cameras.main.setName("MainCamera");
 
     // Create build menu with map reference and UI camera
     this.actionMenu = new ActionMenu(this, gameState.map, (itemName, x, y) =>
       this.handleItemPlaced(itemName, x, y)
     );
 
-    // Create resource display
-    this.resourceDisplay = new ResourceDisplay(this);
-
-    // Set world bounds if you have a large map
-    this.physics.world.setBounds(
-      0,
-      0,
-      (this.game.config.width as number) * 2,
-      (this.game.config.height as number) * 2
-    );
-
-    // Set the spawn point
-    this.spawnPoint = new Phaser.Math.Vector2(
-      this.cameras.main.width / 2,
-      this.cameras.main.height / 2
-    );
-
-    // Update the spawn point in the enemy manager
-    if (this.enemyManager) {
-      this.enemyManager.updateSpawnPoint(this.spawnPoint);
-
-      // Create enemies using the enemy manager
-      this.enemyManager.createEnemies(5);
-    } else {
-      console.error("EnemyManager is not initialized!");
-    }
-
-    // Create a landing pad near the spawn point
-    const landingPadOffset = 100; // Reduced distance from spawn point (was 200)
-    const landingPadX = this.spawnPoint.x + landingPadOffset;
-    const landingPadY = this.spawnPoint.y + landingPadOffset; // Changed to be below the spawn point instead of above
-
-    // Create the landing pad
-    const initialLandingPad = BuildingFactory.createBuilding(
+    // Initialize RobotManager after starship is created
+    this.robotManager = new RobotManager(
       this,
-      landingPadX,
-      landingPadY,
-      "landing-pad"
-    ) as LandingPad;
+      this.healthBarRenderer,
+      this.starship
+    );
 
-    // Add to buildings list
-    this.buildings.push(initialLandingPad);
+    // Explicitly create initial robots after RobotManager is initialized
+    this.robotManager.createInitialRobots();
 
-    // Store a reference to the starship
-    this.starship = initialLandingPad.getStarship();
+    // Initialize JobManager after RobotManager
+    this.jobManager = new GameJobManager(
+      this,
+      this.robotManager.getRobots(),
+      this.resourceNodes,
+      this.blueprints
+    );
 
     // Add resource nodes near the spawn point
     this.addResourceNodesNearSpawn();
@@ -313,24 +379,14 @@ export class MainScene extends Phaser.Scene {
     // Place ice deposits on the map
     this.placeIceDepositsOnTiles();
 
-    // Create robots
-    this.createRobots();
-
     // Store current tile position in registry for robot panel to access
     this.registry.set("player", gameState.player);
     this.registry.set("currentTilePos", gameState.currentTilePos);
 
     // Create tool inventory display
-    console.log("Creating tool inventory display");
     this.toolInventoryDisplay = new ToolInventoryDisplay(
       this,
       this.player.getToolInventory()
-    );
-
-    console.log("Tool inventory display created:", this.toolInventoryDisplay);
-    console.log(
-      "Tool inventory container:",
-      this.toolInventoryDisplay.getContainer()
     );
 
     // Make sure the tool inventory display is not ignored by the UI camera
@@ -343,7 +399,6 @@ export class MainScene extends Phaser.Scene {
     this.uiCamera.ignore([gameState.player, gameState.groundLayer]);
 
     // Create detail view for entity selection
-    console.log("Creating DetailView...");
     this.detailView = new DetailView(this);
 
     // Add debug message to check UI camera setup
@@ -438,11 +493,29 @@ export class MainScene extends Phaser.Scene {
     // Update buildings
     this.updateBuildings(time, delta);
 
-    // Update robots
-    this.updateRobots();
+    // Update robots using the RobotManager
+    this.robotManager.update(time, delta);
 
-    // Create resource delivery jobs
-    this.jobManager.createResourceDeliveryJobs();
+    // Create resource delivery jobs every 3 seconds
+    if (time % 3000 < delta) {
+      this.robotManager.createResourceDeliveryJobs(
+        this.resourceNodes,
+        this.blueprints
+      );
+    }
+
+    // Generate farming jobs for grow zones every 5 seconds
+    if (time % 5000 < delta) {
+      // Find all GrowZone buildings
+      const growZones = this.children
+        .getChildren()
+        .filter((child) => child.constructor.name === "GrowZone");
+
+      // Generate farming jobs for each grow zone
+      growZones.forEach((growZone) => {
+        (growZone as any).generateFarmingJobs();
+      });
+    }
 
     // Clean up completed jobs every 10 seconds
     if (time % 10000 < 100) {
@@ -502,8 +575,8 @@ export class MainScene extends Phaser.Scene {
       type: ResourceType;
       amount: number;
     }[] = [
-      { type: "iron", amount: 256 },
-      { type: "silicon", amount: 256 },
+      { type: "iron", amount: 512 },
+      { type: "silicon", amount: 512 },
       { type: "aluminium", amount: 64 },
       { type: "potatoes", amount: 64 },
     ];
@@ -679,128 +752,6 @@ export class MainScene extends Phaser.Scene {
     );
   }
 
-  // Update all robots
-  private updateRobots(): void {
-    // Update all robots
-    this.robots.forEach((robot) =>
-      robot.update(this.time.now, this.game.loop.delta)
-    );
-
-    // Check if we need to create more Optimus robots
-    if (this.optimuses.length < 2) {
-      this.createOptimusRobots(2 - this.optimuses.length);
-    }
-
-    // Make sure gameState.robots is always up to date
-    gameState.robots = this.robots;
-  }
-
-  // Create a specific number of Optimus robots
-  private createOptimusRobots(count: number): void {
-    if (count <= 0) return;
-
-    const isDelivery = this.robots.length > 0; // If we already have robots, this is a delivery
-
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const distance = 100 + Math.random() * 50;
-      const x = this.starship
-        ? this.starship.x + Math.cos(angle) * distance
-        : 400;
-      const y = this.starship
-        ? this.starship.y + Math.sin(angle) * distance
-        : 400;
-
-      const optimus = new Optimus(this, x, y);
-      this.robots.push(optimus);
-      this.optimuses.push(optimus);
-
-      // Set up health bar for the new robot
-      if (this.healthBarRenderer) {
-        const healthBar = this.healthBarRenderer.createHealthBar(
-          optimus as any,
-          -30
-        );
-        optimus.setHealthBar(healthBar);
-      }
-    }
-
-    // Update the robots list in the menu
-    this.updateRobotsListInMenu();
-
-    // Show notification if this is a delivery
-    if (isDelivery) {
-      // Create a notification text
-      const notification = this.add.text(
-        this.cameras.main.centerX,
-        100,
-        `STARSHIP DELIVERED ${count} OPTIMUS ROBOTS`,
-        {
-          fontSize: "24px",
-          color: "#00ffff",
-          fontStyle: "bold",
-          stroke: "#000000",
-          strokeThickness: 4,
-          shadow: {
-            offsetX: 2,
-            offsetY: 2,
-            color: "#000000",
-            blur: 2,
-            stroke: true,
-            fill: true,
-          },
-        }
-      );
-      notification.setOrigin(0.5);
-      notification.setScrollFactor(0);
-      notification.setDepth(1000);
-
-      // Fade out and remove after a few seconds
-      this.tweens.add({
-        targets: notification,
-        alpha: { from: 1, to: 0 },
-        y: 80,
-        duration: 3000,
-        ease: "Power2",
-        onComplete: () => {
-          notification.destroy();
-        },
-      });
-    }
-
-    // Make sure gameState.robots is always up to date
-    if ((window as any).gameState) {
-      (window as any).gameState.robots = this.robots;
-    }
-  }
-
-  // Create robots for the colony
-  private createRobots(): void {
-    // Create a few humanoid robots near the starship
-    this.createOptimusRobots(2);
-  }
-
-  // Add a robot to the scene
-  public addRobot(robot: Robot): void {
-    this.robots.push(robot);
-
-    // Add to gameState for enemies to target
-    gameState.robots = this.robots;
-
-    // If it's a mining drone, add it to the mining drones array
-    if (robot instanceof MiningDrone) {
-      this.miningDrones.push(robot as MiningDrone);
-    }
-
-    // If it's an optimus, add it to the optimuses array
-    if (robot instanceof Optimus) {
-      this.optimuses.push(robot as Optimus);
-    }
-
-    // Update the robots list in the action menu
-    this.updateRobotsListInMenu();
-  }
-
   // Update all buildings in the game
   private updateBuildings(time: number, delta: number): void {
     // Get all buildings from the BuildingManager
@@ -838,6 +789,21 @@ export class MainScene extends Phaser.Scene {
         );
         // Call the update method using bracket notation to avoid TypeScript errors
         (processor as any).update(time);
+      });
+
+      // Debug log if we have any grow zones
+      const growZones = buildingInstances.filter(
+        (child) => child.constructor.name === "GrowZone"
+      );
+      console.log(`Found ${growZones.length} GrowZone instances in the scene`);
+
+      // Update all grow zones directly
+      growZones.forEach((growZone) => {
+        console.log(
+          `Directly updating GrowZone at (${growZone.x}, ${growZone.y})`
+        );
+        // Call the update method using bracket notation to avoid TypeScript errors
+        (growZone as any).update(time, delta);
       });
     }
 
@@ -909,11 +875,9 @@ export class MainScene extends Phaser.Scene {
       this.player.destroy();
     }
 
-    // Clean up robots
-    if (this.robots) {
-      this.robots.forEach((robot) => {
-        robot.destroy();
-      });
+    // Clean up robots using the RobotManager
+    if (this.robotManager) {
+      this.robotManager.shutdown();
     }
 
     // Clean up buildings
@@ -979,45 +943,8 @@ export class MainScene extends Phaser.Scene {
   }
 
   private updateRobotsListInMenu() {
-    // Get all robots and their information
-    const robotsInfo = this.robots.map((robot) => {
-      let carrying = "";
-
-      // Check if the robot is an Optimus
-      if (robot instanceof Optimus) {
-        // Get the resource type and amount if carrying something
-        if (
-          (robot as any).getCarriedResource &&
-          (robot as any).getCarriedResource()
-        ) {
-          const resourceType = (robot as any).getResourceType();
-          const resourceAmount = (robot as any).getResourceAmount();
-          carrying = `${resourceType} (${resourceAmount})`;
-        }
-      }
-
-      // Check if the robot is a MiningDrone
-      if (robot instanceof MiningDrone) {
-        // Get the resource type and amount if carrying something
-        const resourceAmount =
-          (robot as any).getResourceAmount &&
-          (robot as any).getResourceAmount();
-        if (resourceAmount > 0) {
-          carrying = `${(robot as any).getResourceType()} (${resourceAmount})`;
-        }
-      }
-
-      return {
-        name: (robot as any).getRobotName
-          ? (robot as any).getRobotName()
-          : "Unknown",
-        type: robot instanceof Optimus ? "optimus" : "mining-drone",
-        state: (robot as any).getRobotState
-          ? (robot as any).getRobotState()
-          : "unknown",
-        carrying: carrying,
-      };
-    });
+    // Get robot info from the RobotManager
+    const robotsInfo = this.robotManager.getRobotInfoForUI();
 
     // Update the robots list in the menu
     if (this.actionMenu) {
@@ -1129,7 +1056,7 @@ export class MainScene extends Phaser.Scene {
 
     if (this.jobManager) {
       this.jobManager.updateReferences(
-        this.robots,
+        this.robotManager.getRobots(),
         this.resourceNodes,
         this.blueprints
       );
@@ -1146,24 +1073,12 @@ export class MainScene extends Phaser.Scene {
 
   // Add a method to show destruction effect
   private showDestructionEffect(x: number, y: number): void {
-    // Create a particle emitter for the destruction effect
-    const particles = this.add.particles(x, y, "flare", {
-      speed: { min: 50, max: 150 },
-      angle: { min: 0, max: 360 },
-      scale: { start: 0.4, end: 0 },
-      lifespan: 500,
-      tint: [0xff0000, 0xff7700, 0xffff00],
-      blendMode: "ADD",
-      frequency: -1, // Emit all particles at once
-      quantity: 20,
-    });
-
-    // Emit particles once
-    particles.explode();
-
-    // Destroy the emitter after a short delay
-    this.time.delayedCall(1000, () => {
-      particles.destroy();
+    // Create an explosion effect
+    const explosion = this.add.sprite(x, y, "explosion");
+    explosion.setScale(2);
+    explosion.play("explosion");
+    explosion.once("animationcomplete", () => {
+      explosion.destroy();
     });
   }
 }

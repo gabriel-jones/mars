@@ -1,6 +1,7 @@
 import { ResourceNode } from "../resourceNode";
 import { ResourceType } from "../../data/resources";
 import { Blueprint } from "../buildings/Blueprint";
+import { GrowZone } from "../buildings/GrowZone";
 
 // Define job types
 export enum JobType {
@@ -8,6 +9,9 @@ export enum JobType {
   WORK_MACHINE = "work_machine",
   BUILD = "build",
   DELIVER_RESOURCE = "deliver_resource", // New job type for resource delivery
+  WATER_TILE = "water_tile", // Water a grow zone tile
+  PLANT_SEED = "plant_seed", // Plant seeds in a grow zone tile
+  HARVEST_CROP = "harvest_crop", // Harvest crops from a grow zone tile
   // Add more job types as needed
 }
 
@@ -25,6 +29,9 @@ export interface Job {
   resourceType?: ResourceType;
   resourceAmount?: number;
   blueprint?: Blueprint;
+  // Additional properties for farming jobs
+  growZone?: GrowZone;
+  tileIndex?: number;
   // Add more properties as needed for different job types
 }
 
@@ -126,6 +133,81 @@ export class JobManager {
       `Created new resource delivery job: ${jobId} for ${resourceAmount} ${resourceType}`
     );
     return job;
+  }
+
+  // Create a new water tile job
+  public createWaterTileJob(
+    growZone: GrowZone,
+    tileIndex: number,
+    duration: number = 2000 // Default 2 seconds for watering
+  ): Job {
+    const jobId = `job_${this.nextJobId++}`;
+    const job: Job = {
+      id: jobId,
+      type: JobType.WATER_TILE,
+      growZone,
+      tileIndex,
+      completed: false,
+      workDuration: duration,
+    };
+
+    this.jobs.set(jobId, job);
+    console.log(`Created new water tile job: ${jobId} for tile ${tileIndex}`);
+    return job;
+  }
+
+  // Create a new plant seed job
+  public createPlantSeedJob(
+    growZone: GrowZone,
+    tileIndex: number,
+    duration: number = 3000 // Default 3 seconds for planting
+  ): Job {
+    const jobId = `job_${this.nextJobId++}`;
+    const job: Job = {
+      id: jobId,
+      type: JobType.PLANT_SEED,
+      growZone,
+      tileIndex,
+      completed: false,
+      workDuration: duration,
+    };
+
+    this.jobs.set(jobId, job);
+    console.log(`Created new plant seed job: ${jobId} for tile ${tileIndex}`);
+    return job;
+  }
+
+  // Create a new harvest crop job
+  public createHarvestCropJob(
+    growZone: GrowZone,
+    tileIndex: number,
+    duration: number = 4000 // Default 4 seconds for harvesting
+  ): Job {
+    const jobId = `job_${this.nextJobId++}`;
+    const job: Job = {
+      id: jobId,
+      type: JobType.HARVEST_CROP,
+      growZone,
+      tileIndex,
+      completed: false,
+      workDuration: duration,
+    };
+
+    this.jobs.set(jobId, job);
+    console.log(`Created new harvest crop job: ${jobId} for tile ${tileIndex}`);
+    return job;
+  }
+
+  // Find all farming jobs (water, plant, harvest)
+  public findFarmingJobs(): Job[] {
+    return Array.from(this.jobs.values()).filter(
+      (job) =>
+        !job.completed &&
+        !job.assignedRobotId &&
+        (job.type === JobType.WATER_TILE ||
+          job.type === JobType.PLANT_SEED ||
+          job.type === JobType.HARVEST_CROP)
+    );
   }
 
   // Find resource delivery jobs for blueprints

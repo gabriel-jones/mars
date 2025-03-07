@@ -392,12 +392,40 @@ export function createPlayer(scene: Phaser.Scene): Player {
     // Use the spawn point coordinates plus the landing pad offset
     // This will place the player near the landing pad where robots spawn
     const landingPadOffset = 100;
-    spawnX = mainScene.spawnPoint.x + landingPadOffset + 50; // Add extra offset to be right next to robots
-    spawnY = mainScene.spawnPoint.y + landingPadOffset + 50;
+    // Position the player slightly to the right of the landing pad
+    spawnX = mainScene.spawnPoint.x + landingPadOffset + 100;
+    spawnY = mainScene.spawnPoint.y + landingPadOffset;
+
+    console.log("Creating player at:", {
+      x: spawnX,
+      y: spawnY,
+      spawnPointX: mainScene.spawnPoint.x,
+      spawnPointY: mainScene.spawnPoint.y,
+      offset: landingPadOffset,
+    });
   } else {
     // Fallback to center of map if spawnPoint is not available
-    spawnX = scene.game.config.width as number;
-    spawnY = scene.game.config.height as number;
+    spawnX = (scene.game.config.width as number) / 2;
+    spawnY = (scene.game.config.height as number) / 2;
+
+    console.log("Creating player at center (fallback):", {
+      x: spawnX,
+      y: spawnY,
+      gameWidth: scene.game.config.width,
+      gameHeight: scene.game.config.height,
+    });
+  }
+
+  // Ensure the player is created at a valid position
+  if (
+    isNaN(spawnX) ||
+    isNaN(spawnY) ||
+    !isFinite(spawnX) ||
+    !isFinite(spawnY)
+  ) {
+    console.error("Invalid player spawn position, using fallback position");
+    spawnX = 500;
+    spawnY = 500;
   }
 
   // Create the player at the new location

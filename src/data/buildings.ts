@@ -5,7 +5,8 @@ export type BuildingType =
   | "mining-station"
   | "ice-drill"
   | "regolith-processor"
-  | "landing-pad";
+  | "landing-pad"
+  | "grow-zone";
 
 import { ResourceType } from "./resources";
 import { TerrainFeatureType } from "../entities/TerrainFeature";
@@ -127,6 +128,15 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     locationType: LocationType.Outside,
     buildEffort: 20000, // 20 seconds to build
     hasInventory: true, // Landing pads can store resources (via starship)
+  },
+  {
+    buildingType: "grow-zone",
+    name: "Grow Zone",
+    cost: [{ type: "iron", amount: 50 }],
+    placementType: PlacementType.RangeSelect,
+    locationType: LocationType.Both, // Can be placed anywhere
+    buildEffort: 1000, // 1 seconds to build
+    hasInventory: true, // Grow zones can store resources (seeds and harvested crops)
   },
 ];
 

@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { Enemy } from "../entities/enemies/Enemy";
 import { Alien } from "../entities/enemies/Alien";
 import { HealthBarRenderer } from "../interfaces/Health";
+import { NUM_INITIAL_ENEMIES } from "../constants";
 
 /**
  * EnemyManager handles all enemy-related functionality
@@ -46,7 +47,7 @@ export class EnemyManager {
   /**
    * Creates enemies
    */
-  public createEnemies(count: number = 5): void {
+  public createEnemies(count: number = NUM_INITIAL_ENEMIES): void {
     // Check if initialized
     if (!this.initialized) {
       console.error("EnemyManager is not initialized!");

@@ -207,7 +207,6 @@ export abstract class Enemy extends Agent implements HasHealth {
   protected handleAttackingState(time: number, delta: number): void {
     // If no target or target is dead, go back to idle
     if (!this.target || !this.isTargetValid()) {
-      console.log("Enemy target lost or invalid, switching to IDLE state");
       this.target = null;
       this.enemyState = EnemyState.IDLE;
       this.updateStateText();
@@ -226,26 +225,11 @@ export abstract class Enemy extends Agent implements HasHealth {
 
     // Check if in attack range
     if (this.isInAttackRange()) {
-      // Log occasionally for debugging
-      if (Math.random() < 0.05) {
-        console.log(
-          `Enemy in attack range, cooldown: ${time - this.lastAttackTime}/${
-            this.attackCooldown
-          }`
-        );
-      }
-
       // Attack if cooldown has passed
       if (time - this.lastAttackTime >= this.attackCooldown) {
-        console.log("Enemy attacking target!");
         // Call the abstract attackTarget method that subclasses will implement
         this.attackTarget();
         this.lastAttackTime = time;
-      }
-    } else {
-      // Log occasionally for debugging
-      if (Math.random() < 0.05) {
-        console.log("Enemy not in attack range yet");
       }
     }
   }
@@ -261,13 +245,6 @@ export abstract class Enemy extends Agent implements HasHealth {
     let closestDistance = Number.MAX_VALUE;
     let targetType = "none";
 
-    // Log available targets for debugging
-    console.log(
-      `Enemy searching for targets. Found player: ${!!player}, robots: ${
-        robots.length
-      }`
-    );
-
     // Check player
     if (player && player.active) {
       const distance = Phaser.Math.Distance.Between(
@@ -281,22 +258,17 @@ export abstract class Enemy extends Agent implements HasHealth {
         closestDistance = distance;
         closestTarget = player as unknown as TargetObject;
         targetType = "player";
-        console.log(`Enemy targeting player at distance ${distance}`);
       }
     }
 
     // Check robots
     if (robots && robots.length > 0) {
-      console.log(`Checking ${robots.length} robots for targeting`);
-
       for (const robot of robots) {
         if (!robot) {
-          console.log("Found null robot, skipping");
           continue;
         }
 
         if (!robot.getSprite || typeof robot.getSprite !== "function") {
-          console.log("Robot missing getSprite method, skipping");
           continue;
         }
 
@@ -313,13 +285,11 @@ export abstract class Enemy extends Agent implements HasHealth {
         }
 
         if (!isRobotAlive) {
-          console.log("Robot is dead, skipping");
           continue;
         }
 
         const robotSprite = robot.getSprite();
         if (!robotSprite || !robotSprite.active) {
-          console.log("Robot sprite inactive, skipping");
           continue;
         }
 
@@ -341,8 +311,6 @@ export abstract class Enemy extends Agent implements HasHealth {
           robotY
         );
 
-        console.log(`Robot at (${robotX}, ${robotY}), distance: ${distance}`);
-
         if (distance < closestDistance) {
           closestDistance = distance;
           closestTarget = robotSprite as unknown as TargetObject;
@@ -350,11 +318,8 @@ export abstract class Enemy extends Agent implements HasHealth {
 
           // Store a reference to the robot instance for damage
           (closestTarget as any).robotInstance = robot;
-          console.log(`Enemy targeting robot at distance ${distance}`);
         }
       }
-    } else {
-      console.log("No robots found in gameState");
     }
 
     // Only change target if we found something or we already had a target that's now invalid
@@ -363,21 +328,11 @@ export abstract class Enemy extends Agent implements HasHealth {
 
       // If we found a target, switch to attacking state
       if (closestTarget && this.enemyState !== EnemyState.ATTACKING) {
-        console.log(
-          `Enemy switching to ATTACKING state, targeting ${targetType}`
-        );
         this.enemyState = EnemyState.ATTACKING;
       } else if (!closestTarget && this.enemyState === EnemyState.ATTACKING) {
         // If we lost our target, switch back to idle
-        console.log("Enemy switching back to IDLE state, no target found");
         this.enemyState = EnemyState.IDLE;
       }
-    }
-
-    if (this.target) {
-      console.log(`Enemy set target: ${targetType}`);
-    } else {
-      console.log("Enemy found no target");
     }
   }
 
@@ -481,18 +436,7 @@ export abstract class Enemy extends Agent implements HasHealth {
       this.target.y
     );
 
-    const inRange = distance <= this.attackRange;
-
-    // Log occasionally for debugging
-    if (Math.random() < 0.01) {
-      console.log(
-        `Enemy distance to target: ${distance.toFixed(2)}, attack range: ${
-          this.attackRange
-        }, in range: ${inRange}`
-      );
-    }
-
-    return inRange;
+    return distance <= this.attackRange;
   }
 
   // Update state text (now just updates the health bar)
@@ -558,8 +502,6 @@ export abstract class Enemy extends Agent implements HasHealth {
 
   // Clean up resources
   public destroy(): void {
-    console.log(`Destroying enemy: ${this.getEnemyName()}`);
-
     // Clean up dust effects
     this.cleanupDustEffects();
 
@@ -608,12 +550,6 @@ export abstract class Enemy extends Agent implements HasHealth {
 
   // Take damage and show visual feedback
   public damage(amount: number): void {
-    console.log(
-      `${this.getEnemyName()} taking ${amount} damage. Current health: ${
-        this.health
-      }`
-    );
-
     // Directly modify health instead of calling takeDamage to avoid recursion
     this.health -= amount;
 
@@ -642,17 +578,6 @@ export abstract class Enemy extends Agent implements HasHealth {
 
     // Update health bar position
     this.updateHealthBarPosition();
-
-    console.log(
-      `Enemy ${this.getEnemyName()} (${
-        this.enemyType
-      }) took ${amount} damage. Health: ${this.health}/${this.maxHealth}`
-    );
-
-    // Log if enemy died from this damage
-    if (this.health <= 0) {
-      console.log(`${this.getEnemyName()} died from damage`);
-    }
   }
 
   // Check if target is valid (still exists and is alive)

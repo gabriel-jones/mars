@@ -73,7 +73,6 @@ export class Starship extends Phaser.GameObjects.Container {
     scene.add.existing(this);
 
     // Start the cycle automatically
-    console.log("Starship created - starting cycle");
     this.startCycle();
   }
 
@@ -91,7 +90,6 @@ export class Starship extends Phaser.GameObjects.Container {
   takeOffFromMars() {
     if (this.currentState !== StarshipState.MARS_LANDED) return;
 
-    console.log("Starship taking off from Mars");
     this.currentState = StarshipState.MARS_TAKEOFF;
 
     // Show engine flame
@@ -116,7 +114,6 @@ export class Starship extends Phaser.GameObjects.Container {
       ease: "Cubic.easeIn",
       onComplete: () => {
         // Ship has reached Mars orbit
-        console.log("Starship reached Mars orbit");
         this.currentState = StarshipState.MARS_ORBIT;
         this.setVisible(false);
 
@@ -134,7 +131,6 @@ export class Starship extends Phaser.GameObjects.Container {
   startMarsToEarthTransfer() {
     if (this.currentState !== StarshipState.MARS_ORBIT) return;
 
-    console.log("Starship starting Mars to Earth transfer");
     this.currentState = StarshipState.MARS_TO_EARTH;
 
     // Schedule arrival at Earth orbit
@@ -149,7 +145,6 @@ export class Starship extends Phaser.GameObjects.Container {
   arriveAtEarthOrbit() {
     if (this.currentState !== StarshipState.MARS_TO_EARTH) return;
 
-    console.log("Starship arrived at Earth orbit");
     this.currentState = StarshipState.EARTH_ORBIT;
 
     // Schedule Earth to Mars transfer
@@ -164,7 +159,6 @@ export class Starship extends Phaser.GameObjects.Container {
   startEarthToMarsTransfer() {
     if (this.currentState !== StarshipState.EARTH_ORBIT) return;
 
-    console.log("Starship starting Earth to Mars transfer");
     this.currentState = StarshipState.EARTH_TO_MARS;
 
     // Schedule arrival back at Mars orbit
@@ -179,7 +173,6 @@ export class Starship extends Phaser.GameObjects.Container {
   arriveBackAtMarsOrbit() {
     if (this.currentState !== StarshipState.EARTH_TO_MARS) return;
 
-    console.log("Starship arrived back at Mars orbit");
     this.currentState = StarshipState.MARS_ORBIT;
 
     // Schedule landing on Mars
@@ -194,7 +187,6 @@ export class Starship extends Phaser.GameObjects.Container {
   landOnMars() {
     if (this.currentState !== StarshipState.MARS_ORBIT) return;
 
-    console.log("Starship landing on Mars");
     this.currentState = StarshipState.MARS_LANDING;
 
     // Reset position above landing pad
@@ -224,7 +216,6 @@ export class Starship extends Phaser.GameObjects.Container {
       ease: "Cubic.easeOut",
       onComplete: () => {
         // Ship has landed
-        console.log("Starship landed on Mars");
         this.currentState = StarshipState.MARS_LANDED;
         this.engineFlame.setVisible(false);
 
@@ -235,7 +226,6 @@ export class Starship extends Phaser.GameObjects.Container {
         this.stateTimer = this.scene.time.delayedCall(
           this.stateDurations.marsOrbit, // Use same duration as orbit for landed state
           () => {
-            console.log("Scheduling next takeoff");
             this.takeOffFromMars();
           }
         );
@@ -248,9 +238,10 @@ export class Starship extends Phaser.GameObjects.Container {
     // Get the main scene
     const mainScene = this.scene as any;
 
-    // Check if the scene has the createOptimusRobots method
-    if (mainScene.createOptimusRobots) {
-      mainScene.createOptimusRobots(this.robotsToDeliver);
+    // Check if the scene has a robotManager
+    if (mainScene.robotManager) {
+      // Use the RobotManager to create the robots
+      mainScene.robotManager.createOptimusRobots(this.robotsToDeliver);
     }
   }
 

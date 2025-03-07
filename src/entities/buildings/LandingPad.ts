@@ -56,10 +56,6 @@ export class LandingPad extends Building {
       tiles: this.calculateTiles(tileX, tileY, tileWidth, tileHeight),
       hasInventory: true,
     });
-
-    console.log(
-      `Created landing pad with starship at (${alignedX}, ${alignedY})`
-    );
   }
 
   private calculateTiles(
@@ -83,13 +79,6 @@ export class LandingPad extends Building {
     // Update the starship with time and delta parameters
     if (this.starship) {
       this.starship.update();
-
-      // Log starship state occasionally for debugging
-      if (Math.random() < 0.005) {
-        console.log(
-          `LandingPad updating starship, state: ${this.starship.getState()}`
-        );
-      }
     }
 
     // Sync the starship inventory with our inventory

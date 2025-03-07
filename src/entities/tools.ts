@@ -92,10 +92,6 @@ export class Tool {
         this.laserDot = scene.add.circle(0, 0, 3, 0xff0000, 1);
         this.laserDot.setVisible(false);
         this.laserDot.setDepth(19); // Below the weapon
-
-        console.log(
-          `Created sprite for tool: ${name} with texture: ${textureKey}`
-        );
       } catch (error) {
         // If that fails, try to use the rect texture
         console.error(
@@ -118,10 +114,6 @@ export class Tool {
           this.laserDot = scene.add.circle(0, 0, 3, 0xff0000, 1);
           this.laserDot.setVisible(false);
           this.laserDot.setDepth(19); // Below the weapon
-
-          console.log(
-            `Created sprite for tool: ${name} with rect texture: ${textureKey}-rect`
-          );
         } catch (rectError) {
           // If that fails, try to use the fallback texture
           console.error(
@@ -144,10 +136,6 @@ export class Tool {
             this.laserDot = scene.add.circle(0, 0, 3, 0xff0000, 1);
             this.laserDot.setVisible(false);
             this.laserDot.setDepth(19); // Below the weapon
-
-            console.log(
-              `Created sprite for tool: ${name} with fallback texture: ${textureKey}-fallback`
-            );
           } catch (fallbackError) {
             console.error(
               `Failed to create sprite for tool: ${name} with fallback texture: ${textureKey}-fallback`,
@@ -180,8 +168,6 @@ export class Tool {
       } else if (this.laserDot) {
         this.laserDot.setVisible(false);
       }
-
-      console.log(`Showing tool: ${this.name} at position: ${x}, ${y}`);
     } else {
       console.warn(`Cannot show tool: ${this.name} - sprite is null`);
     }
@@ -199,8 +185,6 @@ export class Tool {
       if (this.laserDot) {
         this.laserDot.setVisible(false);
       }
-
-      console.log(`Hiding tool: ${this.name}`);
     } else {
       console.warn(`Cannot hide tool: ${this.name} - sprite is null`);
     }
@@ -401,10 +385,6 @@ export class Tool {
     if (isPlayer && this.scene.cameras && this.scene.cameras.main) {
       this.scene.cameras.main.shake(50, 0.005);
     }
-
-    console.log(
-      `Fired weapon: ${this.name} from position: ${barrelX}, ${barrelY} towards: ${targetX}, ${targetY}, Flipped: ${isFlipped}`
-    );
   }
 
   // Create a bullet
@@ -415,10 +395,6 @@ export class Tool {
     targetY: number
   ): void {
     if (!this.scene) return;
-
-    console.log(
-      `Creating bullet from (${startX}, ${startY}) to (${targetX}, ${targetY})`
-    );
 
     // Calculate the angle and velocity
     const angle = Math.atan2(targetY - startY, targetX - startX);
@@ -542,15 +518,9 @@ export class Tool {
       loop: true,
     });
 
-    // Log that the bullet was created successfully
-    console.log(
-      `Bullet created successfully with velocity (${velocityX}, ${velocityY})`
-    );
-
     // Destroy bullet when it hits world bounds
     const worldBoundsListener = (body: Phaser.Physics.Arcade.Body) => {
       if (body.gameObject === bullet) {
-        console.log("Bullet hit world bounds, destroying");
         bullet.destroy();
         debugRect.destroy();
         debugUpdater.destroy();
@@ -564,7 +534,6 @@ export class Tool {
     // Destroy bullet after 1 second (if it hasn't hit anything)
     this.scene.time.delayedCall(1000, () => {
       if (bullet && bullet.active) {
-        console.log("Bullet lifetime expired, destroying");
         bullet.destroy();
         debugRect.destroy();
         debugUpdater.destroy();
@@ -576,12 +545,6 @@ export class Tool {
     const enemies = gameState.enemies || [];
     const player = gameState.player;
     const robots = gameState.robots || [];
-
-    console.log(
-      `Found ${enemies.length} enemies, ${
-        robots.length
-      } robots, and player: ${!!player} for bullet collision detection from gameState`
-    );
 
     // Set up collision with enemies, player, and robots
     const processOverlap = (): boolean => {
@@ -597,10 +560,6 @@ export class Tool {
           const playerBounds = player.getBounds();
 
           if (Phaser.Geom.Rectangle.Overlaps(bulletBounds, playerBounds)) {
-            console.log(
-              `Bullet hit player at position: (${player.x}, ${player.y})`
-            );
-
             // Destroy the bullet
             bullet.destroy();
             debugRect.destroy();
@@ -610,9 +569,6 @@ export class Tool {
             const playerInstance = (window as any).gameState.playerInstance;
             if (playerInstance && typeof playerInstance.damage === "function") {
               playerInstance.damage(bulletDamage);
-              console.log(
-                `Successfully damaged player for ${bulletDamage} damage`
-              );
             } else {
               console.error("Damage method not found on player");
             }
@@ -628,13 +584,11 @@ export class Tool {
             !robot.getSprite ||
             typeof robot.getSprite !== "function"
           ) {
-            console.log("Invalid robot object, skipping");
             continue;
           }
 
           const robotSprite = robot.getSprite();
           if (!robotSprite || !robotSprite.active || !bullet.active) {
-            console.log("Robot sprite inactive, skipping");
             continue;
           }
 
@@ -661,8 +615,6 @@ export class Tool {
           const bulletBounds = bullet.getBounds();
 
           if (Phaser.Geom.Rectangle.Overlaps(bulletBounds, robotBounds)) {
-            console.log(`Bullet hit robot at position: (${robotX}, ${robotY})`);
-
             // Destroy the bullet
             bullet.destroy();
             debugRect.destroy();
@@ -674,9 +626,7 @@ export class Tool {
             // Method 1: Try direct damage method on robot
             if (typeof robot.damage === "function") {
               robot.damage(bulletDamage);
-              console.log(
-                `Successfully damaged robot directly for ${bulletDamage} damage`
-              );
+
               damageApplied = true;
             }
             // Method 2: Try damage via robotInstance
@@ -685,9 +635,7 @@ export class Tool {
               typeof robotSprite.robotInstance.damage === "function"
             ) {
               robotSprite.robotInstance.damage(bulletDamage);
-              console.log(
-                `Successfully damaged robot via robotInstance for ${bulletDamage} damage`
-              );
+
               damageApplied = true;
             }
             // Method 3: Try to access the robot instance from gameState
@@ -702,9 +650,7 @@ export class Tool {
                 ) {
                   if (typeof stateRobot.damage === "function") {
                     stateRobot.damage(bulletDamage);
-                    console.log(
-                      `Successfully damaged robot via gameState for ${bulletDamage} damage`
-                    );
+
                     damageApplied = true;
                     break;
                   }
@@ -739,10 +685,6 @@ export class Tool {
           const enemyBounds = enemySprite.getBounds();
 
           if (Phaser.Geom.Rectangle.Overlaps(bulletBounds, enemyBounds)) {
-            console.log(
-              `Bullet hit enemy at position: (${enemySprite.x}, ${enemySprite.y})`
-            );
-
             // Destroy the bullet
             bullet.destroy();
             debugRect.destroy();
@@ -752,9 +694,6 @@ export class Tool {
             if (typeof enemy.damage === "function") {
               enemy.damage(bulletDamage);
               this.createBloodEffect(enemySprite);
-              console.log(
-                `Successfully damaged enemy for ${bulletDamage} damage`
-              );
             } else {
               console.error("Damage method not found on enemy");
             }
@@ -888,8 +827,6 @@ export class Tool {
     if (this.laserDot) {
       this.laserDot.destroy();
     }
-
-    console.log(`Tool ${this.name} destroyed`);
   }
 }
 
@@ -951,11 +888,6 @@ export class ToolInventory {
         this.scene.input.setDefaultCursor("default");
       }
     }
-
-    console.log(
-      `Selected tool at index ${index}:`,
-      selectedTool?.name || "none"
-    );
   }
 
   // Deselect the current tool

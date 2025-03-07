@@ -35,6 +35,10 @@ export class JobManager {
       return;
     }
 
+    console.log(
+      `Checking ${this.blueprints.length} blueprints for resource delivery jobs`
+    );
+
     // Check each blueprint
     for (const blueprint of this.blueprints) {
       // Skip if blueprint is already complete
@@ -49,21 +53,55 @@ export class JobManager {
 
       // Skip if no required resources
       if (requiredResources.length === 0) {
+        console.log(
+          `Blueprint at (${blueprint.x}, ${blueprint.y}) has no required resources`
+        );
         continue;
       }
+
+      console.log(
+        `Blueprint at (${blueprint.x}, ${blueprint.y}) requires ${requiredResources.length} resources`
+      );
 
       // Check each required resource
       for (const resource of requiredResources) {
         // Skip if resource is already complete
         if (resource.current >= resource.amount) {
+          console.log(
+            `Resource ${resource.type} is already complete (${resource.current}/${resource.amount})`
+          );
           continue;
         }
+
+        console.log(
+          `Blueprint needs ${resource.amount - resource.current} more ${
+            resource.type
+          }`
+        );
 
         // Find a resource node with the required resource
         const resourceNode = this.findResourceNodeWithType(resource.type);
         if (!resourceNode) {
+          console.log(`No resource node found with ${resource.type}`);
           continue;
         }
+
+        console.log(
+          `Found resource node with ${resource.type} at (${resourceNode.x}, ${resourceNode.y})`
+        );
+
+        // Find an available robot
+        const availableRobot = this.findAvailableRobot();
+        if (!availableRobot) {
+          console.log("No available robots found for resource delivery");
+          continue;
+        }
+
+        console.log(
+          `Found available robot for resource delivery: ${
+            (availableRobot as any).getRobotId?.() || "unknown"
+          }`
+        );
 
         // Create a job for this resource delivery
         this.createResourceDeliveryJob(
@@ -72,6 +110,9 @@ export class JobManager {
           resource.type,
           resource.amount - resource.current
         );
+
+        // Only create one job at a time to avoid overwhelming the system
+        break;
       }
     }
   }
@@ -107,6 +148,10 @@ export class JobManager {
       return;
     }
 
+    console.log(
+      `Creating resource delivery job for ${amount} ${resourceType} from (${resourceNode.x}, ${resourceNode.y}) to blueprint at (${blueprint.x}, ${blueprint.y})`
+    );
+
     // Create the job
     if ((availableRobot as any).pickupResourceNode) {
       // First, pick up the resource
@@ -119,7 +164,25 @@ export class JobManager {
           resourceType,
           amount
         );
+
+        console.log(
+          `Assigned robot ${
+            (availableRobot as any).getRobotId?.() || "unknown"
+          } to deliver ${amount} ${resourceType} to blueprint`
+        );
+      } else {
+        console.log(
+          `Robot ${
+            (availableRobot as any).getRobotId?.() || "unknown"
+          } cannot deliver resources to blueprints`
+        );
       }
+    } else {
+      console.log(
+        `Robot ${
+          (availableRobot as any).getRobotId?.() || "unknown"
+        } cannot pick up resources`
+      );
     }
   }
 

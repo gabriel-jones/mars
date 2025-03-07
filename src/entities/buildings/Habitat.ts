@@ -1,10 +1,8 @@
 import Phaser from "phaser";
-import { Building } from "./Building";
+import { RangeSelectionBuilding } from "./RangeSelectionBuilding";
 import { TILE_SIZE } from "../../constants";
 
-export class Habitat extends Building {
-  protected habitatWidth: number;
-  protected habitatHeight: number;
+export class Habitat extends RangeSelectionBuilding {
   protected habitatId: string;
   protected habitatTiles: { x: number; y: number }[] = [];
   protected floorContainer: Phaser.GameObjects.Container;
@@ -19,10 +17,9 @@ export class Habitat extends Building {
     height: number,
     habitatId: string
   ) {
-    super(scene, x, y, "habitat");
+    // Use custom rendering for habitat
+    super(scene, x, y, "habitat", width, height, true, true);
 
-    this.habitatWidth = width;
-    this.habitatHeight = height;
     this.habitatId = habitatId;
 
     // Create containers for floor and wall tiles
@@ -31,12 +28,25 @@ export class Habitat extends Building {
     this.add(this.floorContainer);
     this.add(this.wallsContainer);
 
-    // Hide the default sprite as we'll render our own tiles
-    this.sprite.setVisible(false);
-
-    // Update the label text and position
+    // Update the label text
     this.label.setText(this.getBuildingName());
-    this.label.setPosition(0, -height * 32 - 20);
+    this.label.setPosition(0, (-height * TILE_SIZE) / 2 - 20);
+  }
+
+  /**
+   * Override createTileSprite to customize the appearance of habitat tiles
+   */
+  protected createTileSprite(
+    tileX: number,
+    tileY: number,
+    row: number,
+    col: number
+  ): Phaser.GameObjects.Sprite {
+    // Create a floor tile
+    const floorTile = this.scene.add.sprite(tileX, tileY, "habitat");
+    floorTile.setDisplaySize(TILE_SIZE, TILE_SIZE);
+    floorTile.setTint(0x444444); // Dark gray for floor
+    return floorTile;
   }
 
   protected getBuildingName(): string {
@@ -101,7 +111,7 @@ export class Habitat extends Building {
         relY,
         TILE_SIZE,
         TILE_SIZE,
-        0x888888, // Gray floor color
+        0x444444, // Dark gray for floor
         1
       );
       floorTile.setOrigin(0.5);
@@ -115,7 +125,7 @@ export class Habitat extends Building {
 
       // Add walls where needed
       const wallThickness = 4;
-      const wallColor = 0x444444; // Darker color for walls
+      const wallColor = 0x888888; // Light gray for walls
 
       if (needsWallNorth) {
         const wall = this.scene.add.rectangle(
@@ -170,38 +180,29 @@ export class Habitat extends Building {
       }
     }
 
-    // Create an invisible interactive area that covers all tiles
-    // This makes the entire habitat clickable
+    // Create an interactive area for the entire habitat
     const width = (maxX - minX + 1) * TILE_SIZE;
     const height = (maxY - minY + 1) * TILE_SIZE;
-
     this.interactiveArea = this.scene.add.rectangle(
-      0, // Centered on the container
+      0,
       0,
       width,
       height,
       0xffffff,
-      0 // Fully transparent
+      0
     );
-    this.interactiveArea.setInteractive();
+    this.interactiveArea.setOrigin(0.5);
     this.add(this.interactiveArea);
 
-    // Make the interactive area emit events to the parent container
-    this.interactiveArea.on("pointerdown", () => {
-      this.emit("pointerdown");
-    });
-    this.interactiveArea.on("pointerup", () => {
-      this.emit("pointerup");
-    });
-    this.interactiveArea.on("pointerover", () => {
-      this.emit("pointerover");
-    });
-    this.interactiveArea.on("pointerout", () => {
-      this.emit("pointerout");
-    });
+    // Make the habitat interactive
+    this.setInteractive(
+      new Phaser.Geom.Rectangle(-width / 2, -height / 2, width, height),
+      Phaser.Geom.Rectangle.Contains
+    );
   }
 
-  public update(): void {
+  public update(time: number, delta: number): void {
+    super.update(time, delta);
     // Habitat-specific update logic
   }
 }

@@ -32,8 +32,6 @@ export class RegolithProcessor extends Building {
   ) {
     super(scene, x, y, "regolith-processor", tileWidth, tileHeight);
 
-    console.log(`Creating RegolithProcessor at (${x}, ${y})`);
-
     // Add processing text centered below the building
     this.processingText = scene.add.text(
       0,
@@ -98,7 +96,6 @@ export class RegolithProcessor extends Building {
       this.smokeParticles.setPosition(this.x, this.y);
       this.smokeParticles.start();
       this.isProcessing = true;
-      console.log("Started smoke effect and set isProcessing to true");
     }
   }
 
@@ -107,7 +104,6 @@ export class RegolithProcessor extends Building {
     if (this.smokeParticles && this.isProcessing) {
       this.smokeParticles.stop();
       this.isProcessing = false;
-      console.log("Stopped smoke effect and set isProcessing to false");
     }
   }
 
@@ -117,9 +113,6 @@ export class RegolithProcessor extends Building {
 
   // Add regolith to the processor
   public addRegolith(amount: number): void {
-    console.log(
-      `Adding ${amount} regolith to processor. Current amount: ${this.regolithAmount}`
-    );
     this.regolithAmount += amount;
     this.updateProcessingText();
 
@@ -130,10 +123,6 @@ export class RegolithProcessor extends Building {
       // Reset the last process time to start processing on the next update
       // Subtract half the interval to ensure it processes soon but not immediately
       this.lastProcessTime = this.scene.time.now - this.processingInterval / 2;
-
-      console.log(`Started smoke effect and reset processing timer to ${this.lastProcessTime}. 
-        Current time: ${this.scene.time.now}. 
-        New regolith amount: ${this.regolithAmount}`);
     }
   }
 
@@ -152,10 +141,6 @@ export class RegolithProcessor extends Building {
   }
 
   public update(time?: number, delta?: number): void {
-    console.log(
-      `RegolithProcessor.update called at time: ${time || this.scene.time.now}`
-    );
-
     // Process regolith at regular intervals
     const currentTime = time || this.scene.time.now;
     const timeSinceLastProcess = currentTime - this.lastProcessTime;
@@ -165,25 +150,10 @@ export class RegolithProcessor extends Building {
       this.smokeParticles.setPosition(this.x, this.y);
     }
 
-    // Debug logging
-    if (currentTime % 5000 < 20) {
-      // Log every ~5 seconds
-      console.log(`RegolithProcessor status: 
-        - regolithAmount: ${this.regolithAmount}
-        - isProcessing: ${this.isProcessing}
-        - timeSinceLastProcess: ${timeSinceLastProcess}ms
-        - processingInterval: ${this.processingInterval}ms
-        - currentTime: ${currentTime}
-        - lastProcessTime: ${this.lastProcessTime}`);
-    }
-
     if (
       this.regolithAmount > 0 &&
       timeSinceLastProcess >= this.processingInterval
     ) {
-      console.log(
-        `Time to process regolith! Time since last process: ${timeSinceLastProcess}ms, Interval: ${this.processingInterval}ms`
-      );
       this.processRegolith();
       this.lastProcessTime = currentTime;
     }
@@ -197,10 +167,6 @@ export class RegolithProcessor extends Building {
   }
 
   private processRegolith(): void {
-    console.log(
-      `Attempting to process regolith. Current amount: ${this.regolithAmount}`
-    );
-
     if (this.regolithAmount > 0) {
       // Calculate how much to process
       const amountToProcess = Math.min(
@@ -208,18 +174,11 @@ export class RegolithProcessor extends Building {
         this.processingRate
       );
 
-      console.log(
-        `Processing ${amountToProcess} regolith out of ${this.regolithAmount} total`
-      );
-
       // Process the regolith and extract resources based on occurrence rates
       this.extractResources(amountToProcess);
 
       // Reduce the regolith amount
       this.regolithAmount -= amountToProcess;
-      console.log(
-        `Regolith remaining after processing: ${this.regolithAmount}`
-      );
 
       // Update the display
       this.updateProcessingText();
@@ -229,7 +188,6 @@ export class RegolithProcessor extends Building {
         this.stopSmokeEffect();
       }
     } else {
-      console.log("No regolith to process");
       // Ensure smoke effect is stopped if there's no regolith
       this.stopSmokeEffect();
     }
@@ -237,14 +195,10 @@ export class RegolithProcessor extends Building {
 
   // Extract resources from regolith based on occurrence rates
   private extractResources(amountProcessed: number): void {
-    console.log(`Extracting resources from ${amountProcessed} regolith`);
-
     // Get all resources that can be extracted from regolith (have occurrence rates)
     const extractableResources = RESOURCE_DEFINITIONS.filter(
       (resource) => resource.occurrenceRate && resource.occurrenceRate > 0
     );
-
-    console.log(`Found ${extractableResources.length} extractable resources`);
 
     // Always guarantee at least one resource when processing regolith
     let anyResourceExtracted = false;
@@ -264,9 +218,6 @@ export class RegolithProcessor extends Building {
 
         // Calculate base amount
         let baseAmount = amountProcessed * multiplier;
-        console.log(
-          `Resource: ${resource.name}, Occurrence rate: ${resource.occurrenceRate}, Base amount: ${baseAmount}`
-        );
 
         // For resources with low occurrence rates, give them a minimum chance
         // This ensures even rare resources have a chance to spawn
@@ -276,23 +227,14 @@ export class RegolithProcessor extends Building {
           // For resources that would yield less than 1 unit, use probability
           const probability = baseAmount; // Use the fractional amount as probability
           const randomValue = Math.random();
-          console.log(
-            `${resource.name} has low yield (${baseAmount}). Using probability ${probability}, random value: ${randomValue}`
-          );
 
           // If random value is less than probability, extract 1 unit
           if (randomValue < probability) {
             amountToExtract = 1;
-            console.log(
-              `Random value ${randomValue} < probability ${probability}, extracting 1 ${resource.name}`
-            );
           }
         } else {
           // For resources that would yield at least 1 unit, use floor
           amountToExtract = Math.floor(baseAmount);
-          console.log(
-            `Extracting ${amountToExtract} ${resource.name} (floored from ${baseAmount})`
-          );
         }
 
         if (amountToExtract > 0) {
@@ -301,8 +243,6 @@ export class RegolithProcessor extends Building {
 
           // Spawn or update resource node
           this.spawnResourceNode(resource, amountToExtract);
-
-          console.log(`Extracted ${amountToExtract} ${resource.name}`);
 
           anyResourceExtracted = true;
           processedResources.add(resource.type);
@@ -320,8 +260,6 @@ export class RegolithProcessor extends Building {
 
         // Spawn a silicon node
         this.spawnResourceNode(silicon, 1);
-
-        console.log("Guaranteed extraction: 1 Silicon");
       }
     }
 
@@ -346,33 +284,21 @@ export class RegolithProcessor extends Building {
 
         // Spawn a resource node
         this.spawnResourceNode(randomResource, 1);
-
-        console.log(`Bonus extraction: 1 ${randomResource.name}`);
       }
     }
   }
 
   // Spawn or update a ResourceNode next to the processor
   private spawnResourceNode(resource: any, amount: number): void {
-    console.log(
-      `Attempting to spawn resource node: ${resource.type}, amount: ${amount}`
-    );
-
     // Check if we already have this resource type
     if (this.spawnedResources.has(resource.type)) {
       // Update existing node with additional amount
       const existingNode = this.spawnedResources.get(resource.type);
       if (existingNode && existingNode.active) {
-        console.log(
-          `Updating existing ${resource.type} node with ${amount} more units`
-        );
         existingNode.addAmount(amount);
         return;
       } else {
         // Node is no longer valid, remove it from our map
-        console.log(
-          `Existing ${resource.type} node is no longer valid, will create a new one`
-        );
         this.spawnedResources.delete(resource.type);
       }
     }
@@ -383,10 +309,6 @@ export class RegolithProcessor extends Building {
     const distance = 80; // Distance from processor center
     const x = this.x + Math.cos(angle) * distance;
     const y = this.y + Math.sin(angle) * distance;
-
-    console.log(
-      `Creating new ${resource.type} node at position (${x}, ${y}) with ${amount} units`
-    );
 
     // Create a new ResourceNode
     const resourceNode = new ResourceNode(this.scene, x, y, resource, amount);
@@ -399,7 +321,7 @@ export class RegolithProcessor extends Building {
   }
 
   // Clean up resources when destroyed
-  public destroy(fromScene?: boolean): void {
+  public destroy(): void {
     if (this.smokeParticles) {
       this.smokeParticles.destroy();
     }
@@ -409,6 +331,6 @@ export class RegolithProcessor extends Building {
       resourceNode.destroy();
     });
 
-    super.destroy(fromScene);
+    super.destroy();
   }
 }

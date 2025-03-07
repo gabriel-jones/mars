@@ -39,10 +39,6 @@ export class Building
     this.maxHealth = maxHealth;
     this.currentHealth = maxHealth;
 
-    console.log(
-      `Creating Building: ${buildingType} at (${x}, ${y}) with size ${tileWidth}x${tileHeight}`
-    );
-
     // Create the building sprite at the origin (0,0) of the container
     this.sprite = scene.add.sprite(0, 0, buildingType);
 
@@ -84,14 +80,7 @@ export class Building
   }
 
   public update(time?: number, delta?: number): void {
-    // Base update method, to be overridden by subclasses
-    console.log(`Base Building.update called for ${this.buildingType}`);
-
-    // Update health bar if it exists
-    if (this.healthBar) {
-      // The health bar renderer will be passed in from the scene
-      // and will update the health bar
-    }
+    // Base implementation does nothing
   }
 
   /**
@@ -278,5 +267,19 @@ export class Building
 
   public rechargeShield(amount: number): void {
     // Buildings don't have shields, so this is a no-op
+  }
+
+  /**
+   * Get the sprite for this building
+   */
+  public getSprite(): Phaser.GameObjects.Sprite {
+    return this.sprite;
+  }
+
+  /**
+   * Get the tile dimensions of the building
+   */
+  public getTileDimensions(): { width: number; height: number } {
+    return { width: this.tileWidth, height: this.tileHeight };
   }
 }
