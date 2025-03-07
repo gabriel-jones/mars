@@ -3,7 +3,7 @@ import { ResourceType } from "../../data/resources";
 import { MiningDrone } from "../robots";
 import { MainScene } from "../../scenes/MainScene";
 import { Building } from "./Building";
-import { TILE_SIZE } from "../../constants";
+import { TILE_SIZE, DEFAULT_FONT } from "../../constants";
 import { getResourceRichnessAt } from "../../terrain";
 
 export const MINING_RADIUS = 3;
@@ -126,6 +126,7 @@ export class MiningStation extends Building {
         fontSize: "12px",
         color: "#ffffff",
         padding: { x: 3, y: 2 },
+        fontFamily: DEFAULT_FONT,
       }
     );
     this.miningYieldText.setOrigin(0.5, 0.5);
@@ -191,6 +192,7 @@ export class MiningStation extends Building {
         fontSize: "12px",
         color: textColor,
         padding: { x: 5, y: 2 },
+        fontFamily: DEFAULT_FONT,
       }
     );
     this.previewText.setOrigin(0.5);

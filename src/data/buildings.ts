@@ -6,7 +6,8 @@ export type BuildingType =
   | "ice-drill"
   | "regolith-processor"
   | "landing-pad"
-  | "grow-zone";
+  | "grow-zone"
+  | "inventory-zone";
 
 import { ResourceType } from "./resources";
 import { TerrainFeatureType } from "../entities/TerrainFeature";
@@ -137,6 +138,18 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     locationType: LocationType.Both, // Can be placed anywhere
     buildEffort: 1000, // 1 seconds to build
     hasInventory: true, // Grow zones can store resources (seeds and harvested crops)
+  },
+  {
+    buildingType: "inventory-zone",
+    name: "Inventory Zone",
+    cost: [
+      { type: "iron", amount: 75 },
+      { type: "silicon", amount: 25 },
+    ],
+    placementType: PlacementType.RangeSelect,
+    locationType: LocationType.Both, // Can be placed anywhere
+    buildEffort: 5000, // 5 seconds to build
+    hasInventory: true, // Inventory zones are specifically for storing resources
   },
 ];
 

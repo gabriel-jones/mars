@@ -8,12 +8,15 @@ import {
   MAP_WIDTH,
   MAP_HEIGHT,
   TILE_SIZE,
+  DEFAULT_FONT,
 } from "../constants";
 import { gameState } from "../state";
 import { ResourceNode } from "../entities/resourceNode";
 import { ResourceType } from "../data/resources";
 import { Blueprint } from "../entities/buildings/Blueprint";
 import { JobManager } from "../entities/robots/JobManager";
+import { InventoryZone } from "../entities/buildings/InventoryZone";
+import { Building } from "../entities/buildings/Building";
 
 /**
  * RobotManager handles all robot-related functionality
@@ -142,10 +145,10 @@ export class RobotManager {
           offsetX: 2,
           offsetY: 2,
           color: "#000000",
-          blur: 2,
-          stroke: true,
+          blur: 5,
           fill: true,
         },
+        fontFamily: DEFAULT_FONT,
       }
     );
     notification.setOrigin(0.5);
@@ -435,6 +438,118 @@ export class RobotManager {
       }
     }
     return null;
+  }
+
+  /**
+   * Creates jobs for robots to deliver resources to inventory zones
+   * @param resourceNodes Array of resource nodes
+   * @param buildings Array of buildings
+   */
+  public createInventoryZoneDeliveryJobs(
+    resourceNodes: ResourceNode[],
+    buildings: Building[]
+  ): void {
+    // Skip if no buildings, robots, or resource nodes
+    if (
+      buildings.length === 0 ||
+      this.robots.length === 0 ||
+      resourceNodes.length === 0
+    ) {
+      return;
+    }
+
+    // Find inventory zones
+    const inventoryZones = buildings.filter(
+      (building) => building.getBuildingType() === "inventory-zone"
+    ) as InventoryZone[];
+
+    if (inventoryZones.length === 0) {
+      // No inventory zones found
+      return;
+    }
+
+    console.log(
+      `Checking ${inventoryZones.length} inventory zones for resource delivery jobs`
+    );
+
+    // Find available robots
+    const availableRobots = this.robots.filter(
+      (robot) => (robot as any).isAvailable && (robot as any).isAvailable()
+    );
+
+    if (availableRobots.length === 0) {
+      console.log("No available robots for inventory delivery");
+      return;
+    }
+
+    console.log(
+      `Found ${availableRobots.length} available robots for inventory delivery`
+    );
+
+    // Get the job manager
+    const jobManager = JobManager.getInstance();
+
+    // For each resource node, create a job to deliver it to an inventory zone
+    for (const resourceNode of resourceNodes) {
+      // Skip if the resource node is already part of a job
+      if (jobManager.isNodeInJob(resourceNode)) {
+        continue;
+      }
+
+      // Find the closest inventory zone with space
+      let closestZone: InventoryZone | null = null;
+      let closestDistance = Infinity;
+
+      for (const zone of inventoryZones) {
+        if (zone.hasSpace()) {
+          const distance = Phaser.Math.Distance.Between(
+            resourceNode.x,
+            resourceNode.y,
+            zone.x,
+            zone.y
+          );
+
+          if (distance < closestDistance) {
+            closestZone = zone;
+            closestDistance = distance;
+          }
+        }
+      }
+
+      // Skip if no inventory zone with space was found
+      if (!closestZone) {
+        console.log("No inventory zone with space found");
+        continue;
+      }
+
+      // Create a job to deliver the resource to the inventory zone
+      const job = jobManager.createDeliverToInventoryJob(
+        resourceNode,
+        closestZone
+      );
+
+      console.log(
+        `Created job to deliver ${
+          resourceNode.getResource().type
+        } to inventory zone at (${closestZone.x}, ${closestZone.y})`
+      );
+
+      // Get the next available robot
+      if (availableRobots.length === 0) {
+        console.log("No more available robots for inventory delivery");
+        return;
+      }
+
+      const robot = availableRobots.shift()!;
+      console.log(
+        `Assigning robot ${
+          (robot as any).getRobotId?.() || "unknown"
+        } to deliver ${resourceNode.getResource().type} to inventory zone`
+      );
+
+      // Assign the robot to the job
+      jobManager.assignJob(job.id, (robot as any).getRobotId());
+    }
   }
 
   /**

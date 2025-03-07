@@ -1,5 +1,9 @@
 import Phaser from "phaser";
 import { MainScene } from "./scenes/MainScene";
+import { initFontUtils } from "./utils/fontUtils";
+
+// Initialize font utilities to use the default font throughout the game
+initFontUtils();
 
 //  Find out more information about the Game Config at:
 //  https://newdocs.phaser.io/docs/3.70.0/Phaser.Types.Core.GameConfig

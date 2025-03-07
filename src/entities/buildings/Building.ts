@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { BuildingType } from "../../data/buildings";
-import { TILE_SIZE } from "../../constants";
+import { TILE_SIZE, DEFAULT_FONT } from "../../constants";
 import { ResourceType } from "../../data/resources";
 import { HasHealth } from "../../interfaces/Health";
 
@@ -61,6 +61,7 @@ export class Building
         color: "#ffffff",
         stroke: "#000000",
         strokeThickness: 3,
+        fontFamily: DEFAULT_FONT,
       }
     );
     this.label.setOrigin(0.5);

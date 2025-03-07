@@ -8,6 +8,7 @@ import { ResourceManager, ResourceType } from "../data/resources";
 import { BuildingPlacer } from "../mechanics/buildingPlacer";
 import { Starship, StarshipState } from "../entities/starship";
 import { LandingPad } from "../entities/buildings/LandingPad";
+import { DEFAULT_FONT } from "../constants";
 
 interface ButtonConfig {
   text: string;
@@ -176,12 +177,13 @@ export class ActionMenu {
     }
 
     // Button text - adjust position if icon is present
-    const textX = config.icon ? 5 : 0; // Move text to the right if icon is present
+    const textX = config.icon ? 10 : 0; // Move text to the right if icon is present
     const buttonText = this.scene.add
       .text(textX, 0, config.text, {
         fontSize: "20px",
         color: "#ffffff",
         fontStyle: "bold",
+        fontFamily: DEFAULT_FONT,
       })
       .setOrigin(0.5)
       .setName("buttonText");
@@ -267,6 +269,7 @@ export class ActionMenu {
         fontSize: "24px",
         color: "#ffffff",
         fontStyle: "bold",
+        fontFamily: DEFAULT_FONT,
       })
       .setOrigin(0.5);
 
@@ -292,6 +295,7 @@ export class ActionMenu {
       .text(closeButtonX, closeButtonY, "X", {
         fontSize: "16px",
         color: "#ffffff",
+        fontFamily: DEFAULT_FONT,
       })
       .setOrigin(0.5);
 
@@ -313,7 +317,7 @@ export class ActionMenu {
     );
 
     // Calculate dynamic panel size based on number of items
-    const maxItemsPerRow = 4; // Reduced from 8 to make items larger
+    const maxItemsPerRow = 5; // Reduced from 8 to make items larger
     const itemSize = 150; // Increased from 90 to make items larger
     const itemPadding = 10;
     const itemsCount = BUILDING_DEFINITIONS.length;

@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { DEFAULT_FONT } from "../constants";
 
 export class CloseButton extends Phaser.GameObjects.Container {
   private background: Phaser.GameObjects.Rectangle;
@@ -26,6 +27,7 @@ export class CloseButton extends Phaser.GameObjects.Container {
       fontSize: `${Math.floor(size * 0.7)}px`,
       color: "#ffffff",
       fontStyle: "bold",
+      fontFamily: DEFAULT_FONT,
     });
     this.xText.setOrigin(0.5);
     this.add(this.xText);

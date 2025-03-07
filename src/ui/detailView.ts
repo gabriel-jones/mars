@@ -15,6 +15,7 @@ import {
   CropType,
 } from "../entities/buildings/GrowZone";
 import { RangeSelectionBuilding } from "../entities/buildings/RangeSelectionBuilding";
+import { DEFAULT_FONT } from "../constants";
 
 // Define a type for selectable entities
 export type SelectableEntity =
@@ -101,6 +102,7 @@ export class DetailView {
         fontSize: "18px",
         color: "#ffffff",
         fontStyle: "bold",
+        fontFamily: DEFAULT_FONT,
       }
     );
     this.container.add(this.titleText);
@@ -750,237 +752,47 @@ export class DetailView {
   private addEntityProperties(): void {
     if (!this.selectedEntity) return;
 
+    // Get properties based on entity type
     let properties: { label: string; value: string }[] = [];
-    let hasInventory = false;
-    let inventory: { type: ResourceType | string; amount: number }[] = [];
 
     if (this.selectedEntity instanceof Building) {
       properties = this.getBuildingProperties(this.selectedEntity);
-
-      // Use the generic inventory interface
-      if (
-        "getHasInventory" in this.selectedEntity &&
-        typeof this.selectedEntity.getHasInventory === "function" &&
-        this.selectedEntity.getHasInventory()
-      ) {
-        hasInventory = true;
-        const buildingInventory = this.selectedEntity.getInventory();
-
-        // Convert the inventory object to an array of {type, amount}
-        inventory = Object.entries(buildingInventory).map(([type, amount]) => ({
-          type: type as ResourceType,
-          amount: amount as number,
-        }));
-      }
-    } else if (this.selectedEntity instanceof Blueprint) {
-      properties = this.getBlueprintProperties(this.selectedEntity);
-
-      // Use the generic inventory interface for blueprints too
-      if (
-        "getHasInventory" in this.selectedEntity &&
-        typeof this.selectedEntity.getHasInventory === "function" &&
-        this.selectedEntity.getHasInventory()
-      ) {
-        hasInventory = true;
-        const blueprintInventory = this.selectedEntity.getInventory();
-
-        // Convert the inventory object to an array of {type, amount}
-        inventory = Object.entries(blueprintInventory).map(
-          ([type, amount]) => ({
-            type: type as ResourceType,
-            amount: amount as number,
-          })
-        );
-      }
     } else if (this.selectedEntity instanceof Robot) {
       properties = this.getRobotProperties(this.selectedEntity);
-      // Try to get carried resource
-      const carriedResource = this.selectedEntity.getCarriedResource();
-      if (carriedResource) {
-        hasInventory = true;
-        const resource = carriedResource.getResource();
-        const amount = carriedResource.getAmount();
-        inventory = [{ type: resource.type as ResourceType, amount }];
-      }
     } else if (this.selectedEntity instanceof Starship) {
-      // This should not happen anymore since starships are not directly selectable
       properties = this.getStarshipProperties(this.selectedEntity);
-      // Try to get inventory
-      const starshipAny = this.selectedEntity as any;
-      if (starshipAny.inventory) {
-        hasInventory = true;
-        try {
-          inventory = Object.entries(starshipAny.inventory).map(
-            ([type, amount]) => ({
-              type: type as ResourceType,
-              amount: amount as number,
-            })
-          );
-        } catch (e) {
-          console.warn("Error formatting starship inventory:", e);
-        }
-      }
     } else if (this.selectedEntity instanceof ResourceNode) {
       properties = this.getResourceNodeProperties(this.selectedEntity);
-      // Resource nodes don't show inventory grid
-      hasInventory = false;
+    } else if (this.selectedEntity instanceof Blueprint) {
+      properties = this.getBlueprintProperties(this.selectedEntity);
     } else if (this.selectedEntity instanceof Tool) {
       properties = this.getToolProperties(this.selectedEntity);
-      // Tools don't have inventory
-      hasInventory = false;
     }
 
-    // Add properties to the panel
+    // Add properties to the container
     let yOffset = 0;
-    properties.forEach((property, index) => {
-      // Skip inventory property as we'll display it as a grid
-      if (property.label.toLowerCase() === "inventory") {
-        return;
-      }
-
-      // Add label
+    properties.forEach((property) => {
+      // Create label text
       const labelText = this.scene.add.text(0, yOffset, `${property.label}:`, {
         fontSize: "16px",
         color: `#${this.COLORS.propertyLabel.toString(16)}`,
         fontStyle: "bold",
+        fontFamily: DEFAULT_FONT,
       });
 
-      // Add value (on the same line)
+      // Create value text
       const valueText = this.scene.add.text(150, yOffset, property.value, {
         fontSize: "16px",
         color: `#${this.COLORS.propertyValue.toString(16)}`,
+        fontFamily: DEFAULT_FONT,
       });
 
-      // Add to container and track for cleanup
-      this.propertiesContainer.add(labelText);
-      this.propertiesContainer.add(valueText);
-      this.propertyTexts.push(labelText);
-      this.propertyTexts.push(valueText);
+      // Add to container
+      this.propertiesContainer.add([labelText, valueText]);
+      this.propertyTexts.push(labelText, valueText);
 
-      // Increment y position for next property
-      yOffset += 30;
-    });
-
-    // Add inventory grid if entity has inventory
-    if (hasInventory && inventory.length > 0) {
-      // Add inventory label
-      const inventoryLabel = this.scene.add.text(0, yOffset, "Inventory:", {
-        fontSize: "16px",
-        color: `#${this.COLORS.propertyLabel.toString(16)}`,
-        fontStyle: "bold",
-      });
-      this.propertiesContainer.add(inventoryLabel);
-      this.propertyTexts.push(inventoryLabel);
-
-      // Increment y position for inventory grid
-      yOffset += 30;
-
-      // Create inventory grid
-      this.createInventoryGrid(inventory, yOffset);
-    }
-  }
-
-  private createInventoryGrid(
-    inventory: { type: ResourceType | string; amount: number }[],
-    yOffset: number
-  ): void {
-    // Constants for grid layout
-    const GRID_CELL_SIZE = 50;
-    const GRID_PADDING = 8;
-    const GRID_COLS = 3; // Number of columns in the grid
-
-    // Sort inventory by resource type
-    inventory.sort((a, b) => a.type.localeCompare(b.type));
-
-    // Create grid cells
-    inventory.forEach((item, index) => {
-      // Calculate grid position
-      const col = index % GRID_COLS;
-      const row = Math.floor(index / GRID_COLS);
-      const x = col * (GRID_CELL_SIZE + GRID_PADDING);
-      const y = yOffset + row * (GRID_CELL_SIZE + GRID_PADDING);
-
-      // Create cell container
-      const cellContainer = this.scene.add.container(x, y);
-
-      // Create cell background
-      const cellBg = this.scene.add.rectangle(
-        0,
-        0,
-        GRID_CELL_SIZE,
-        GRID_CELL_SIZE,
-        0x444444
-      );
-      cellBg.setStrokeStyle(1, 0x666666);
-      cellBg.setOrigin(0);
-      cellContainer.add(cellBg);
-
-      // Try to get resource emoji or first letter
-      const resourceDef = this.getResourceDefinition(item.type as ResourceType);
-      const resourceEmoji =
-        resourceDef?.emoji || item.type.charAt(0).toUpperCase();
-
-      // Create resource icon/text
-      const resourceIcon = this.scene.add.text(
-        GRID_CELL_SIZE / 2,
-        GRID_CELL_SIZE / 2 - 10,
-        resourceEmoji,
-        {
-          fontSize: "24px",
-          color: "#ffffff",
-        }
-      );
-      resourceIcon.setOrigin(0.5);
-      cellContainer.add(resourceIcon);
-
-      // Create resource name text (small)
-      const nameText = this.scene.add.text(
-        GRID_CELL_SIZE / 2,
-        GRID_CELL_SIZE - 22,
-        resourceDef?.name || item.type,
-        {
-          fontSize: "10px",
-          color: "#cccccc",
-        }
-      );
-      nameText.setOrigin(0.5);
-      cellContainer.add(nameText);
-
-      // Create amount text
-      const amountText = this.scene.add.text(
-        GRID_CELL_SIZE / 2,
-        GRID_CELL_SIZE - 8,
-        `${item.amount}`,
-        {
-          fontSize: "12px",
-          color: "#ffffff",
-          fontStyle: "bold",
-        }
-      );
-      amountText.setOrigin(0.5);
-      cellContainer.add(amountText);
-
-      // Add tooltip on hover
-      cellBg.setInteractive();
-      cellBg.on("pointerover", () => {
-        this.scene.input.setDefaultCursor("pointer");
-        // Highlight the cell
-        cellBg.setFillStyle(0x666666);
-      });
-
-      cellBg.on("pointerout", () => {
-        this.scene.input.setDefaultCursor("default");
-        // Reset the cell color
-        cellBg.setFillStyle(0x444444);
-      });
-
-      // Add cell to properties container
-      this.propertiesContainer.add(cellContainer);
-
-      // Track for cleanup
-      this.propertyTexts.push(resourceIcon);
-      this.propertyTexts.push(nameText);
-      this.propertyTexts.push(amountText);
+      // Move down for next property
+      yOffset += 25;
     });
   }
 
@@ -1457,6 +1269,7 @@ export class DetailView {
         fontSize: "14px",
         color: "#ffffff",
         fontStyle: "bold",
+        fontFamily: DEFAULT_FONT,
       })
       .setOrigin(0.5);
 

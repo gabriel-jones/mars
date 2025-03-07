@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { Tool, ToolInventory } from "../entities/tools";
-import { TILE_SIZE } from "../constants";
+import { TILE_SIZE, DEFAULT_FONT } from "../constants";
 
 export class ToolInventoryDisplay {
   private scene: Phaser.Scene;
@@ -79,6 +79,7 @@ export class ToolInventoryDisplay {
           fontSize: "16px",
           color: "#FFFFFF",
           fontStyle: "bold",
+          fontFamily: DEFAULT_FONT,
         }
       );
       numberText.setScrollFactor(0);

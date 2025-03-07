@@ -1,5 +1,10 @@
 import * as Phaser from "phaser";
-import { TILE_SIZE, ROBOT_VELOCITY, DUST_COLOR } from "../../constants";
+import {
+  TILE_SIZE,
+  ROBOT_VELOCITY,
+  DUST_COLOR,
+  DEFAULT_FONT,
+} from "../../constants";
 import { ResourceNode } from "../resourceNode";
 import { DustEffects } from "../../effects/DustEffects";
 import { Agent } from "../Agent";
@@ -85,6 +90,7 @@ export abstract class Robot extends Agent {
           blur: 2,
           fill: true,
         },
+        fontFamily: DEFAULT_FONT,
       })
       .setOrigin(0.5);
     container.add(this.label);
@@ -104,6 +110,7 @@ export abstract class Robot extends Agent {
           blur: 2,
           fill: true,
         },
+        fontFamily: DEFAULT_FONT,
       })
       .setAlpha(0.75)
       .setOrigin(0.5);

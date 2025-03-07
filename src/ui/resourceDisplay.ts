@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { ResourceManager, ResourceType } from "../data/resources";
 import { gameState } from "../state";
+import { DEFAULT_FONT } from "../constants";
 
 const TOP_LEVEL_RESOURCES: ResourceType[] = [
   "energy",
@@ -59,6 +60,7 @@ export class ResourceDisplay {
         const emoji = this.scene.add
           .text(20, yPosition, resource.emoji, {
             fontSize: "20px",
+            fontFamily: DEFAULT_FONT,
           })
           .setOrigin(0, 0.5);
 
@@ -67,6 +69,7 @@ export class ResourceDisplay {
           .text(50, yPosition, `${resource.name}: 0`, {
             fontSize: "16px",
             color: "#ffffff",
+            fontFamily: DEFAULT_FONT,
           })
           .setOrigin(0, 0.5);
 
@@ -109,6 +112,7 @@ export class ResourceDisplay {
           fontSize: "16px",
           color: "#ffffff",
           fontStyle: "bold",
+          fontFamily: DEFAULT_FONT,
         })
         .setOrigin(0, 0.5);
 
@@ -117,6 +121,7 @@ export class ResourceDisplay {
         .text(180, 0, "+", {
           fontSize: "16px",
           color: "#ffffff",
+          fontFamily: DEFAULT_FONT,
         })
         .setOrigin(1, 0.5);
 
@@ -131,6 +136,7 @@ export class ResourceDisplay {
           const emoji = this.scene.add
             .text(20, resourceY, resource.emoji, {
               fontSize: "20px",
+              fontFamily: DEFAULT_FONT,
             })
             .setOrigin(0, 0.5)
             .setVisible(false); // Initially hidden
@@ -140,6 +146,7 @@ export class ResourceDisplay {
             .text(50, resourceY, `${resource.name}: 0`, {
               fontSize: "16px",
               color: "#ffffff",
+              fontFamily: DEFAULT_FONT,
             })
             .setOrigin(0, 0.5)
             .setVisible(false); // Initially hidden

@@ -2,13 +2,15 @@ import { ResourceNode } from "../resourceNode";
 import { ResourceType } from "../../data/resources";
 import { Blueprint } from "../buildings/Blueprint";
 import { GrowZone } from "../buildings/GrowZone";
+import { InventoryZone } from "../buildings/InventoryZone";
 
 // Define job types
 export enum JobType {
   MERGE_STACKS = "merge_stacks",
   WORK_MACHINE = "work_machine",
   BUILD = "build",
-  DELIVER_RESOURCE = "deliver_resource", // New job type for resource delivery
+  DELIVER_RESOURCE = "deliver_resource", // Deliver resource to a blueprint
+  DELIVER_TO_INVENTORY = "deliver_to_inventory", // Deliver resource to an inventory zone
   WATER_TILE = "water_tile", // Water a grow zone tile
   PLANT_SEED = "plant_seed", // Plant seeds in a grow zone tile
   HARVEST_CROP = "harvest_crop", // Harvest crops from a grow zone tile
@@ -32,6 +34,7 @@ export interface Job {
   // Additional properties for farming jobs
   growZone?: GrowZone;
   tileIndex?: number;
+  inventoryZone?: InventoryZone;
   // Add more properties as needed for different job types
 }
 
@@ -436,5 +439,62 @@ export class JobManager {
 
     console.log(`Job ${jobId} canceled successfully`);
     return true;
+  }
+
+  /**
+   * Create a job to deliver a resource to an inventory zone
+   * @param sourceNode The resource node to deliver
+   * @param inventoryZone The inventory zone to deliver to
+   * @returns The created job
+   */
+  public createDeliverToInventoryJob(
+    sourceNode: ResourceNode,
+    inventoryZone: InventoryZone
+  ): Job {
+    // Check if the inventory zone has space
+    if (!inventoryZone.hasSpace()) {
+      console.log("Inventory zone is full, cannot create delivery job");
+      // Create a dummy job that's already completed
+      const dummyJobId = `dummy_deliver_to_inventory_${this.nextJobId++}`;
+      const dummyJob: Job = {
+        id: dummyJobId,
+        type: JobType.DELIVER_TO_INVENTORY,
+        completed: true, // Already completed so it won't be assigned
+        workDuration: 0,
+      };
+      return dummyJob;
+    }
+
+    const jobId = `deliver_to_inventory_${this.nextJobId++}`;
+    const job: Job = {
+      id: jobId,
+      type: JobType.DELIVER_TO_INVENTORY,
+      sourceNode: sourceNode,
+      inventoryZone: inventoryZone,
+      position: new Phaser.Math.Vector2(inventoryZone.x, inventoryZone.y),
+      completed: false,
+      workDuration: 2000, // 2 seconds to deliver
+      resourceType: sourceNode.getResource().type,
+      resourceAmount: sourceNode.getAmount(),
+    };
+
+    this.jobs.set(jobId, job);
+    console.log(
+      `Created deliver to inventory job ${jobId} for ${job.resourceAmount} ${job.resourceType}`
+    );
+    return job;
+  }
+
+  /**
+   * Find all jobs for delivering resources to inventory zones
+   * @returns Array of inventory zone delivery jobs
+   */
+  public findInventoryDeliveryJobs(): Job[] {
+    return Array.from(this.jobs.values()).filter(
+      (job) =>
+        job.type === JobType.DELIVER_TO_INVENTORY &&
+        !job.completed &&
+        !job.assignedRobotId
+    );
   }
 }

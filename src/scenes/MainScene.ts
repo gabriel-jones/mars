@@ -1,11 +1,5 @@
 import * as Phaser from "phaser";
-import {
-  createPlayer,
-  setupControls,
-  updatePlayerMovement,
-  cleanupPlayerDustEffects,
-  Player,
-} from "../entities/player";
+import { createPlayer, setupControls, Player } from "../entities/player";
 import { createTileHighlight, updateTileHighlight } from "../ui/tileHighlight";
 import { gameState } from "../state";
 import { ActionMenu } from "../ui/actionMenu";
@@ -15,7 +9,6 @@ import { ResourceNode } from "../entities/resourceNode";
 import { RESOURCE_DEFINITIONS, ResourceType } from "../data/resources";
 import {
   NUM_INITIAL_ENEMIES,
-  NUM_INITIAL_OPTIMUS,
   TILE_SIZE,
   MAP_WIDTH,
   MAP_HEIGHT,
@@ -24,14 +17,13 @@ import { createFPS } from "../ui/fps";
 import { Starship } from "../entities/starship";
 import { Optimus, MiningDrone, Robot } from "../entities/robots";
 import { BuildingFactory } from "../entities/buildings";
-import { BuildingType } from "../data/buildings";
 import { Building } from "../entities/buildings/Building";
-import { JobManager, JobType, Job } from "../entities/robots/JobManager";
+import { JobManager } from "../entities/robots/JobManager";
 import { TerrainFeature, TerrainFeatureType } from "../entities/TerrainFeature";
 import { BuildingManager, Building as BuildingData } from "../data/buildings";
 import { ResourceManager } from "../data/resources";
 import { Blueprint } from "../entities/buildings/Blueprint";
-import { Enemy, Alien } from "../entities/enemies";
+import { Enemy } from "../entities/enemies";
 import { ToolInventoryDisplay } from "../ui/toolInventoryDisplay";
 import { DetailView } from "../ui/detailView";
 import { LandingPad } from "../entities/buildings/LandingPad";
@@ -120,6 +112,7 @@ export class MainScene extends Phaser.Scene {
     this.load.image("regolith-processor", "assets/regolith-processor.png");
     this.load.image("landing-pad", "assets/landing-pad.png");
     this.load.image("grow-zone", "assets/farm-dry.png");
+    this.load.image("inventory-zone", "assets/inventory-zone.png");
 
     // Grow Zone Textures
     this.load.image("farm-dry", "assets/farm-dry.png");
@@ -506,6 +499,12 @@ export class MainScene extends Phaser.Scene {
       this.robotManager.createResourceDeliveryJobs(
         this.resourceNodes,
         this.blueprints
+      );
+
+      // Also create inventory zone delivery jobs
+      this.robotManager.createInventoryZoneDeliveryJobs(
+        this.resourceNodes,
+        this.buildings
       );
     }
 

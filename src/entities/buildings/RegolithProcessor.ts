@@ -6,7 +6,7 @@ import {
   ResourceType,
 } from "../../data/resources";
 import { ResourceNode } from "../resourceNode";
-import { TILE_SIZE } from "../../constants";
+import { TILE_SIZE, DEFAULT_FONT } from "../../constants";
 
 export class RegolithProcessor extends Building {
   private processingText: Phaser.GameObjects.Text;
@@ -41,6 +41,7 @@ export class RegolithProcessor extends Building {
         fontSize: "12px",
         color: "#ffffff",
         // backgroundColor: "#000000",
+        fontFamily: DEFAULT_FONT,
       }
     );
     this.processingText.setOrigin(0.5, 0);

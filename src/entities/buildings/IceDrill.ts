@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { Building } from "./Building";
 import { TerrainFeatureType } from "../TerrainFeature";
 import { ResourceManager } from "../../data/resources";
+import { DEFAULT_FONT } from "../../constants";
 
 export class IceDrill extends Building {
   protected waterOutput: number;
@@ -43,6 +44,7 @@ export class IceDrill extends Building {
       color: "#ffffff",
       backgroundColor: "#000000",
       padding: { x: 3, y: 2 },
+      fontFamily: DEFAULT_FONT,
     });
     this.outputText.setOrigin(0.5);
     this.add(this.outputText);

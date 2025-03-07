@@ -13,6 +13,8 @@ import { LandingPad } from "./LandingPad";
 import { GrowZone } from "./GrowZone";
 import { Blueprint } from "./Blueprint";
 import { TILE_SIZE } from "../../constants";
+import { SolarPanel } from "./SolarPanel";
+import { InventoryZone } from "./InventoryZone";
 
 export class BuildingFactory {
   /**
@@ -119,8 +121,30 @@ export class BuildingFactory {
           "solar-panel",
           panelWidth,
           panelHeight,
-          false
+          hasInventory
         );
+
+      case "inventory-zone":
+        const inventoryWidth = options.width || tileWidth;
+        const inventoryHeight = options.height || tileHeight;
+        console.log(
+          `Creating InventoryZone with dimensions: ${inventoryWidth}x${inventoryHeight}`
+        );
+
+        // Create a new InventoryZone with the specified dimensions
+        const inventoryZone = new InventoryZone(
+          scene,
+          x,
+          y,
+          inventoryWidth,
+          inventoryHeight
+        );
+
+        console.log(
+          `Created InventoryZone at (${x}, ${y}) with dimensions ${inventoryWidth}x${inventoryHeight}`
+        );
+
+        return inventoryZone;
 
       default:
         // Create a generic building with the appropriate tile size and hasInventory

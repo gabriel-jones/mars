@@ -1,9 +1,11 @@
+import { DEFAULT_FONT } from "../constants";
+
 // Add this to your UI initialization function (likely createUI or similar)
 export function createFPS(scene: Phaser.Scene): Phaser.GameObjects.Text {
   // Create FPS text in top right corner
   const fpsText = scene.add
     .text(scene.cameras.main.width - 10, 10, "FPS: 0", {
-      fontFamily: "Arial",
+      fontFamily: DEFAULT_FONT,
       fontSize: "18px", // Slightly larger
       color: "#ffffff", // Yellow color for better visibility
     })

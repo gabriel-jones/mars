@@ -11,7 +11,7 @@ import {
   ResourceManager,
   RESOURCE_DEFINITIONS,
 } from "../../data/resources";
-import { TILE_SIZE } from "../../constants";
+import { TILE_SIZE, DEFAULT_FONT } from "../../constants";
 import { JobManager, JobType } from "../robots/JobManager";
 import { HasHealth } from "../../interfaces/Health";
 
@@ -115,6 +115,7 @@ export class Blueprint extends Building implements HasHealth {
         padding: { x: 5, y: 5 },
         stroke: "#000000",
         strokeThickness: 2,
+        fontFamily: DEFAULT_FONT,
       }
     );
     this.resourceText.setOrigin(0.5, 0);

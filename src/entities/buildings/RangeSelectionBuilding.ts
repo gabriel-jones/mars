@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { Building } from "./Building";
-import { TILE_SIZE } from "../../constants";
+import { TILE_SIZE, DEFAULT_FONT } from "../../constants";
 import { BuildingManager } from "../../data/buildings";
 import { BuildingType } from "../../data/buildings";
 
@@ -194,6 +194,7 @@ export abstract class RangeSelectionBuilding extends Building {
         fontSize: "10px",
         color: "#ffffff",
         backgroundColor: "#000000",
+        fontFamily: DEFAULT_FONT,
       });
       debugText.setOrigin(0.5);
       this.tilesContainer.add(debugText);

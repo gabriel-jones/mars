@@ -7,6 +7,7 @@ import { Blueprint } from "../buildings/Blueprint";
 import { TILE_SIZE } from "../../constants";
 import { HealthBarRenderer } from "../../interfaces/Health";
 import { GrowZone } from "../buildings/GrowZone";
+import { InventoryZone } from "../buildings/InventoryZone";
 
 // Optimus class - can perform tasks like a player
 export class Optimus extends Robot {
@@ -156,6 +157,80 @@ export class Optimus extends Robot {
       // The actual delivery will happen in update when we reach the target
       this.targetBlueprint = blueprint;
     });
+  }
+
+  /**
+   * Deliver a resource to an inventory zone
+   * @param inventoryZone The inventory zone to deliver to
+   */
+  public deliverResourceToInventoryZone(inventoryZone: InventoryZone): void {
+    // Add task to move to the inventory zone
+    this.addTask(() => {
+      this.moveToTarget(
+        new Phaser.Math.Vector2(inventoryZone.x, inventoryZone.y)
+      );
+    });
+
+    // Add task to deliver the resource
+    this.addTask(() => {
+      this.deliverResourceToInventory(inventoryZone);
+    });
+  }
+
+  /**
+   * Deliver the carried resource to an inventory zone
+   * @param inventoryZone The inventory zone to deliver to
+   */
+  private deliverResourceToInventory(inventoryZone: InventoryZone): void {
+    // Check if we have a resource to deliver
+    if (!this.resourceType || this.resourceAmount <= 0) {
+      console.log(
+        `Robot ${this.robotId} has no resource to deliver to inventory zone`
+      );
+      return;
+    }
+
+    // Create a temporary resource node to represent the carried resource
+    const tempNode = new ResourceNode(
+      this.scene,
+      this.container.x,
+      this.container.y,
+      ResourceManager.getResource(this.resourceType) || {
+        type: this.resourceType,
+        name: this.resourceType,
+        emoji: "📦",
+      },
+      this.resourceAmount
+    );
+
+    // Try to add the resource to the inventory zone
+    const success = inventoryZone.addResourceNode(tempNode);
+
+    if (success) {
+      console.log(
+        `Robot ${this.robotId} delivered ${this.resourceAmount} ${this.resourceType} to inventory zone`
+      );
+
+      // Clear the carried resource
+      this.resourceType = "" as ResourceType;
+      this.resourceAmount = 0;
+
+      // Update the label
+      if (this.label) {
+        this.label.setText(this.getRobotNameInternal());
+      }
+
+      // Set state back to idle
+      this.robotState = RobotState.IDLE;
+    } else {
+      console.log(
+        `Robot ${this.robotId} failed to deliver ${this.resourceAmount} ${this.resourceType} to inventory zone - no space`
+      );
+
+      // The temporary node will be destroyed automatically if it couldn't be added
+      // Set state back to idle
+      this.robotState = RobotState.IDLE;
+    }
   }
 
   // Look for available jobs
@@ -308,6 +383,18 @@ export class Optimus extends Robot {
                 closestJob.resourceType,
                 closestJob.resourceAmount
               );
+            }
+            break;
+
+          case JobType.DELIVER_TO_INVENTORY:
+            if (closestJob.sourceNode && closestJob.inventoryZone) {
+              console.log(
+                `Robot ${this.robotId} assigned to deliver to inventory job ${closestJob.id}`
+              );
+
+              // Add tasks to pick up the resource and deliver to inventory zone
+              this.pickupResourceNode(closestJob.sourceNode);
+              this.deliverResourceToInventoryZone(closestJob.inventoryZone);
             }
             break;
 
