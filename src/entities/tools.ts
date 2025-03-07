@@ -3,8 +3,36 @@ import Phaser from "phaser";
 // Enum for tool types
 export enum ToolType {
   ASSAULT_RIFLE = "assault-rifle",
+  RAYGUN = "raygun",
   // Add more tool types here as needed
 }
+
+// Weapon characteristics
+interface WeaponCharacteristics {
+  burstCount: number;
+  burstDelay: number;
+  burstCooldown: number;
+  damage: number;
+  imprecision: number;
+}
+
+// Define characteristics for each weapon type
+const WEAPON_CHARACTERISTICS: Record<ToolType, WeaponCharacteristics> = {
+  [ToolType.ASSAULT_RIFLE]: {
+    burstCount: 3,
+    burstDelay: 100,
+    burstCooldown: 800,
+    damage: 10,
+    imprecision: 20,
+  },
+  [ToolType.RAYGUN]: {
+    burstCount: 3,
+    burstDelay: 200,
+    burstCooldown: 3000,
+    damage: 15,
+    imprecision: 50,
+  },
+};
 
 // Tool class to represent a tool in the inventory
 export class Tool {
@@ -15,6 +43,15 @@ export class Tool {
   private laserDot: Phaser.GameObjects.Arc | null = null;
   private scene: Phaser.Scene | undefined;
 
+  // Burst fire properties
+  private burstCount: number = 0;
+  private maxBurstCount: number = 3;
+  private burstDelay: number = 100; // ms between shots in a burst
+  private burstCooldown: number = 500; // ms between bursts
+  private lastBurstTime: number = 0;
+  private lastFireTime: number = 0;
+  private characteristics: WeaponCharacteristics;
+
   constructor(
     type: ToolType,
     name: string,
@@ -24,6 +61,17 @@ export class Tool {
     this.type = type;
     this.name = name;
     this.scene = scene;
+
+    // Set weapon characteristics based on type
+    this.characteristics = WEAPON_CHARACTERISTICS[type];
+    this.maxBurstCount = this.characteristics.burstCount;
+    this.burstDelay = this.characteristics.burstDelay;
+    this.burstCooldown = this.characteristics.burstCooldown;
+
+    // Initialize with a random burst time
+    if (scene) {
+      this.lastBurstTime = scene.time.now - Math.random() * this.burstCooldown;
+    }
 
     // Create sprite if scene and textureKey are provided
     if (scene && textureKey) {
@@ -112,17 +160,25 @@ export class Tool {
   }
 
   // Show the tool sprite at the given position
-  public show(x: number, y: number): void {
+  public show(x: number, y: number, isPlayer: boolean = false): void {
     if (this.sprite) {
       this.sprite.setPosition(x, y);
       this.sprite.setVisible(true);
 
-      // Also show the laser pointer
-      if (this.laserLine) {
+      // Set a consistent scale for all entities
+      this.sprite.setScale(0.5);
+
+      // Only show the laser pointer for the player
+      if (this.laserLine && isPlayer) {
         this.laserLine.setVisible(true);
+      } else if (this.laserLine) {
+        this.laserLine.setVisible(false);
       }
-      if (this.laserDot) {
+
+      if (this.laserDot && isPlayer) {
         this.laserDot.setVisible(true);
+      } else if (this.laserDot) {
+        this.laserDot.setVisible(false);
       }
 
       console.log(`Showing tool: ${this.name} at position: ${x}, ${y}`);
@@ -155,8 +211,25 @@ export class Tool {
     startX: number,
     startY: number,
     targetX: number,
-    targetY: number
+    targetY: number,
+    isPlayer: boolean = false
   ): void {
+    // Create laser pointer components if they don't exist
+    if (!this.laserLine || !this.laserDot) {
+      // Only create visible laser pointers for the player
+      const alpha = isPlayer ? 0.3 : 0.0; // Invisible for non-players, but still functional
+
+      if (!this.laserLine && this.scene) {
+        this.laserLine = this.scene.add.line(0, 0, 0, 0, 0, 0, 0xff0000, alpha);
+        this.laserLine.setDepth(10);
+      }
+
+      if (!this.laserDot && this.scene) {
+        this.laserDot = this.scene.add.circle(0, 0, 3, 0xff0000, alpha);
+        this.laserDot.setDepth(10);
+      }
+    }
+
     if (this.laserLine && this.laserDot && this.sprite) {
       // Calculate the barrel position (slightly offset from the tool position)
       const barrelOffsetDistance = 30; // Increased from 25 to match the fire method
@@ -199,7 +272,14 @@ export class Tool {
   // Set the rotation of the tool sprite
   public setRotation(rotation: number): void {
     if (this.sprite) {
-      this.sprite.setRotation(rotation);
+      // If the sprite is flipped (facing left), adjust the rotation by 180 degrees
+      const isFlipped = this.sprite.flipX;
+      if (isFlipped) {
+        // When facing left, we need to rotate 180 degrees
+        this.sprite.setRotation(rotation + Math.PI);
+      } else {
+        this.sprite.setRotation(rotation);
+      }
     } else {
       console.warn(
         `Cannot set rotation for tool: ${this.name} - sprite is null`
@@ -225,8 +305,52 @@ export class Tool {
     }
   }
 
+  // Check if the weapon can fire (based on burst logic)
+  public canFire(currentTime: number): boolean {
+    // Check if we're in the middle of a burst
+    if (
+      this.burstCount > 0 &&
+      currentTime - this.lastFireTime >= this.burstDelay
+    ) {
+      return true;
+    }
+    // Check if we can start a new burst
+    else if (
+      this.burstCount === 0 &&
+      currentTime - this.lastBurstTime >= this.burstCooldown
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // Update burst state after firing
+  public updateBurstState(currentTime: number): void {
+    if (this.burstCount > 0) {
+      // Continue current burst
+      this.burstCount--;
+      this.lastFireTime = currentTime;
+    } else {
+      // Start new burst
+      this.burstCount = this.maxBurstCount - 1; // Subtract 1 because we're firing one shot now
+      this.lastBurstTime = currentTime;
+      this.lastFireTime = currentTime;
+    }
+  }
+
+  // Get the damage value for this weapon
+  public getDamage(): number {
+    return this.characteristics.damage;
+  }
+
+  // Get the imprecision factor for this weapon
+  public getImprecision(): number {
+    return this.characteristics.imprecision;
+  }
+
   // Fire the weapon
-  public fire(): void {
+  public fire(isPlayer: boolean = false): void {
     if (!this.sprite || !this.scene) return;
 
     // Get the barrel position
@@ -249,8 +373,23 @@ export class Tool {
     }
 
     // Get the target position (where the laser dot is)
-    const targetX = this.laserDot?.x || this.scene.input.activePointer.worldX;
-    const targetY = this.laserDot?.y || this.scene.input.activePointer.worldY;
+    let targetX, targetY;
+
+    if (this.laserDot) {
+      // Use the laser dot position if available
+      targetX = this.laserDot.x;
+      targetY = this.laserDot.y;
+    } else if (isPlayer) {
+      // Only use the player's cursor for player-controlled weapons
+      targetX = this.scene.input.activePointer.worldX;
+      targetY = this.scene.input.activePointer.worldY;
+    } else {
+      // For non-player entities without a laser dot, calculate target based on angle
+      // This ensures robots and enemies shoot in the direction they're facing
+      const targetDistance = 1000; // Far enough to be off-screen
+      targetX = barrelX + Math.cos(angle) * targetDistance;
+      targetY = barrelY + Math.sin(angle) * targetDistance;
+    }
 
     // Create muzzle flash effect first (so it's visible immediately)
     this.createMuzzleFlash(barrelX, barrelY, angle);
@@ -258,8 +397,8 @@ export class Tool {
     // Create a bullet
     this.createBullet(barrelX, barrelY, targetX, targetY);
 
-    // Add a screen shake effect for more impact
-    if (this.scene.cameras && this.scene.cameras.main) {
+    // Add a screen shake effect for more impact, but only for player
+    if (isPlayer && this.scene.cameras && this.scene.cameras.main) {
       this.scene.cameras.main.shake(50, 0.005);
     }
 
@@ -287,15 +426,69 @@ export class Tool {
     const velocityX = Math.cos(angle) * speed;
     const velocityY = Math.sin(angle) * speed;
 
-    // Create a bullet as a simple rectangle for better visibility
-    const bullet = this.scene.add.rectangle(
-      startX,
-      startY,
-      8, // bulletWidth
-      4, // bulletHeight
-      0xffff00
-    );
-    bullet.setRotation(angle);
+    // Create a bullet based on the tool type
+    let bullet: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Arc;
+    let bulletColor: number;
+    let bulletDamage: number = this.getDamage(); // Use the weapon's damage value
+
+    if (this.type === ToolType.RAYGUN) {
+      // Raygun creates a glowing energy ball
+      bullet = this.scene.add.circle(
+        startX,
+        startY,
+        6, // radius
+        0x00ffff, // cyan color
+        1
+      );
+      bulletColor = 0x00ffff;
+
+      // Add a glow effect
+      const glow = this.scene.add.circle(
+        startX,
+        startY,
+        12, // larger radius for glow
+        0x00ffff,
+        0.3
+      );
+      glow.setDepth(14); // Below the bullet
+
+      // Make the glow follow the bullet
+      const updateGlow = () => {
+        if (bullet.active) {
+          glow.setPosition(bullet.x, bullet.y);
+        } else {
+          glow.destroy();
+        }
+      };
+
+      // Add an update event for the glow
+      const glowUpdater = this.scene.time.addEvent({
+        delay: 16,
+        callback: updateGlow,
+        loop: true,
+      });
+
+      // Clean up the glow when the bullet is destroyed
+      const originalDestroy = bullet.destroy;
+      bullet.destroy = function () {
+        glow.destroy();
+        glowUpdater.destroy();
+        // Call the original destroy method with the correct context
+        return originalDestroy.call(this);
+      };
+    } else {
+      // Default assault rifle bullet
+      bullet = this.scene.add.rectangle(
+        startX,
+        startY,
+        8, // bulletWidth
+        4, // bulletHeight
+        0xffff00
+      );
+      bulletColor = 0xffff00;
+      bullet.setRotation(angle);
+    }
+
     bullet.setDepth(15);
 
     // Enable physics on the bullet
@@ -320,7 +513,7 @@ export class Tool {
 
     // Enable debug visualization to see the physics body
     body.debugShowBody = true;
-    body.debugBodyColor = 0xff0000;
+    body.debugBodyColor = bulletColor;
 
     // Add a visual debug rectangle to show the bullet's hitbox
     const debugRect = this.scene.add.rectangle(
@@ -328,7 +521,7 @@ export class Tool {
       bullet.y,
       16,
       16,
-      0xff0000,
+      bulletColor,
       0.3
     );
     debugRect.setDepth(20);
@@ -381,26 +574,160 @@ export class Tool {
     // Get enemies from gameState instead of searching through all scene children
     const gameState = (window as any).gameState;
     const enemies = gameState.enemies || [];
+    const player = gameState.player;
+    const robots = gameState.robots || [];
 
     console.log(
-      `Found ${enemies.length} enemies for bullet collision detection from gameState`
+      `Found ${enemies.length} enemies, ${
+        robots.length
+      } robots, and player: ${!!player} for bullet collision detection from gameState`
     );
 
-    // Set up collision with enemies
-    if (enemies.length > 0) {
-      console.log("Setting up bullet collision with enemies");
+    // Set up collision with enemies, player, and robots
+    const processOverlap = (): boolean => {
+      // Check if this is an enemy's bullet
+      const isEnemyBullet = this.name.toLowerCase().includes("raygun");
 
-      // Log enemy positions for debugging
-      enemies.forEach((enemy: any, index: number) => {
-        const enemySprite = enemy.getSprite();
-        console.log(
-          `Enemy ${index} position: (${enemySprite.x}, ${enemySprite.y}), active: ${enemySprite.active}`
-        );
-      });
+      if (isEnemyBullet) {
+        // Enemy bullets can hit the player and robots
 
-      // Use overlap instead of collider for more control
-      const processOverlap = (): boolean => {
-        // Check for overlap with each enemy
+        // Check for player collision
+        if (player && player.active && bullet.active) {
+          const bulletBounds = bullet.getBounds();
+          const playerBounds = player.getBounds();
+
+          if (Phaser.Geom.Rectangle.Overlaps(bulletBounds, playerBounds)) {
+            console.log(
+              `Bullet hit player at position: (${player.x}, ${player.y})`
+            );
+
+            // Destroy the bullet
+            bullet.destroy();
+            debugRect.destroy();
+            debugUpdater.destroy();
+
+            // Damage the player
+            const playerInstance = (window as any).gameState.playerInstance;
+            if (playerInstance && typeof playerInstance.damage === "function") {
+              playerInstance.damage(bulletDamage);
+              console.log(
+                `Successfully damaged player for ${bulletDamage} damage`
+              );
+            } else {
+              console.error("Damage method not found on player");
+            }
+
+            return true;
+          }
+        }
+
+        // Check for robot collisions
+        for (const robot of robots) {
+          if (
+            !robot ||
+            !robot.getSprite ||
+            typeof robot.getSprite !== "function"
+          ) {
+            console.log("Invalid robot object, skipping");
+            continue;
+          }
+
+          const robotSprite = robot.getSprite();
+          if (!robotSprite || !robotSprite.active || !bullet.active) {
+            console.log("Robot sprite inactive, skipping");
+            continue;
+          }
+
+          // Get the position of the robot sprite
+          let robotX, robotY;
+          let robotBounds;
+
+          if (robotSprite instanceof Phaser.GameObjects.Container) {
+            robotX = robotSprite.x;
+            robotY = robotSprite.y;
+            // Create a bounds object for the container
+            robotBounds = new Phaser.Geom.Rectangle(
+              robotX - 32, // Half the typical size
+              robotY - 32,
+              64, // Typical size
+              64
+            );
+          } else {
+            robotX = robotSprite.x;
+            robotY = robotSprite.y;
+            robotBounds = robotSprite.getBounds();
+          }
+
+          const bulletBounds = bullet.getBounds();
+
+          if (Phaser.Geom.Rectangle.Overlaps(bulletBounds, robotBounds)) {
+            console.log(`Bullet hit robot at position: (${robotX}, ${robotY})`);
+
+            // Destroy the bullet
+            bullet.destroy();
+            debugRect.destroy();
+            debugUpdater.destroy();
+
+            // Try multiple ways to damage the robot
+            let damageApplied = false;
+
+            // Method 1: Try direct damage method on robot
+            if (typeof robot.damage === "function") {
+              robot.damage(bulletDamage);
+              console.log(
+                `Successfully damaged robot directly for ${bulletDamage} damage`
+              );
+              damageApplied = true;
+            }
+            // Method 2: Try damage via robotInstance
+            else if (
+              robotSprite.robotInstance &&
+              typeof robotSprite.robotInstance.damage === "function"
+            ) {
+              robotSprite.robotInstance.damage(bulletDamage);
+              console.log(
+                `Successfully damaged robot via robotInstance for ${bulletDamage} damage`
+              );
+              damageApplied = true;
+            }
+            // Method 3: Try to access the robot instance from gameState
+            else {
+              // Find the matching robot in gameState
+              const gameStateRobots = (window as any).gameState.robots || [];
+              for (const stateRobot of gameStateRobots) {
+                if (
+                  stateRobot &&
+                  stateRobot.getSprite &&
+                  stateRobot.getSprite() === robotSprite
+                ) {
+                  if (typeof stateRobot.damage === "function") {
+                    stateRobot.damage(bulletDamage);
+                    console.log(
+                      `Successfully damaged robot via gameState for ${bulletDamage} damage`
+                    );
+                    damageApplied = true;
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (damageApplied) {
+              // Create blood effect
+              this.createBloodEffect(robotSprite);
+            } else {
+              console.error(
+                "Failed to damage robot - no valid damage method found"
+              );
+            }
+
+            return true;
+          }
+        }
+      } else {
+        // Player bullets can hit enemies
+
+        // Check for enemy collisions
         for (const enemy of enemies) {
           const enemySprite = enemy.getSprite();
 
@@ -423,123 +750,106 @@ export class Tool {
 
             // Damage the enemy
             if (typeof enemy.damage === "function") {
-              enemy.damage(10);
+              enemy.damage(bulletDamage);
               this.createBloodEffect(enemySprite);
-              console.log(`Successfully damaged enemy`);
+              console.log(
+                `Successfully damaged enemy for ${bulletDamage} damage`
+              );
             } else {
               console.error("Damage method not found on enemy");
             }
 
-            // We found and processed an overlap
             return true;
           }
         }
+      }
 
-        // No overlap found
-        return false;
-      };
+      // No overlap found
+      return false;
+    };
 
-      // Check for overlap every frame until bullet is destroyed
-      const overlapChecker = this.scene.time.addEvent({
-        delay: 16, // Check approximately every frame (60fps)
-        callback: () => {
-          if (!bullet.active) {
-            overlapChecker.destroy();
-            return;
-          }
+    // Check for overlap every frame until bullet is destroyed
+    const overlapChecker = this.scene.time.addEvent({
+      delay: 16, // Check approximately every frame (60fps)
+      callback: () => {
+        if (!bullet.active) {
+          overlapChecker.destroy();
+          return;
+        }
 
-          if (processOverlap()) {
-            overlapChecker.destroy();
-          }
-        },
-        loop: true,
-      });
-
-      console.log("Bullet-enemy overlap checker created successfully");
-    }
+        processOverlap();
+      },
+      loop: true,
+    });
   }
 
   // Create muzzle flash effect
   private createMuzzleFlash(x: number, y: number, angle: number): void {
     if (!this.scene) return;
 
-    console.log(`Creating muzzle flash at (${x}, ${y}) with angle ${angle}`);
+    // Different muzzle flash based on weapon type
+    let flashColor = 0xffff00; // Default yellow
+    let flashScale = 0.2;
 
-    // Create a more appropriately sized orange circle for the muzzle flash
-    const flash = this.scene.add.circle(x, y, 6, 0xffaa00, 1);
-    flash.setDepth(16);
-
-    // Add a simple animation to make it fade out
-    this.scene.tweens.add({
-      targets: flash,
-      alpha: 0,
-      scale: 1.5,
-      duration: 120,
-      onComplete: () => {
-        flash.destroy();
-      },
-    });
-
-    // Create a few particles
-    for (let i = 0; i < 6; i++) {
-      const particleAngle = angle + (Math.random() - 0.5) * 0.6; // Random angle within a cone
-      const particleSpeed = 50 + Math.random() * 50; // Random speed
-
-      // Start particles exactly at the muzzle position
-      const particleX = x;
-      const particleY = y;
-
-      const particle = this.scene.add.circle(
-        particleX,
-        particleY,
-        2,
-        0xffaa00,
-        0.9
-      );
-      particle.setDepth(15);
-
-      // Move the particle outward
-      this.scene.tweens.add({
-        targets: particle,
-        x: particleX + Math.cos(particleAngle) * particleSpeed,
-        y: particleY + Math.sin(particleAngle) * particleSpeed,
-        alpha: 0,
-        scale: 0.5,
-        duration: 120,
-        onComplete: () => {
-          particle.destroy();
-        },
-      });
+    if (this.type === ToolType.RAYGUN) {
+      flashColor = 0x00ffff; // Cyan for raygun
+      flashScale = 0.3; // Larger flash
     }
 
-    // Add a bright flash at the barrel (smaller)
-    const brightFlash = this.scene.add.circle(x, y, 8, 0xffffff, 0.7);
-    brightFlash.setDepth(17);
+    // Create a sprite for the muzzle flash
+    const muzzleFlash = this.scene.add.sprite(x, y, "flare");
+    muzzleFlash.setTint(flashColor);
+    muzzleFlash.setScale(flashScale);
+    muzzleFlash.setRotation(angle);
+    muzzleFlash.setDepth(25); // Above everything
 
-    // Make the bright flash disappear quickly
+    // Animate the muzzle flash
     this.scene.tweens.add({
-      targets: brightFlash,
+      targets: muzzleFlash,
       alpha: 0,
-      scale: 1.2,
-      duration: 60,
+      scale: flashScale * 1.5,
+      duration: 50,
       onComplete: () => {
-        brightFlash.destroy();
+        muzzleFlash.destroy();
       },
     });
   }
 
-  // Create blood effect when an enemy is hit
-  private createBloodEffect(enemy: Phaser.Physics.Arcade.Sprite): void {
+  // Create blood effect when an entity is hit
+  private createBloodEffect(
+    entity: Phaser.Physics.Arcade.Sprite | Phaser.GameObjects.Container
+  ): void {
     if (!this.scene) return;
 
-    // Determine if the enemy is a UFO (for green blood) or other enemy (red blood)
-    const isUFO = (enemy as any).enemyType === "ufo";
-    const bloodColor = isUFO ? 0x00ff00 : 0xff0000;
+    // Determine the entity type and set appropriate blood color
+    let bloodColor = 0xff0000; // Default red blood
+
+    // Check if it's an enemy
+    const isUFO = (entity as any).enemyType === "ufo";
+    if (isUFO) {
+      bloodColor = 0x00ff00; // Green for UFOs
+    }
+
+    // Check if it's a robot
+    const isRobot = (entity as any).robotType || (entity as any).robotInstance;
+    if (isRobot) {
+      bloodColor = 0x888888; // Gray/metallic for robots
+    }
+
+    // Get entity position
+    let x, y;
+    if (entity instanceof Phaser.GameObjects.Container) {
+      x = entity.x;
+      y = entity.y;
+    } else {
+      x = entity.x;
+      y = entity.y;
+    }
 
     // Create a particle emitter for the blood
     const particles = this.scene.add.particles(0, 0, "flare", {
-      x: enemy.x,
-      y: enemy.y,
+      x: x,
+      y: y,
       speed: { min: 50, max: 150 },
       angle: { min: 0, max: 360 },
       scale: { start: 0.2, end: 0 },
@@ -559,17 +869,27 @@ export class Tool {
     });
   }
 
-  // Clean up resources
+  // Destroy the tool and clean up resources
   public destroy(): void {
+    // Hide the tool first
+    this.hide();
+
+    // Destroy the sprite
     if (this.sprite) {
       this.sprite.destroy();
     }
+
+    // Destroy the laser line
     if (this.laserLine) {
       this.laserLine.destroy();
     }
+
+    // Destroy the laser dot
     if (this.laserDot) {
       this.laserDot.destroy();
     }
+
+    console.log(`Tool ${this.name} destroyed`);
   }
 }
 
@@ -657,8 +977,9 @@ export class ToolInventory {
 
   // Update the position of the selected tool
   public updateSelectedToolPosition(x: number, y: number): void {
-    if (this.selectedIndex !== -1 && this.tools[this.selectedIndex]) {
-      this.tools[this.selectedIndex]!.updatePosition(x, y);
+    const selectedTool = this.getSelectedTool();
+    if (selectedTool) {
+      selectedTool.show(x, y, true); // Pass true for isPlayer
     }
   }
 

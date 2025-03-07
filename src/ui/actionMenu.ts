@@ -32,6 +32,7 @@ export interface StarshipInfo {
   state: StarshipState;
   inventory: { [key in ResourceType]?: number };
   location: string;
+  robotsToDeliver: number;
 }
 
 // Define menu types
@@ -468,6 +469,11 @@ export class ActionMenu {
       return;
     }
 
+    // Clean up animations if starships panel was open
+    if (this.activeMenu === "starships") {
+      this.cleanupStarshipAnimations();
+    }
+
     // Close any open menu
     this.closeAllMenus();
 
@@ -493,10 +499,39 @@ export class ActionMenu {
     this.constructionPanel.setVisible(false);
     this.robotsPanel.setVisible(false);
     this.starshipsPanel.setVisible(false);
+
+    // Clean up animations if starships panel was open
+    if (this.activeMenu === "starships") {
+      this.cleanupStarshipAnimations();
+    }
+
     this.activeMenu = "none";
 
     // Reset button highlights
     this.resetButtonHighlights();
+  }
+
+  // Clean up starship animations to prevent memory leaks
+  private cleanupStarshipAnimations(): void {
+    // Find all tweens related to starship visualizations and stop them
+    const tweens = this.scene.tweens.getTweens();
+
+    for (const tween of tweens) {
+      // Check if the tween target is part of a starship visualization
+      const target = tween.targets[0] as any;
+      if (
+        target &&
+        ((target.name && target.name === "starship") ||
+          (target.name && target.name === "engine-flame") ||
+          (target.type &&
+            target.type === "Container" &&
+            target.name &&
+            target.name.includes("starship")))
+      ) {
+        tween.stop();
+        tween.remove();
+      }
+    }
   }
 
   // Highlight a button to show it's active
@@ -727,10 +762,10 @@ export class ActionMenu {
       const noStarshipsText = this.scene.add
         .text(0, 0, "No starships available", {
           fontSize: "18px",
-          color: "#cccccc",
+          color: "#ffffff",
+          fontStyle: "bold",
         })
-        .setOrigin(0.5);
-
+        .setOrigin(0.5, 0);
       contentContainer.add(noStarshipsText);
       return;
     }
@@ -739,41 +774,317 @@ export class ActionMenu {
     const listContainer = this.scene.add.container(0, 0);
     const panelWidth = 600;
     const panelHeight = 400;
+    const entryHeight = 80; // Reduced from 100 to 80
     const listY = -panelHeight / 2 + 70; // Start below the title
 
     // Add starship entries
     starships.forEach((starship, index) => {
-      const entryHeight = 80;
-      const entryY = listY + index * entryHeight;
+      const entryY = listY + index * (entryHeight + 10); // Reduced spacing between entries
 
       // Create entry background
       const entryBg = this.scene.add
-        .rectangle(0, entryY, panelWidth - 40, entryHeight - 10, 0x444444)
+        .rectangle(0, entryY, panelWidth - 40, entryHeight, 0x444444)
         .setOrigin(0.5, 0);
 
-      // Add starship image
+      // Create a container for the starship visualization - moved further left and made smaller
+      const shipContainer = this.scene.add.container(
+        -panelWidth / 2 + 40,
+        entryY + entryHeight / 2 - 10 // Move up to avoid overlap with orbital diagram
+      );
+      shipContainer.name = `starship-container-${index}`;
+      shipContainer.setScale(0.5); // Reduced from 0.7 to make it even smaller
+
+      // Create a separate container for the orbital diagram
+      const orbitContainer = this.scene.add.container(
+        -panelWidth / 2 + 40,
+        entryY + entryHeight / 2 + 15 // Position below the starship
+      );
+      orbitContainer.name = `orbit-container-${index}`;
+
+      // Add starship image with appropriate state-based styling
       const starshipImage = this.scene.add
-        .image(-panelWidth / 2 + 50, entryY + entryHeight / 2, "starship")
-        .setScale(0.4); // Use scale instead of display size to maintain aspect ratio
+        .image(0, 0, "starship")
+        .setScale(0.03)
+        .setOrigin(0.5, 0.5);
+      starshipImage.name = "starship";
 
-      // Add starship name
+      shipContainer.add(starshipImage);
+
+      // Add engine flame with proper size and position - coming from bottom of ship
+      const engineFlame = this.scene.add
+        .image(0, 15, "engine-flame")
+        .setScale(0.04)
+        .setOrigin(0.5, 0)
+        .setVisible(false);
+      engineFlame.name = "engine-flame";
+
+      shipContainer.add(engineFlame);
+
+      // Set up the starship visualization based on its state
+      let targetRotation = 0;
+      let flameVisible = false;
+      let flameScale = 0.06;
+      let flameAlpha = 0.8;
+      let flameX = 0;
+      let flameY = 20; // Position at bottom of ship
+      let startRotation = 0; // Starting rotation for animation
+      let endRotation = 0; // Ending rotation for animation
+      let shouldAnimate = false; // Flag to determine if we should animate
+
+      // Use string comparison for state to avoid TypeScript errors
+      const state = starship.state as unknown as string;
+
+      switch (state) {
+        case "mars_landed":
+          targetRotation = 0; // Vertical
+          flameVisible = false; // No flame when landed
+          break;
+
+        case "mars_takeoff":
+          startRotation = 0; // Start vertical (0 degrees)
+          endRotation = Math.PI / 2; // End horizontal (90 degrees)
+          targetRotation = startRotation; // Start at vertical position
+          flameVisible = true; // Flame visible during takeoff
+          flameScale = 0.08;
+          flameAlpha = 1;
+          shouldAnimate = true; // Enable animation
+          break;
+
+        case "mars_orbit":
+        case "earth_orbit":
+          targetRotation = Math.PI / 2; // 90 degrees (horizontal)
+          flameVisible = false; // No flame when in orbit
+          flameScale = 0.06;
+          flameAlpha = 0.9;
+          // Define position for consistency
+          flameX = -20; // Position at left side when horizontal
+          flameY = 0;
+          break;
+
+        case "mars_to_earth":
+        case "earth_to_mars":
+          targetRotation = Math.PI / 2; // Horizontal
+          flameVisible = true; // Flame visible during transfer
+          flameScale = 0.08;
+          flameAlpha = 1;
+          // Define position for consistency
+          flameX = -20; // Position at left side when horizontal
+          flameY = 0;
+          break;
+
+        case "mars_landing":
+          startRotation = Math.PI / 2; // Start horizontal (90 degrees)
+          endRotation = 0; // End vertical (0 degrees)
+          targetRotation = startRotation; // Start at horizontal position
+          flameVisible = true; // Flame visible during landing
+          flameScale = 0.08;
+          flameAlpha = 1;
+          shouldAnimate = true; // Enable animation
+          break;
+      }
+
+      // Apply initial rotation to starship - ONLY if we're not animating
+      if (!shouldAnimate) {
+        starshipImage.setRotation(targetRotation);
+      } else {
+        // For animation states, explicitly set the starting rotation
+        starshipImage.setRotation(startRotation);
+      }
+
+      // Helper function to calculate flame position based on rotation
+      const updateFlamePosition = (rotation: number) => {
+        // For vertical ship (0 degrees), flame is at bottom (0, 20)
+        // For horizontal ship (90 degrees), flame is at left (-20, 0)
+        // For angles in between, use trigonometry to position correctly
+
+        // Calculate the angle in radians (0 to PI/2)
+        const normalizedRotation = Math.min(Math.PI / 2, Math.max(0, rotation));
+
+        // Calculate flame position
+        const flameOffsetX = -Math.sin(normalizedRotation) * 20;
+        const flameOffsetY = Math.cos(normalizedRotation) * 20;
+
+        return { x: flameOffsetX, y: flameOffsetY };
+      };
+
+      // Update flame position based on ship rotation
+      if (state === "mars_landed") {
+        flameX = 0;
+        flameY = 20;
+      } else if (state === "mars_takeoff" || state === "mars_landing") {
+        const flamePos = updateFlamePosition(startRotation);
+        flameX = flamePos.x;
+        flameY = flamePos.y;
+      } else if (
+        state === "mars_orbit" ||
+        state === "earth_orbit" ||
+        state === "mars_to_earth" ||
+        state === "earth_to_mars"
+      ) {
+        flameX = -20;
+        flameY = 0;
+      }
+
+      // Set flame properties
+      engineFlame.setPosition(flameX, flameY);
+      engineFlame.setScale(flameScale);
+      engineFlame.setAlpha(flameAlpha);
+      engineFlame.setVisible(flameVisible);
+
+      // Add rotation animation for taking off and landing
+      if (shouldAnimate) {
+        console.log(
+          `Starting animation for ${state} from ${startRotation} to ${endRotation}`
+        );
+
+        // Animate rotation from start to end
+        this.scene.tweens.add({
+          targets: starshipImage,
+          rotation: { from: startRotation, to: endRotation },
+          duration: 3000, // 3 seconds for animation
+          ease: "Cubic.easeInOut",
+          repeat: 0, // Don't repeat - just animate once
+          yoyo: false, // Don't go back and forth
+          onUpdate: (tween) => {
+            // Update flame position and rotation to match ship rotation
+            const currentRotation = starshipImage.rotation;
+
+            // Calculate flame position using helper function
+            const flamePos = updateFlamePosition(currentRotation);
+            engineFlame.setPosition(flamePos.x, flamePos.y);
+
+            // Debug log to verify animation is running
+            if (Math.random() < 0.01) {
+              // Only log occasionally
+              console.log(
+                `Animation progress: ${tween.progress.toFixed(
+                  2
+                )}, rotation = ${currentRotation.toFixed(2)}`
+              );
+            }
+          },
+        });
+      }
+
+      // Add subtle animation to make the visualization more dynamic
+      if (flameVisible) {
+        // Animate the flame with more dramatic pulsing
+        this.scene.tweens.add({
+          targets: engineFlame,
+          scaleX: { from: flameScale * 0.8, to: flameScale * 1.3 },
+          scaleY: { from: flameScale * 0.8, to: flameScale * 1.3 },
+          alpha: { from: flameAlpha * 0.7, to: flameAlpha * 1.2 },
+          duration: 400,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.easeInOut",
+        });
+      }
+
+      // Add subtle hover animation to the starship
+      if (
+        state === "mars_orbit" ||
+        state === "earth_orbit" ||
+        state === "mars_to_earth" ||
+        state === "earth_to_mars"
+      ) {
+        this.scene.tweens.add({
+          targets: shipContainer,
+          y: shipContainer.y + 1,
+          duration: 1000,
+          ease: "Sine.easeInOut",
+          yoyo: true,
+          repeat: -1,
+        });
+      }
+
+      // Add orbit path visualization for flying state - in a separate container
+      if (
+        state === "mars_orbit" ||
+        state === "earth_orbit" ||
+        state === "mars_to_earth" ||
+        state === "earth_to_mars"
+      ) {
+        // Create a simplified orbit indicator instead of a full path
+        const orbitIndicator = this.scene.add.graphics();
+        orbitIndicator.lineStyle(2, 0x3498db, 0.8);
+
+        // Draw a simple arc to represent orbit
+        const orbitRadius = 20;
+        orbitIndicator.beginPath();
+        orbitIndicator.arc(0, 0, orbitRadius, 0, Math.PI, true);
+        orbitIndicator.strokePath();
+
+        // Add a dot to represent the planet (Mars or Earth)
+        let planetColor = 0xe67e22; // Default to Mars (orange)
+
+        // Determine if we're dealing with Earth or Mars
+        if (state === "earth_orbit" || state === "earth_to_mars") {
+          planetColor = 0x2ecc71; // Green for Earth
+        }
+
+        // Create a separate graphics object for the planet to ensure proper filling
+        const planetGraphics = this.scene.add.graphics();
+        planetGraphics.fillStyle(planetColor, 1);
+        planetGraphics.fillCircle(0, orbitRadius, 4);
+        planetGraphics.lineStyle(1, 0xffffff, 0.5);
+        planetGraphics.strokeCircle(0, orbitRadius, 4);
+        orbitContainer.add(planetGraphics);
+
+        // Add a position indicator dot on the orbit path
+        let orbitPosition = Math.PI * 0.5; // Default to middle
+
+        // Set position based on state
+        if (state === "mars_takeoff") {
+          orbitPosition = Math.PI * 0.8; // Near the start of the arc
+        } else if (state === "mars_to_earth") {
+          orbitPosition = Math.PI * 0.2; // Near the end of the arc (leaving Mars)
+        } else if (state === "earth_to_mars") {
+          orbitPosition = Math.PI * 0.8; // Near the start of the arc (leaving Earth)
+        } else if (state === "mars_landing") {
+          orbitPosition = Math.PI * 0.2; // Near the end of the arc
+        }
+
+        const posX = Math.cos(orbitPosition) * orbitRadius;
+        const posY = Math.sin(orbitPosition) * orbitRadius;
+
+        // Create a more visible position indicator with glow effect
+        const dotSize = 3;
+        const glowSize = 5;
+
+        // Add glow effect
+        const glowDot = this.scene.add.circle(
+          posX,
+          posY,
+          glowSize,
+          0xffffff,
+          0.3
+        );
+
+        // Add main position dot
+        const positionDot = this.scene.add.circle(
+          posX,
+          posY,
+          dotSize,
+          0xffffff,
+          1
+        );
+
+        orbitContainer.add(orbitIndicator);
+        orbitContainer.add(glowDot);
+        orbitContainer.add(positionDot);
+      }
+
+      // Add starship name and status on the same line to save space
       const starshipName = this.scene.add
-        .text(-panelWidth / 2 + 100, entryY + 20, starship.name, {
-          fontSize: "18px",
-          color: "#ffffff",
-          fontStyle: "bold",
-        })
-        .setOrigin(0, 0.5);
-
-      // Add starship status
-      const starshipStatus = this.scene.add
         .text(
-          -panelWidth / 2 + 100,
-          entryY + 45,
-          `Status: ${starship.state} (${starship.location})`,
+          -panelWidth / 2 + 100, // Moved from 80 to 100
+          entryY + 15,
+          `${starship.name} - ${starship.state} (${starship.location})`,
           {
-            fontSize: "14px",
-            color: "#cccccc",
+            fontSize: "16px",
+            color: "#ffffff",
+            fontStyle: "bold",
           }
         )
         .setOrigin(0, 0.5);
@@ -790,20 +1101,38 @@ export class ActionMenu {
 
       // Add inventory info
       const carryingText = this.scene.add
-        .text(-panelWidth / 2 + 100, entryY + 65, inventoryText, {
+        .text(-panelWidth / 2 + 100, entryY + 40, inventoryText, {
           fontSize: "14px",
           color: "#aaffaa",
-          wordWrap: { width: panelWidth - 150 },
+          wordWrap: { width: panelWidth - 140 }, // Adjusted for new position
         })
         .setOrigin(0, 0.5);
 
-      listContainer.add([
+      // Add robot delivery info
+      const robotDeliveryText = this.scene.add
+        .text(
+          -panelWidth / 2 + 100,
+          entryY + 65,
+          `Next delivery: ${starship.robotsToDeliver || 2} Optimus robots`,
+          {
+            fontSize: "14px",
+            color: "#00ffff",
+            wordWrap: { width: panelWidth - 140 }, // Adjusted for new position
+          }
+        )
+        .setOrigin(0, 0.5);
+
+      // Add all elements to the list container
+      const elements = [
         entryBg,
-        starshipImage,
+        shipContainer,
+        orbitContainer, // Add the orbit container separately
         starshipName,
-        starshipStatus,
         carryingText,
-      ]);
+        robotDeliveryText,
+      ];
+
+      listContainer.add(elements);
     });
 
     contentContainer.add(listContainer);
@@ -812,28 +1141,30 @@ export class ActionMenu {
   // Get all starships from landing pads
   private getStarships(): StarshipInfo[] {
     // Get all landing pads
-    const landingPads = BuildingManager.getBuildingsByType("landing-pad");
+    const mainScene = this.scene as any;
+    const landingPads = mainScene.buildings.filter(
+      (b: any) => b.getBuildingType && b.getBuildingType() === "landing-pad"
+    );
 
     // Get starships from landing pads
     const starships: StarshipInfo[] = [];
-
-    // Find all landing pad buildings in the scene
-    const buildings = this.scene.children.list.filter(
-      (child) => child instanceof LandingPad
-    ) as LandingPad[];
-
-    // For each landing pad, get the starship
-    buildings.forEach((landingPad, index) => {
-      const starship = landingPad.getStarship();
-      if (starship) {
-        starships.push({
-          id: index + 1,
-          name: `Starship ${index + 1}`,
-          type: "starship",
-          state: starship.getState(),
-          inventory: starship.getInventory(),
-          location: this.getStarshipLocation(starship),
-        });
+    landingPads.forEach((landingPad: any, index: number) => {
+      // For each landing pad, get the starship
+      if (landingPad.getStarship) {
+        const starship = landingPad.getStarship();
+        if (starship) {
+          starships.push({
+            id: index,
+            name: `Starship ${index + 1}`,
+            type: "starship",
+            state: starship.getState(),
+            inventory: starship.getInventory(),
+            location: this.getStarshipLocation(starship),
+            robotsToDeliver: starship.getRobotsToDeliver
+              ? starship.getRobotsToDeliver()
+              : 2, // Use getter method
+          });
+        }
       }
     });
 
@@ -842,16 +1173,22 @@ export class ActionMenu {
 
   // Get the location of a starship based on its state
   private getStarshipLocation(starship: Starship): string {
-    const state = starship.getState();
+    const state = starship.getState() as string;
 
     switch (state) {
-      case StarshipState.LANDED:
+      case "mars_landed":
         return "Mars Surface";
-      case StarshipState.TAKING_OFF:
+      case "mars_takeoff":
         return "Leaving Mars";
-      case StarshipState.FLYING:
-        return "In Transit";
-      case StarshipState.LANDING:
+      case "mars_orbit":
+        return "Mars Orbit";
+      case "mars_to_earth":
+        return "Mars → Earth";
+      case "earth_orbit":
+        return "Earth Orbit";
+      case "earth_to_mars":
+        return "Earth → Mars";
+      case "mars_landing":
         return "Approaching Mars";
       default:
         return "Unknown";

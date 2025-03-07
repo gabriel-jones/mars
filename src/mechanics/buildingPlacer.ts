@@ -607,34 +607,99 @@ export class BuildingPlacer {
     const worldX = this.map.tileToWorldX(startX)! + TILE_SIZE / 2;
     const worldY = this.map.tileToWorldY(startY)! + TILE_SIZE / 2;
 
-    // Create a new building record
-    const building: Building = {
-      type: this.selectedItem,
-      displayName: this.selectedBuildingDef.name,
-      position: {
-        x: startX,
-        y: startY,
-      },
-      size: {
-        width: width,
-        height: height,
-      },
-      placedAt: Date.now(),
-      isBlueprint: true, // Mark as blueprint
-    };
+    // Generate all tile positions for the habitat
+    const habitatTiles: { x: number; y: number }[] = [];
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        habitatTiles.push({ x: startX + x, y: startY + y });
+      }
+    }
 
-    // Add to building manager
-    BuildingManager.addBuilding(building);
-    console.log("Building blueprint added to BuildingManager");
+    // Check if we're adjacent to an existing habitat
+    let adjacentHabitat: Building | undefined;
+    for (const tile of habitatTiles) {
+      adjacentHabitat = BuildingManager.getAdjacentHabitat(tile.x, tile.y);
+      if (adjacentHabitat) {
+        break;
+      }
+    }
 
-    // Call the callback to handle the actual placement in the main scene
-    // We pass 'blueprint-' + this.selectedItem to indicate this is a blueprint
-    this.onItemPlaced("blueprint-" + this.selectedItem, worldX, worldY);
-    console.log("onItemPlaced callback called for blueprint");
+    if (adjacentHabitat && adjacentHabitat.habitatId) {
+      // We're expanding an existing habitat
+      console.log(`Expanding habitat ${adjacentHabitat.habitatId}`);
 
-    // Emit the event
-    this.scene.events.emit("habitatPlaced", { startX, startY, width, height });
-    console.log("habitatPlaced event emitted");
+      // Create a new building record for the expansion (as a blueprint)
+      const expansionBlueprint: Building = {
+        type: this.selectedItem,
+        displayName: this.selectedBuildingDef.name,
+        position: {
+          x: startX,
+          y: startY,
+        },
+        size: {
+          width: width,
+          height: height,
+        },
+        tiles: habitatTiles,
+        placedAt: Date.now(),
+        isBlueprint: true, // Mark as blueprint
+        habitatId: `expansion-${adjacentHabitat.habitatId}-${Date.now()}`,
+      };
+
+      // Add the expansion blueprint to the building manager
+      BuildingManager.addBuilding(expansionBlueprint);
+
+      // Call the callback to handle the actual placement in the main scene
+      this.onItemPlaced("blueprint-" + this.selectedItem, worldX, worldY);
+
+      // Emit the event for the expansion blueprint
+      this.scene.events.emit("habitatExpansionPlaced", {
+        startX,
+        startY,
+        width,
+        height,
+        expansionId: expansionBlueprint.habitatId,
+        targetHabitatId: adjacentHabitat.habitatId,
+        tiles: habitatTiles,
+      });
+
+      // We'll expand the habitat when the blueprint is completed
+    } else {
+      // Create a new building record
+      const building: Building = {
+        type: this.selectedItem,
+        displayName: this.selectedBuildingDef.name,
+        position: {
+          x: startX,
+          y: startY,
+        },
+        size: {
+          width: width,
+          height: height,
+        },
+        tiles: habitatTiles,
+        placedAt: Date.now(),
+        isBlueprint: true, // Mark as blueprint
+      };
+
+      // Add to building manager
+      BuildingManager.addBuilding(building);
+      console.log("Building blueprint added to BuildingManager");
+
+      // Call the callback to handle the actual placement in the main scene
+      // We pass 'blueprint-' + this.selectedItem to indicate this is a blueprint
+      this.onItemPlaced("blueprint-" + this.selectedItem, worldX, worldY);
+      console.log("onItemPlaced callback called for blueprint");
+
+      // Emit the event
+      this.scene.events.emit("habitatPlaced", {
+        startX,
+        startY,
+        width,
+        height,
+      });
+      console.log("habitatPlaced event emitted");
+    }
 
     // Clean up placement mode
     this.cancelPlacement();
@@ -957,49 +1022,113 @@ export class BuildingPlacer {
     // Handle click to remove building
     if (pointer.isDown && !this.pointerWasDown) {
       if (building) {
-        // Get the building's visual representation from the scene
-        const buildingSprites = this.scene.children.getAll().filter((obj) => {
-          // Check if it's a sprite or container at the building's position
-          if (
-            (obj instanceof Phaser.GameObjects.Sprite ||
-              obj instanceof Phaser.GameObjects.Container) &&
-            Math.abs(obj.x - building.position.x) < TILE_SIZE / 2 &&
-            Math.abs(obj.y - building.position.y) < TILE_SIZE / 2
-          ) {
-            return true;
+        // Check if this is a habitat
+        if (building.type === "habitat" && building.tiles) {
+          // For habitats, we just remove the specific tile
+          const updatedHabitat = BuildingManager.removeTileFromHabitat(
+            tileX,
+            tileY
+          );
+
+          // If the habitat was updated (not completely removed), we need to update its visual
+          if (updatedHabitat) {
+            // Emit an event that the scene can listen for to update the habitat visual
+            this.scene.events.emit("habitatUpdated", {
+              habitatId: updatedHabitat.habitatId,
+            });
+
+            // Show success message
+            const successText = this.scene.add
+              .text(
+                this.scene.cameras.main.width / 2,
+                100,
+                "Habitat tile removed!",
+                {
+                  fontSize: "24px",
+                  color: "#00ff00",
+                }
+              )
+              .setOrigin(0.5)
+              .setScrollFactor(0)
+              .setDepth(100);
+
+            // Fade out and destroy after 2 seconds
+            this.scene.tweens.add({
+              targets: successText,
+              alpha: 0,
+              duration: 1000,
+              delay: 1000,
+              onComplete: () => {
+                successText.destroy();
+              },
+            });
           }
-          return false;
-        });
+        } else {
+          // For other buildings, remove the entire building
+          // Get the building's visual representation from the scene
+          const buildingSprites = this.scene.children.getAll().filter((obj) => {
+            // Check if it's a sprite or container at the building's position
+            if (
+              obj instanceof Phaser.GameObjects.Sprite ||
+              obj instanceof Phaser.GameObjects.Container
+            ) {
+              // For buildings with world coordinates
+              if (building.type === "mining-station") {
+                return (
+                  Math.abs(obj.x - building.position.x) < TILE_SIZE / 2 &&
+                  Math.abs(obj.y - building.position.y) < TILE_SIZE / 2
+                );
+              }
 
-        // Remove all building sprites found
-        buildingSprites.forEach((sprite) => {
-          sprite.destroy();
-        });
+              // For buildings with tile coordinates
+              const worldX =
+                this.map.tileToWorldX(building.position.x)! + TILE_SIZE / 2;
+              const worldY =
+                this.map.tileToWorldY(building.position.y)! + TILE_SIZE / 2;
 
-        // Remove the building from the manager
-        const removedBuilding = BuildingManager.removeBuilding(tileX, tileY);
-
-        if (removedBuilding) {
-          // Show success message
-          const successText = this.scene.add
-            .text(this.scene.cameras.main.width / 2, 100, "Building removed!", {
-              fontSize: "24px",
-              color: "#00ff00",
-            })
-            .setOrigin(0.5)
-            .setScrollFactor(0)
-            .setDepth(100);
-
-          // Fade out and destroy after 2 seconds
-          this.scene.tweens.add({
-            targets: successText,
-            alpha: 0,
-            duration: 1000,
-            delay: 1000,
-            onComplete: () => {
-              successText.destroy();
-            },
+              return (
+                Math.abs(obj.x - worldX) < TILE_SIZE / 2 &&
+                Math.abs(obj.y - worldY) < TILE_SIZE / 2
+              );
+            }
+            return false;
           });
+
+          // Remove all building sprites found
+          buildingSprites.forEach((sprite) => {
+            sprite.destroy();
+          });
+
+          // Remove the building from the manager
+          const removedBuilding = BuildingManager.removeBuilding(tileX, tileY);
+
+          if (removedBuilding) {
+            // Show success message
+            const successText = this.scene.add
+              .text(
+                this.scene.cameras.main.width / 2,
+                100,
+                "Building removed!",
+                {
+                  fontSize: "24px",
+                  color: "#00ff00",
+                }
+              )
+              .setOrigin(0.5)
+              .setScrollFactor(0)
+              .setDepth(100);
+
+            // Fade out and destroy after 2 seconds
+            this.scene.tweens.add({
+              targets: successText,
+              alpha: 0,
+              duration: 1000,
+              delay: 1000,
+              onComplete: () => {
+                successText.destroy();
+              },
+            });
+          }
         }
       }
     }

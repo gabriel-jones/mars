@@ -43,6 +43,7 @@ export interface BuildMenuItem {
     onlyOn?: TerrainFeatureType[];
   };
   buildEffort?: number; // Time in ms needed to build this building
+  hasInventory?: boolean; // Whether this building type can have inventory
 }
 
 // Define the building definitions
@@ -57,6 +58,7 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     placementType: PlacementType.RangeSelect,
     locationType: LocationType.Outside,
     buildEffort: 10000, // 10 seconds to build
+    hasInventory: true, // Habitats can store resources
   },
   {
     buildingType: "solar-panel",
@@ -68,6 +70,7 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     placementType: PlacementType.RangeSelect,
     locationType: LocationType.Outside,
     buildEffort: 5000, // 5 seconds to build
+    hasInventory: false,
   },
   {
     buildingType: "mining-station",
@@ -76,6 +79,7 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     placementType: PlacementType.SingleTile,
     locationType: LocationType.Outside,
     buildEffort: 8000, // 8 seconds to build
+    hasInventory: true, // Mining stations can store resources
   },
   {
     buildingType: "ice-drill",
@@ -90,6 +94,7 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
       onlyOn: [TerrainFeatureType.IceDeposit],
     },
     buildEffort: 12000, // 12 seconds to build
+    hasInventory: true, // Ice drills can store resources
   },
   {
     buildingType: "regolith-processor",
@@ -105,15 +110,14 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     placementType: PlacementType.SingleTile,
     locationType: LocationType.Outside,
     buildEffort: 15000, // 15 seconds to build
+    hasInventory: true, // Regolith processors can store resources
   },
   {
     buildingType: "landing-pad",
-    name: "Starship Landing Pad",
+    name: "Landing Pad",
     cost: [
-      { type: "iron", amount: 200 },
-      { type: "titanium", amount: 100 },
-      { type: "silicon", amount: 150 },
-      { type: "aluminium", amount: 75 },
+      { type: "iron", amount: 100 },
+      { type: "titanium", amount: 25 },
     ],
     tileSize: {
       width: 4,
@@ -121,7 +125,8 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     },
     placementType: PlacementType.SingleTile,
     locationType: LocationType.Outside,
-    buildEffort: 30000, // 30 seconds to build
+    buildEffort: 20000, // 20 seconds to build
+    hasInventory: true, // Landing pads can store resources (via starship)
   },
 ];
 
@@ -150,6 +155,8 @@ export interface Building {
   tileWidth?: number; // Width in tiles
   tileHeight?: number; // Height in tiles
   isBlueprint?: boolean; // Whether this is a blueprint or a completed building
+  inventory?: { [key in ResourceType]?: number }; // Optional inventory for buildings
+  hasInventory?: boolean; // Flag to indicate if this building type can have inventory
 }
 
 // Store for all placed buildings
@@ -264,10 +271,97 @@ export class BuildingManager {
     // Add new tiles to the habitat
     habitat.tiles.push(...newTiles);
 
+    // Check if this expansion connects with any other habitats
+    // If so, merge them
+    this.checkAndMergeHabitats(habitat);
+
     console.log(
       `Habitat ${habitatId} expanded with ${newTiles.length} new tiles. Total: ${habitat.tiles.length} tiles`
     );
     return true;
+  }
+
+  /**
+   * Checks if a habitat overlaps with any other habitats and merges them if needed
+   * @param habitat The habitat to check for merges
+   */
+  static checkAndMergeHabitats(habitat: Building): void {
+    if (!habitat || habitat.type !== "habitat" || !habitat.tiles) {
+      return;
+    }
+
+    // Create a set of all tile positions in this habitat for quick lookup
+    const habitatTileSet = new Set(habitat.tiles.map((t) => `${t.x},${t.y}`));
+
+    // Find all other habitats that might be adjacent to this one
+    const adjacentHabitats = this.buildings.filter(
+      (b) =>
+        b !== habitat &&
+        b.type === "habitat" &&
+        b.tiles &&
+        b.habitatId !== habitat.habitatId
+    );
+
+    // Track habitats that need to be merged
+    const habitatsToMerge: Building[] = [];
+
+    // Check each habitat for adjacency
+    for (const otherHabitat of adjacentHabitats) {
+      // Check if any tile in the other habitat is adjacent to any tile in this habitat
+      const isAdjacent = otherHabitat.tiles!.some((otherTile) => {
+        // Check if this tile is adjacent to any tile in our habitat
+        return habitat.tiles!.some(
+          (tile) =>
+            // Check all 4 adjacent positions
+            (Math.abs(tile.x - otherTile.x) === 1 && tile.y === otherTile.y) ||
+            (Math.abs(tile.y - otherTile.y) === 1 && tile.x === otherTile.x)
+        );
+      });
+
+      if (isAdjacent) {
+        habitatsToMerge.push(otherHabitat);
+      }
+    }
+
+    // If we found habitats to merge
+    if (habitatsToMerge.length > 0) {
+      console.log(
+        `Merging ${habitatsToMerge.length} habitats with ${habitat.habitatId}`
+      );
+
+      // Merge all the habitats into this one
+      for (const otherHabitat of habitatsToMerge) {
+        // Add all tiles from the other habitat to this one
+        habitat.tiles.push(...otherHabitat.tiles!);
+
+        // Remove the other habitat from the buildings array
+        const index = this.buildings.findIndex((b) => b === otherHabitat);
+        if (index !== -1) {
+          this.buildings.splice(index, 1);
+        }
+
+        // Emit an event that can be caught by the scene to update visuals
+        if (typeof window !== "undefined") {
+          const event = new CustomEvent("habitatMerged", {
+            detail: {
+              primaryHabitatId: habitat.habitatId,
+              mergedHabitatId: otherHabitat.habitatId,
+            },
+          });
+          window.dispatchEvent(event);
+        }
+      }
+
+      // Remove duplicate tiles
+      habitat.tiles = Array.from(
+        new Map(
+          habitat.tiles.map((tile) => [`${tile.x},${tile.y}`, tile])
+        ).values()
+      );
+
+      // Update gameState.buildings to keep it in sync
+      gameState.buildings = this.buildings;
+    }
   }
 
   // Check if a mining area would overlap with existing mining stations
@@ -361,5 +455,167 @@ export class BuildingManager {
     }
 
     return undefined;
+  }
+
+  /**
+   * Removes a tile from a habitat
+   * @param x The x coordinate of the tile to remove
+   * @param y The y coordinate of the tile to remove
+   * @returns The updated habitat or undefined if no habitat was found
+   */
+  static removeTileFromHabitat(x: number, y: number): Building | undefined {
+    // Find the habitat that contains this tile
+    const habitat = this.buildings.find(
+      (building) =>
+        building.type === "habitat" &&
+        building.tiles &&
+        building.tiles.some((tile) => tile.x === x && tile.y === y)
+    );
+
+    if (!habitat || !habitat.tiles) {
+      return undefined;
+    }
+
+    // Remove the tile from the habitat
+    habitat.tiles = habitat.tiles.filter(
+      (tile) => !(tile.x === x && tile.y === y)
+    );
+
+    // If the habitat is now empty, remove it entirely
+    if (habitat.tiles.length === 0) {
+      this.removeBuilding(habitat.position.x, habitat.position.y);
+      return undefined;
+    }
+
+    // Check if removing this tile has split the habitat into disconnected parts
+    const connectedGroups = this.findConnectedTileGroups(habitat.tiles);
+
+    if (connectedGroups.length > 1) {
+      // The habitat has been split into multiple disconnected parts
+      console.log(
+        `Habitat ${habitat.habitatId} split into ${connectedGroups.length} parts`
+      );
+
+      // Keep the first group in the original habitat
+      habitat.tiles = connectedGroups[0];
+
+      // Create new habitats for the other groups
+      for (let i = 1; i < connectedGroups.length; i++) {
+        const newHabitatTiles = connectedGroups[i];
+
+        // Calculate the position for the new habitat (center of the tiles)
+        const avgX = Math.floor(
+          newHabitatTiles.reduce((sum, tile) => sum + tile.x, 0) /
+            newHabitatTiles.length
+        );
+        const avgY = Math.floor(
+          newHabitatTiles.reduce((sum, tile) => sum + tile.y, 0) /
+            newHabitatTiles.length
+        );
+
+        // Create a new habitat
+        const newHabitat: Building = {
+          type: "habitat",
+          displayName: "Habitat",
+          position: {
+            x: avgX,
+            y: avgY,
+          },
+          placedAt: Date.now(),
+          habitatId: `habitat-${this.nextHabitatId++}`,
+          tiles: newHabitatTiles,
+        };
+
+        // Add the new habitat
+        this.addBuilding(newHabitat);
+
+        // Emit an event that can be caught by the scene to update visuals
+        if (typeof window !== "undefined") {
+          const event = new CustomEvent("habitatSplit", {
+            detail: {
+              originalHabitatId: habitat.habitatId,
+              newHabitatId: newHabitat.habitatId,
+            },
+          });
+          window.dispatchEvent(event);
+        }
+      }
+    }
+
+    // Update gameState.buildings to keep it in sync
+    gameState.buildings = this.buildings;
+
+    return habitat;
+  }
+
+  /**
+   * Finds groups of connected tiles in a habitat
+   * @param tiles The tiles to check
+   * @returns An array of connected tile groups
+   */
+  private static findConnectedTileGroups(
+    tiles: { x: number; y: number }[]
+  ): { x: number; y: number }[][] {
+    if (!tiles || tiles.length === 0) {
+      return [];
+    }
+
+    // Create a set of all tile positions for quick lookup
+    const tileSet = new Set(tiles.map((t) => `${t.x},${t.y}`));
+
+    // Create a set to track visited tiles
+    const visited = new Set<string>();
+
+    // Array to hold all connected groups
+    const groups: { x: number; y: number }[][] = [];
+
+    // For each tile, if not visited, start a new connected group
+    for (const tile of tiles) {
+      const tileKey = `${tile.x},${tile.y}`;
+
+      if (!visited.has(tileKey)) {
+        // Start a new group with this tile
+        const group: { x: number; y: number }[] = [];
+
+        // Use a queue for breadth-first search
+        const queue: { x: number; y: number }[] = [tile];
+
+        while (queue.length > 0) {
+          const currentTile = queue.shift()!;
+          const currentKey = `${currentTile.x},${currentTile.y}`;
+
+          // Skip if already visited
+          if (visited.has(currentKey)) {
+            continue;
+          }
+
+          // Mark as visited and add to current group
+          visited.add(currentKey);
+          group.push(currentTile);
+
+          // Check all 4 adjacent tiles
+          const adjacentPositions = [
+            { x: currentTile.x + 1, y: currentTile.y },
+            { x: currentTile.x - 1, y: currentTile.y },
+            { x: currentTile.x, y: currentTile.y + 1 },
+            { x: currentTile.x, y: currentTile.y - 1 },
+          ];
+
+          for (const pos of adjacentPositions) {
+            const posKey = `${pos.x},${pos.y}`;
+
+            // If this adjacent position is in our tile set and not visited, add to queue
+            if (tileSet.has(posKey) && !visited.has(posKey)) {
+              queue.push(pos);
+            }
+          }
+        }
+
+        // Add this connected group to our groups array
+        groups.push(group);
+      }
+    }
+
+    return groups;
   }
 }

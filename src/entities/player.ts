@@ -2,7 +2,8 @@ import Phaser from "phaser";
 import { DUST_COLOR, PLAYER_VELOCITY } from "../constants";
 import { DustEffects } from "../effects/DustEffects";
 import { Agent } from "./Agent";
-import { ToolInventory } from "./tools";
+import { ToolInventory, Tool, ToolType } from "./tools";
+import { HealthBarRenderer } from "../interfaces/Health";
 
 // Player class that extends Agent
 export class Player extends Agent {
@@ -10,8 +11,6 @@ export class Player extends Agent {
   private toolKeys: Phaser.Input.Keyboard.Key[] = [];
   private fireKey: Phaser.Input.Keyboard.Key;
   private escKey: Phaser.Input.Keyboard.Key;
-  private lastFireTime: number = 0;
-  private fireRate: number = 150; // milliseconds between shots
   private lastSelectedToolIndex: number = -1; // Track the last selected tool index
 
   constructor(
@@ -30,54 +29,48 @@ export class Player extends Agent {
     // Call the parent constructor
     super(scene, sprite, maxHealth);
 
-    // Initialize tool inventory
+    // Create tool inventory
     this.toolInventory = new ToolInventory(scene);
-    console.log("Player tool inventory initialized:", this.toolInventory);
-    console.log("Tools in inventory:", this.toolInventory.getAllTools());
 
-    // Initialize tool selection keys (1, 2, 3)
+    // Set up keyboard input for tool selection (1-3 keys)
     this.toolKeys = [
       scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
       scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
       scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.THREE),
     ];
 
-    // Initialize fire key (space)
+    // Set up fire key (spacebar)
     this.fireKey = scene.input.keyboard!.addKey(
       Phaser.Input.Keyboard.KeyCodes.SPACE
     );
 
-    // Initialize ESC key
+    // Set up escape key
     this.escKey = scene.input.keyboard!.addKey(
       Phaser.Input.Keyboard.KeyCodes.ESC
     );
-
-    // Set up mouse input for firing
-    scene.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      if (pointer.leftButtonDown()) {
-        console.log("Mouse left button clicked, attempting to fire");
-        this.tryToFire();
-      }
-    });
-
-    console.log("Player created with tool inventory and keys");
 
     // Initialize dust effects
     this.initDustEffects({
       dustColor: DUST_COLOR,
       dustSize: 5,
       dustAlpha: 0.6,
-      dustCount: 12,
-      dustInterval: 70,
-      dustLifetime: 1000,
+      dustCount: 10,
+      dustInterval: 80,
+      dustLifetime: 900,
       movementDustColor: DUST_COLOR,
       movementDustSize: 4,
       movementDustAlpha: 0.7,
-      movementDustCount: 10,
+      movementDustCount: 8,
     });
 
     // Initialize shadow effects
     this.initShadowEffects();
+
+    // Initialize shield for player (blue shield)
+    this.initShield(50, 0x0088ff);
+
+    // Store a reference to the player instance in gameState for bullet collision detection
+    (window as any).gameState.playerInstance = this;
   }
 
   // Get the tool inventory
@@ -87,23 +80,17 @@ export class Player extends Agent {
 
   // Try to fire the currently selected weapon
   private tryToFire(): void {
-    const currentTime = this.scene.time.now;
     const selectedTool = this.toolInventory.getSelectedTool();
-
-    console.log("Attempting to fire weapon...");
-    console.log("Selected tool:", selectedTool?.name);
-    console.log("Time since last fire:", currentTime - this.lastFireTime, "ms");
-
-    // Check if we can fire (has a tool, and fire rate cooldown has passed)
-    if (selectedTool && currentTime - this.lastFireTime >= this.fireRate) {
-      console.log("Firing weapon:", selectedTool.name);
-      selectedTool.fire();
-      this.lastFireTime = currentTime;
-    } else if (!selectedTool) {
-      console.log("No tool selected, cannot fire");
-    } else {
-      console.log("Fire rate cooldown not passed yet");
+    if (!selectedTool) {
+      return;
     }
+
+    // Get the target position (mouse pointer)
+    const targetX = this.scene.input.activePointer.worldX;
+    const targetY = this.scene.input.activePointer.worldY;
+
+    // Fire the tool using the Agent's fireTool method with isPlayer=true
+    this.fireTool(targetX, targetY, true);
   }
 
   // Update the player
@@ -115,41 +102,28 @@ export class Player extends Agent {
     const cursors = gameState.cursors;
     const wasdKeys = gameState.wasdKeys;
 
-    if (cursors && wasdKeys) {
-      // Update player movement
-      this.updateMovement(cursors, wasdKeys);
-    }
-
-    // Update tool selection
-    this.updateToolSelection();
-
-    // Update cursor based on selected tool
-    this.updateCursor();
-
-    // Update selected tool position
-    this.updateSelectedToolPosition();
-
-    // Check for firing input (space key)
-    if (this.fireKey.isDown) {
-      this.tryToFire();
-    }
-
-    // Check for ESC key to deselect tool
-    if (Phaser.Input.Keyboard.JustDown(this.escKey)) {
-      console.log("ESC key pressed, deselecting tool");
-      this.toolInventory.deselectTool();
-      this.lastSelectedToolIndex = -1;
-      this.scene.input.setDefaultCursor("default");
-
-      // Emit an event to notify the DetailView to clear selection
-      this.scene.events.emit("tool:deselected");
-    }
+    // Update with controls
+    this.updateWithControls(time, delta, cursors, wasdKeys);
 
     // Update dust effects
     this.updateDustEffects(time);
 
     // Update shadow effects
     this.updateShadowEffects();
+
+    // Update health bar position
+    this.updateHealthBarPosition();
+
+    // Update shield position
+    this.updateShieldPosition();
+
+    // Update cursor based on what's under the mouse
+    this.updateCursor();
+
+    // Slowly recharge shield over time (1 point per second)
+    if (this.hasShield() && this.getCurrentShield() < this.getMaxShield()) {
+      this.rechargeShield(delta / 1000); // Convert delta (ms) to seconds
+    }
   }
 
   // Update player with explicit controls (for backward compatibility)
@@ -174,6 +148,17 @@ export class Player extends Agent {
 
     // Update selected tool position
     this.updateSelectedToolPosition();
+
+    // Check if fire key is pressed or mouse is clicked
+    if (this.fireKey.isDown || this.scene.input.activePointer.isDown) {
+      this.tryToFire();
+    }
+
+    // Check if escape key is pressed to deselect tool
+    if (Phaser.Input.Keyboard.JustDown(this.escKey)) {
+      this.toolInventory.deselectTool();
+      this.lastSelectedToolIndex = -1;
+    }
 
     // Update dust effects
     this.updateDustEffects(time);
@@ -216,68 +201,40 @@ export class Player extends Agent {
   // Update the position of the selected tool
   private updateSelectedToolPosition(): void {
     const selectedTool = this.toolInventory.getSelectedTool();
-    if (selectedTool) {
-      // Get the mouse position in world coordinates
-      const worldPoint = this.scene.input.activePointer.positionToCamera(
-        this.scene.cameras.main
-      ) as Phaser.Math.Vector2;
+    if (!selectedTool) return;
 
-      // Calculate the angle between player and mouse pointer
-      const angle = Phaser.Math.Angle.Between(
-        this.sprite.x,
-        this.sprite.y,
-        worldPoint.x,
-        worldPoint.y
-      );
+    const spriteX = (this.sprite as Phaser.Physics.Arcade.Sprite).x;
+    const spriteY = (this.sprite as Phaser.Physics.Arcade.Sprite).y;
 
-      // Determine if the weapon should be flipped (pointing left)
-      // Angle is in radians: -π to π, where 0 is right, π/-π is left
-      // We flip when pointing to the left half (angle > π/2 or angle < -π/2)
-      const shouldFlip = angle > Math.PI / 2 || angle < -Math.PI / 2;
+    // Show the tool at the player's position
+    selectedTool.show(spriteX, spriteY, true);
 
-      // When flipped, we need to adjust the rotation angle
-      // For a flipped sprite, we want to use the mirrored angle
-      let adjustedAngle = angle;
-      if (shouldFlip) {
-        // When flipped, we need to invert the angle
-        // This keeps the gun pointing in the right direction when flipped
-        adjustedAngle = angle - Math.PI;
-      }
+    // Calculate angle to mouse pointer
+    const pointer = this.scene.input.activePointer;
+    const angle = Phaser.Math.Angle.Between(
+      spriteX,
+      spriteY,
+      pointer.worldX,
+      pointer.worldY
+    );
 
-      // Calculate position offset in the direction of the mouse
-      const offsetDistance = 30; // Distance from player center
-      const x = this.sprite.x + Math.cos(angle) * offsetDistance;
-      const y = this.sprite.y + Math.sin(angle) * offsetDistance;
+    // Update tool rotation to face the mouse pointer
+    selectedTool.setRotation(angle);
 
-      // Show the tool at the calculated position
-      selectedTool.show(x, y);
+    // Flip the tool sprite if facing left
+    selectedTool.setFlipX(Math.abs(angle) > Math.PI / 2);
 
-      // Set the tool to face in the direction of the mouse with adjusted angle
-      selectedTool.setRotation(adjustedAngle);
+    // Update the laser pointer
+    selectedTool.updateLaserPointer(
+      spriteX,
+      spriteY,
+      pointer.worldX,
+      pointer.worldY,
+      true
+    );
 
-      // Flip the sprite horizontally if pointing left
-      selectedTool.setFlipX(shouldFlip);
-
-      // Make the tool half the size
-      selectedTool.setScale(0.5);
-
-      // Update the laser pointer
-      selectedTool.updateLaserPointer(x, y, worldPoint.x, worldPoint.y);
-
-      // Log the tool position occasionally for debugging
-      if (Math.random() < 0.01) {
-        // Log approximately once every 100 frames
-        console.log(
-          `Tool position: ${x}, ${y}, Player position: ${this.sprite.x}, ${
-            this.sprite.y
-          }, Angle: ${Phaser.Math.RadToDeg(
-            angle
-          )}, Adjusted Angle: ${Phaser.Math.RadToDeg(
-            adjustedAngle
-          )}, Flipped: ${shouldFlip}`
-        );
-      }
-    }
+    // Also update the equipped tool in the Agent class
+    this.equipTool(selectedTool);
   }
 
   // Update player movement
@@ -326,26 +283,55 @@ export class Player extends Agent {
     }
   }
 
-  // Handle death
+  // Handle player death
   protected onDeath(): void {
-    console.log("Player has died!");
+    // Clean up shield effect directly instead of calling super
+    this.cleanupShieldEffect();
 
-    // Stop dust effects
-    if (this.dustEffects) {
-      this.dustEffects.stop();
-      this.dustEffects.stopMovementDust();
+    console.log("Player died!");
+
+    // Show destruction effect
+    this.showDestructionEffect();
+
+    // Disable player controls
+    if (this.sprite instanceof Phaser.Physics.Arcade.Sprite) {
+      this.sprite.setVelocity(0, 0);
+      this.sprite.setActive(false);
     }
 
-    // Clean up shadow effects
-    this.cleanupShadowEffects();
+    // Hide the player sprite
+    this.sprite.setVisible(false);
 
-    // Hide any selected tool
-    this.toolInventory.deselectTool();
+    // Trigger game over after a delay
+    this.scene.time.delayedCall(1000, () => {
+      // Show game over screen
+      this.scene.scene.start("GameOverScene");
+    });
+  }
 
-    // Stop movement
-    (this.sprite as Phaser.Physics.Arcade.Sprite).setVelocity(0, 0);
+  // Create explosion effect
+  private showDestructionEffect(): void {
+    const x = (this.sprite as Phaser.Physics.Arcade.Sprite).x;
+    const y = (this.sprite as Phaser.Physics.Arcade.Sprite).y;
 
-    // You might want to trigger a game over screen or respawn logic here
+    // Create explosion particles
+    const particles = this.scene.add.particles(x, y, "flare", {
+      speed: { min: 50, max: 150 },
+      scale: { start: 0.4, end: 0 },
+      lifespan: 800,
+      blendMode: "ADD",
+      tint: 0xff0000,
+      quantity: 15,
+      emitting: false,
+    });
+
+    // Explode once
+    particles.explode(30);
+
+    // Clean up particles after animation completes
+    this.scene.time.delayedCall(1000, () => {
+      particles.destroy();
+    });
   }
 
   // Clean up resources
@@ -371,6 +357,26 @@ export class Player extends Agent {
       this.scene.input.setDefaultCursor("default");
     }
   }
+
+  // Override the damage method to make the player invincible
+  public damage(amount: number): void {
+    // Log the damage but don't actually apply it
+    console.log(
+      `Player would take ${amount} damage, but is currently invincible`
+    );
+
+    // Flash the player to indicate damage was received
+    if (this.sprite instanceof Phaser.Physics.Arcade.Sprite) {
+      this.sprite.setTint(0xff0000);
+
+      // Reset tint after a short delay
+      this.scene.time.delayedCall(100, () => {
+        if (this.sprite instanceof Phaser.Physics.Arcade.Sprite) {
+          this.sprite.clearTint();
+        }
+      });
+    }
+  }
 }
 
 // Player dust effects map for backward compatibility
@@ -378,12 +384,24 @@ const playerDustEffects = new Map<Phaser.Physics.Arcade.Sprite, DustEffects>();
 
 // Create the player
 export function createPlayer(scene: Phaser.Scene): Player {
-  // Get the center of the entire map (which is 2x the size of the screen)
-  const centerX = scene.game.config.width as number;
-  const centerY = scene.game.config.height as number;
+  // Get the spawn point from the MainScene
+  const mainScene = scene as any;
+  let spawnX, spawnY;
 
-  // Create the player
-  const player = new Player(scene, centerX, centerY);
+  if (mainScene.spawnPoint) {
+    // Use the spawn point coordinates plus the landing pad offset
+    // This will place the player near the landing pad where robots spawn
+    const landingPadOffset = 100;
+    spawnX = mainScene.spawnPoint.x + landingPadOffset + 50; // Add extra offset to be right next to robots
+    spawnY = mainScene.spawnPoint.y + landingPadOffset + 50;
+  } else {
+    // Fallback to center of map if spawnPoint is not available
+    spawnX = scene.game.config.width as number;
+    spawnY = scene.game.config.height as number;
+  }
+
+  // Create the player at the new location
+  const player = new Player(scene, spawnX, spawnY);
 
   return player;
 }

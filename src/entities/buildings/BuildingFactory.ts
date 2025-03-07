@@ -26,7 +26,7 @@ export class BuildingFactory {
     buildingType: BuildingType,
     options: any = {}
   ): Building {
-    // Get the building definition to access tileSize
+    // Get the building definition to access tileSize and hasInventory
     const buildingDef = BUILDING_DEFINITIONS.find(
       (def) => def.buildingType === buildingType
     );
@@ -34,6 +34,9 @@ export class BuildingFactory {
     // Default tile size is 1x1
     const tileWidth = buildingDef?.tileSize?.width || 1;
     const tileHeight = buildingDef?.tileSize?.height || 1;
+
+    // Default hasInventory is false
+    const hasInventory = buildingDef?.hasInventory || false;
 
     switch (buildingType) {
       case "mining-station":
@@ -60,8 +63,16 @@ export class BuildingFactory {
         return new LandingPad(scene, x, y, tileWidth, tileHeight);
 
       default:
-        // Create a generic building with the appropriate tile size
-        return new Building(scene, x, y, buildingType, tileWidth, tileHeight);
+        // Create a generic building with the appropriate tile size and hasInventory
+        return new Building(
+          scene,
+          x,
+          y,
+          buildingType,
+          tileWidth,
+          tileHeight,
+          hasInventory
+        );
     }
   }
 
@@ -87,10 +98,18 @@ export class BuildingFactory {
     );
 
     // Default tile size is 1x1
-    const tileWidth = buildingDef?.tileSize?.width || 1;
-    const tileHeight = buildingDef?.tileSize?.height || 1;
+    const tileWidth = options.width || buildingDef?.tileSize?.width || 1;
+    const tileHeight = options.height || buildingDef?.tileSize?.height || 1;
 
-    // Create a blueprint with the appropriate tile size
-    return new Blueprint(scene, x, y, buildingType, tileWidth, tileHeight);
+    // Create a blueprint with the appropriate tile size and options
+    return new Blueprint(
+      scene,
+      x,
+      y,
+      buildingType,
+      tileWidth,
+      tileHeight,
+      options
+    );
   }
 }

@@ -29,6 +29,11 @@ import { Enemy, Alien } from "../entities/enemies";
 import { ToolInventoryDisplay } from "../ui/toolInventoryDisplay";
 import { DetailView } from "../ui/detailView";
 import { LandingPad } from "../entities/buildings/LandingPad";
+import { HealthBarRenderer } from "../interfaces/Health";
+import { HabitatManager } from "../mechanics/HabitatManager";
+import { JobManager as GameJobManager } from "../mechanics/JobManager";
+import { BlueprintManager } from "../mechanics/BlueprintManager";
+import { EnemyManager } from "../mechanics/EnemyManager";
 
 export class MainScene extends Phaser.Scene {
   private actionMenu: ActionMenu;
@@ -50,6 +55,13 @@ export class MainScene extends Phaser.Scene {
   private blueprints: Blueprint[] = [];
   private enemies: Enemy[] = [];
   private player: Player;
+  private healthBarRenderer: HealthBarRenderer;
+
+  // Manager instances
+  private habitatManager: HabitatManager;
+  private jobManager: GameJobManager;
+  private blueprintManager: BlueprintManager;
+  private enemyManager: EnemyManager;
 
   constructor() {
     super({ key: "MainScene" });
@@ -66,6 +78,11 @@ export class MainScene extends Phaser.Scene {
     this.load.image("assault-rifle", "assets/assault-rifle.png");
     this.load.svg("assault-rifle", "assets/assault-rifle.svg");
     this.load.svg("assault-rifle-icon", "assets/assault-rifle-icon.svg");
+
+    // Raygun for aliens
+    this.load.image("raygun", "assets/raygun.png");
+    this.load.svg("raygun", "assets/raygun.svg");
+    this.load.image("raygun-fallback", "assets/assault-rifle.png"); // Fallback to assault rifle if raygun image is missing
 
     // Bullet
     this.load.image("bullet", "assets/bullet.png");
@@ -140,6 +157,36 @@ export class MainScene extends Phaser.Scene {
   }
 
   create() {
+    // Store a reference to gameState for easier access
+    const gameState = (window as any).gameState;
+
+    // Create health bar renderer
+    this.healthBarRenderer = new HealthBarRenderer(this);
+
+    // Initialize managers early in the create method
+    this.habitatManager = new HabitatManager(this, this.buildings);
+    this.jobManager = new GameJobManager(
+      this,
+      this.robots,
+      this.resourceNodes,
+      this.blueprints
+    );
+    this.blueprintManager = new BlueprintManager(
+      this,
+      this.blueprints,
+      this.buildings,
+      this.healthBarRenderer
+    );
+
+    // Initialize EnemyManager with a default spawn point
+    // The actual spawn point will be set later
+    this.enemyManager = new EnemyManager(
+      this,
+      this.enemies,
+      new Phaser.Math.Vector2(0, 0),
+      this.healthBarRenderer
+    );
+
     // Set default cursor
     this.input.setDefaultCursor("default");
 
@@ -155,6 +202,13 @@ export class MainScene extends Phaser.Scene {
     // Create player
     this.player = createPlayer(this);
     gameState.player = this.player.getSprite() as Phaser.Physics.Arcade.Sprite;
+
+    // Add health bar to player
+    const playerHealthBar = this.healthBarRenderer.createHealthBar(
+      this.player as any, // Type cast to bypass type checking
+      -30
+    );
+    this.player.setHealthBar(playerHealthBar);
 
     // Setup controls
     const controls = setupControls(this);
@@ -218,18 +272,28 @@ export class MainScene extends Phaser.Scene {
       (this.game.config.height as number) * 2
     );
 
-    // Create the player at the spawn point
+    // Set the spawn point
     this.spawnPoint = new Phaser.Math.Vector2(
-      gameState.player.x,
-      gameState.player.y
+      this.cameras.main.width / 2,
+      this.cameras.main.height / 2
     );
 
-    // Create initial landing pad with starship near spawn point
-    const landingPadOffset = 200; // Distance from spawn point
-    const landingPadX = this.spawnPoint.x + landingPadOffset;
-    const landingPadY = this.spawnPoint.y - landingPadOffset; // Position above the spawn point
+    // Update the spawn point in the enemy manager
+    if (this.enemyManager) {
+      this.enemyManager.updateSpawnPoint(this.spawnPoint);
 
-    // Create the landing pad building
+      // Create enemies using the enemy manager
+      this.enemyManager.createEnemies(5);
+    } else {
+      console.error("EnemyManager is not initialized!");
+    }
+
+    // Create a landing pad near the spawn point
+    const landingPadOffset = 100; // Reduced distance from spawn point (was 200)
+    const landingPadX = this.spawnPoint.x + landingPadOffset;
+    const landingPadY = this.spawnPoint.y + landingPadOffset; // Changed to be below the spawn point instead of above
+
+    // Create the landing pad
     const initialLandingPad = BuildingFactory.createBuilding(
       this,
       landingPadX,
@@ -240,7 +304,7 @@ export class MainScene extends Phaser.Scene {
     // Add to buildings list
     this.buildings.push(initialLandingPad);
 
-    // Store reference to the starship
+    // Store a reference to the starship
     this.starship = initialLandingPad.getStarship();
 
     // Add resource nodes near the spawn point
@@ -251,9 +315,6 @@ export class MainScene extends Phaser.Scene {
 
     // Create robots
     this.createRobots();
-
-    // Create enemies
-    this.createEnemies();
 
     // Store current tile position in registry for robot panel to access
     this.registry.set("player", gameState.player);
@@ -312,6 +373,29 @@ export class MainScene extends Phaser.Scene {
       toolInventoryDisplay: !!this.toolInventoryDisplay,
       detailView: !!this.detailView,
     });
+
+    // Set up event listeners for habitat events
+    this.events.on("habitatPlaced", this.onHabitatPlaced, this);
+    this.events.on("habitatExpanded", this.onHabitatExpanded, this);
+    this.events.on("habitatUpdated", this.onHabitatUpdated, this);
+    this.events.on(
+      "habitatExpansionPlaced",
+      this.onHabitatExpansionPlaced,
+      this
+    );
+
+    // Listen for custom events from BuildingManager
+    if (typeof window !== "undefined") {
+      window.addEventListener("habitatMerged", (e: any) =>
+        this.onHabitatMerged(e.detail)
+      );
+      window.addEventListener("habitatSplit", (e: any) =>
+        this.onHabitatSplit(e.detail)
+      );
+    }
+
+    // Listen for building destroyed events
+    this.events.on("buildingDestroyed", this.onBuildingDestroyed, this);
   }
 
   update(time: number, delta: number) {
@@ -348,30 +432,30 @@ export class MainScene extends Phaser.Scene {
     // Update resource display
     this.resourceDisplay.update();
 
-    // Update all robots
-    this.updateRobots();
+    // Update blueprints
+    this.blueprintManager.updateBlueprints(time, delta);
 
-    // Update all buildings
+    // Update buildings
     this.updateBuildings(time, delta);
 
-    // Update all blueprints
-    this.updateBlueprints(time, delta);
+    // Update robots
+    this.updateRobots();
 
-    // Update resource node physics
-    this.updateResourceNodePhysics();
-
-    // Periodically check for resource delivery jobs (every 2 seconds)
-    if (time % 2000 < 20) {
-      this.createResourceDeliveryJobs();
-    }
+    // Create resource delivery jobs
+    this.jobManager.createResourceDeliveryJobs();
 
     // Clean up completed jobs every 10 seconds
     if (time % 10000 < 100) {
       JobManager.getInstance().cleanupCompletedJobs();
     }
 
-    // Update enemies
-    this.updateEnemies(time, delta);
+    // Update resource node physics
+    this.updateResourceNodePhysics();
+
+    // Update enemies with error handling
+    if (this.enemyManager) {
+      this.enemyManager.updateEnemies(time, delta);
+    }
 
     // Update registry values
     this.registry.set("currentTilePos", gameState.currentTilePos);
@@ -394,228 +478,22 @@ export class MainScene extends Phaser.Scene {
     if (this.detailView) {
       this.detailView.update(time, delta);
     }
+
+    // Update player health bar
+    if (this.player && this.player.getHealthBar()) {
+      this.healthBarRenderer.updateHealthBar(
+        this.player.getHealthBar()!,
+        this.player
+      );
+    }
+
+    // Update manager references
+    this.updateManagerReferences();
   }
 
   private handleItemPlaced(itemName: string, x: number, y: number) {
-    // Convert world coordinates to tile coordinates for logging
-    const tileX = Math.floor(x / TILE_SIZE);
-    const tileY = Math.floor(y / TILE_SIZE);
-
-    // Check if this is a blueprint request
-    if (itemName.startsWith("blueprint-")) {
-      // Extract the actual building type from the blueprint request
-      const buildingType = itemName.replace("blueprint-", "") as BuildingType;
-
-      console.log(
-        `Creating blueprint for ${buildingType} at (${tileX}, ${tileY})`
-      );
-
-      // Create a blueprint using the factory
-      const blueprint = BuildingFactory.createBlueprint(
-        this,
-        x,
-        y,
-        buildingType
-      );
-
-      // Add to our blueprints list
-      this.blueprints.push(blueprint);
-
-      console.log(
-        `Placed blueprint for ${buildingType} at tile (${tileX}, ${tileY}) with size ${blueprint.tileWidth}x${blueprint.tileHeight}`
-      );
-    } else {
-      // This branch should only be used for direct building placement (not through the build menu)
-      console.log(
-        `Creating actual building ${itemName} at (${tileX}, ${tileY})`
-      );
-
-      // Create the actual building using the factory with the provided position
-      const building = BuildingFactory.createBuilding(
-        this,
-        x,
-        y,
-        itemName as BuildingType
-      );
-
-      // Add to our buildings list
-      this.buildings.push(building);
-
-      console.log(
-        `Placed ${itemName} at tile (${tileX}, ${tileY}) with size ${building.tileWidth}x${building.tileHeight}`
-      );
-    }
-  }
-
-  // Update all blueprints and check if any are complete
-  private updateBlueprints(time: number, delta: number): void {
-    // Update all blueprints
-    for (let i = this.blueprints.length - 1; i >= 0; i--) {
-      const blueprint = this.blueprints[i];
-      blueprint.update(time, delta);
-
-      // Check if the blueprint is complete and should be converted to a real building
-      if (blueprint.isComplete()) {
-        // Get the building type and position
-        const buildingType = blueprint.buildingType;
-        const x = blueprint.x;
-        const y = blueprint.y;
-
-        // Remove the blueprint
-        blueprint.destroy();
-        this.blueprints.splice(i, 1);
-
-        // Create the actual building
-        const building = BuildingFactory.createBuilding(
-          this,
-          x,
-          y,
-          buildingType
-        );
-
-        // Add to our buildings list
-        this.buildings.push(building);
-
-        console.log(
-          `Blueprint complete! Created ${buildingType} at (${x}, ${y})`
-        );
-      }
-    }
-
-    // Periodically check for resource delivery jobs (every 5 seconds)
-    if (time % 5000 < 20) {
-      this.createResourceDeliveryJobs();
-    }
-  }
-
-  // Create resource delivery jobs for blueprints
-  private createResourceDeliveryJobs(): void {
-    // Skip if no blueprints
-    if (this.blueprints.length === 0) return;
-
-    console.log(
-      `Checking for resource delivery jobs for ${this.blueprints.length} blueprints`
-    );
-
-    // Get the job manager
-    const jobManager = JobManager.getInstance();
-
-    // Get existing delivery jobs to avoid creating duplicates
-    const existingDeliveryJobs = Array.from(
-      jobManager.getAllJobs().values()
-    ).filter(
-      (job) =>
-        (job as Job).type === JobType.DELIVER_RESOURCE &&
-        !(job as Job).completed
-    ) as Job[];
-
-    // Skip if we already have active delivery jobs
-    if (existingDeliveryJobs.length >= this.optimuses.length) {
-      console.log(
-        `Already have ${existingDeliveryJobs.length} active delivery jobs, skipping`
-      );
-      return;
-    }
-
-    // Get all resource nodes
-    const resourceNodes = ResourceNode.getAllNodes();
-    console.log(`Found ${resourceNodes.length} resource nodes`);
-
-    // Group resource nodes by type
-    const nodesByType: { [key: string]: ResourceNode[] } = {};
-    resourceNodes.forEach((node) => {
-      const resourceType = node.getResource().type;
-      if (!nodesByType[resourceType]) {
-        nodesByType[resourceType] = [];
-      }
-      nodesByType[resourceType].push(node);
-    });
-
-    // Log available resource types
-    console.log("Available resource types:", Object.keys(nodesByType));
-
-    // Check each blueprint for needed resources
-    for (const blueprint of this.blueprints) {
-      console.log(`Checking blueprint for ${blueprint.buildingType}`);
-
-      // Get the required resources for this blueprint
-      const requiredResources = blueprint.getRequiredResources();
-      console.log(
-        `Blueprint requires ${requiredResources.length} resource types`
-      );
-
-      // For each required resource
-      for (const req of requiredResources) {
-        console.log(
-          `Checking resource ${req.type}: ${req.current}/${req.amount}`
-        );
-
-        // Skip if we already have enough
-        if (req.current >= req.amount) {
-          console.log(`Already have enough ${req.type}`);
-          continue;
-        }
-
-        // Check if there's already a job for this blueprint and resource type
-        const existingJob = existingDeliveryJobs.find(
-          (job) => job.blueprint === blueprint && job.resourceType === req.type
-        );
-
-        if (existingJob) {
-          console.log(`Already have a job for ${req.type} to this blueprint`);
-          continue;
-        }
-
-        // Find resource nodes of this type
-        const nodes = nodesByType[req.type] || [];
-        console.log(`Found ${nodes.length} nodes of type ${req.type}`);
-
-        // Skip if no nodes of this type
-        if (nodes.length === 0) {
-          console.log(`No nodes of type ${req.type} available`);
-          continue;
-        }
-
-        // Find a node that isn't already part of a job
-        const availableNode = nodes.find(
-          (node) => !jobManager.isNodeInJob(node)
-        );
-
-        // Skip if no available nodes
-        if (!availableNode) {
-          console.log(`No available nodes of type ${req.type} (all in use)`);
-          continue;
-        }
-
-        // Calculate how much we need
-        const amountNeeded = req.amount - req.current;
-
-        // Calculate how much we can get from this node
-        const amountAvailable = Math.min(
-          availableNode.getAmount(),
-          amountNeeded
-        );
-
-        // Skip if node is empty
-        if (amountAvailable <= 0) {
-          console.log(`Node of type ${req.type} is empty`);
-          continue;
-        }
-
-        console.log(`Creating delivery job for ${amountAvailable} ${req.type}`);
-
-        // Create a resource delivery job
-        jobManager.createResourceDeliveryJob(
-          availableNode,
-          blueprint,
-          req.type,
-          amountAvailable
-        );
-
-        // Only create one job at a time to avoid overwhelming the system
-        return;
-      }
-    }
+    // Delegate to blueprint manager
+    this.blueprintManager.handleItemPlaced(itemName, x, y);
   }
 
   private addResourceNodesNearSpawn(): void {
@@ -812,10 +690,17 @@ export class MainScene extends Phaser.Scene {
     if (this.optimuses.length < 2) {
       this.createOptimusRobots(2 - this.optimuses.length);
     }
+
+    // Make sure gameState.robots is always up to date
+    gameState.robots = this.robots;
   }
 
   // Create a specific number of Optimus robots
   private createOptimusRobots(count: number): void {
+    if (count <= 0) return;
+
+    const isDelivery = this.robots.length > 0; // If we already have robots, this is a delivery
+
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
       const distance = 100 + Math.random() * 50;
@@ -829,6 +714,63 @@ export class MainScene extends Phaser.Scene {
       const optimus = new Optimus(this, x, y);
       this.robots.push(optimus);
       this.optimuses.push(optimus);
+
+      // Set up health bar for the new robot
+      if (this.healthBarRenderer) {
+        const healthBar = this.healthBarRenderer.createHealthBar(
+          optimus as any,
+          -30
+        );
+        optimus.setHealthBar(healthBar);
+      }
+    }
+
+    // Update the robots list in the menu
+    this.updateRobotsListInMenu();
+
+    // Show notification if this is a delivery
+    if (isDelivery) {
+      // Create a notification text
+      const notification = this.add.text(
+        this.cameras.main.centerX,
+        100,
+        `STARSHIP DELIVERED ${count} OPTIMUS ROBOTS`,
+        {
+          fontSize: "24px",
+          color: "#00ffff",
+          fontStyle: "bold",
+          stroke: "#000000",
+          strokeThickness: 4,
+          shadow: {
+            offsetX: 2,
+            offsetY: 2,
+            color: "#000000",
+            blur: 2,
+            stroke: true,
+            fill: true,
+          },
+        }
+      );
+      notification.setOrigin(0.5);
+      notification.setScrollFactor(0);
+      notification.setDepth(1000);
+
+      // Fade out and remove after a few seconds
+      this.tweens.add({
+        targets: notification,
+        alpha: { from: 1, to: 0 },
+        y: 80,
+        duration: 3000,
+        ease: "Power2",
+        onComplete: () => {
+          notification.destroy();
+        },
+      });
+    }
+
+    // Make sure gameState.robots is always up to date
+    if ((window as any).gameState) {
+      (window as any).gameState.robots = this.robots;
     }
   }
 
@@ -924,6 +866,14 @@ export class MainScene extends Phaser.Scene {
       if (buildingInstance) {
         // Call the update method using bracket notation to avoid TypeScript errors
         (buildingInstance as any).update(time);
+
+        // Update health bar
+        if (buildingInstance.getHealthBar()) {
+          this.healthBarRenderer.updateHealthBar(
+            buildingInstance.getHealthBar()!,
+            buildingInstance
+          );
+        }
       }
     });
   }
@@ -1003,6 +953,29 @@ export class MainScene extends Phaser.Scene {
 
     // Remove resize handler
     this.scale.off("resize", this.handleResize, this);
+
+    // Remove habitat event listeners
+    this.events.off("habitatPlaced", this.onHabitatPlaced, this);
+    this.events.off("habitatExpanded", this.onHabitatExpanded, this);
+    this.events.off("habitatUpdated", this.onHabitatUpdated, this);
+    this.events.off(
+      "habitatExpansionPlaced",
+      this.onHabitatExpansionPlaced,
+      this
+    );
+
+    // Remove custom event listeners
+    if (typeof window !== "undefined") {
+      window.removeEventListener("habitatMerged", (e: any) =>
+        this.onHabitatMerged(e.detail)
+      );
+      window.removeEventListener("habitatSplit", (e: any) =>
+        this.onHabitatSplit(e.detail)
+      );
+    }
+
+    // Remove building destroyed event listener
+    this.events.off("buildingDestroyed", this.onBuildingDestroyed, this);
   }
 
   private updateRobotsListInMenu() {
@@ -1013,9 +986,12 @@ export class MainScene extends Phaser.Scene {
       // Check if the robot is an Optimus
       if (robot instanceof Optimus) {
         // Get the resource type and amount if carrying something
-        if (robot.getCarriedResource()) {
-          const resourceType = robot.getResourceType();
-          const resourceAmount = robot.getResourceAmount();
+        if (
+          (robot as any).getCarriedResource &&
+          (robot as any).getCarriedResource()
+        ) {
+          const resourceType = (robot as any).getResourceType();
+          const resourceAmount = (robot as any).getResourceAmount();
           carrying = `${resourceType} (${resourceAmount})`;
         }
       }
@@ -1023,116 +999,38 @@ export class MainScene extends Phaser.Scene {
       // Check if the robot is a MiningDrone
       if (robot instanceof MiningDrone) {
         // Get the resource type and amount if carrying something
-        const resourceAmount = robot.getResourceAmount();
+        const resourceAmount =
+          (robot as any).getResourceAmount &&
+          (robot as any).getResourceAmount();
         if (resourceAmount > 0) {
-          carrying = `${robot.getResourceType()} (${resourceAmount})`;
+          carrying = `${(robot as any).getResourceType()} (${resourceAmount})`;
         }
       }
 
       return {
-        name: robot.getRobotName(),
+        name: (robot as any).getRobotName
+          ? (robot as any).getRobotName()
+          : "Unknown",
         type: robot instanceof Optimus ? "optimus" : "mining-drone",
-        state: robot.getRobotState(),
+        state: (robot as any).getRobotState
+          ? (robot as any).getRobotState()
+          : "unknown",
         carrying: carrying,
       };
     });
 
     // Update the robots list in the menu
-    this.actionMenu.updateRobotsList(robotsInfo);
+    if (this.actionMenu) {
+      this.actionMenu.updateRobotsList(robotsInfo);
+    }
   }
 
-  // Create enemies
-  private createEnemies(): void {
-    // Create UFO and Alien enemies at random positions around the map
-    const ufoCount = 3;
-    const alienCount = 3;
-
-    // Clear existing enemies array to prevent duplicates when respawning
-    this.enemies = [];
-
-    // Create UFOs and Aliens
-    for (let i = 0; i < ufoCount + alienCount; i++) {
-      // Generate random position at the edges of the map
-      let x, y;
-      const mapWidth = this.map.widthInPixels;
-      const mapHeight = this.map.heightInPixels;
-      const margin = 200; // Keep enemies away from the center initially
-
-      // Randomly choose which edge to spawn on
-      const edge = Phaser.Math.Between(0, 3);
-
-      switch (edge) {
-        case 0: // Top edge
-          x = Phaser.Math.Between(margin, mapWidth - margin);
-          y = Phaser.Math.Between(margin, margin * 2);
-          break;
-        case 1: // Right edge
-          x = Phaser.Math.Between(mapWidth - margin * 2, mapWidth - margin);
-          y = Phaser.Math.Between(margin, mapHeight - margin);
-          break;
-        case 2: // Bottom edge
-          x = Phaser.Math.Between(margin, mapWidth - margin);
-          y = Phaser.Math.Between(mapHeight - margin * 2, mapHeight - margin);
-          break;
-        case 3: // Left edge
-          x = Phaser.Math.Between(margin, margin * 2);
-          y = Phaser.Math.Between(margin, mapHeight - margin);
-          break;
-        default:
-          x = margin;
-          y = margin;
-      }
-
-      // Create an enemy (UFO or Alien)
-      try {
-        // Determine if this should be a UFO or Alien
-        const isUFO = i < ufoCount;
-
-        const enemy = new Alien(
-          this,
-          x,
-          y,
-          isUFO ? 100 : 80, // maxHealth (UFOs are tougher)
-          isUFO
-            ? 90 + Phaser.Math.Between(-10, 10)
-            : 70 + Phaser.Math.Between(-10, 10), // speed (UFOs are faster)
-          isUFO ? 150 : 120, // attackRange (UFOs have longer range)
-          isUFO ? 20 : 15, // attackDamage (UFOs do more damage)
-          isUFO ? 2000 : 1500 // attackCooldown (UFOs attack slower)
-        );
-
-        this.enemies.push(enemy);
-        console.log(`Created ${isUFO ? "UFO" : "Alien"} at ${x}, ${y}`);
-      } catch (error) {
-        console.error(`Error creating enemy:`, error);
-      }
+  // Handle blueprint cancellation
+  private handleBlueprintCanceled(blueprint: any): void {
+    // Delegate to blueprint manager
+    if (this.blueprintManager) {
+      this.blueprintManager.handleBlueprintCanceled(blueprint);
     }
-
-    // Add enemies to gameState
-    gameState.enemies = this.enemies;
-
-    console.log(`Created ${this.enemies.length} enemies`);
-  }
-
-  // Update enemies
-  private updateEnemies(time: number, delta: number): void {
-    // Update each enemy
-    for (let i = this.enemies.length - 1; i >= 0; i--) {
-      const enemy = this.enemies[i];
-
-      // Update the enemy
-      enemy.update(time, delta);
-
-      // Remove dead enemies
-      if (!enemy.isAlive()) {
-        console.log(`Enemy died: ${enemy.getEnemyName()}`);
-        enemy.destroy();
-        this.enemies.splice(i, 1);
-      }
-    }
-
-    // Update gameState.enemies
-    gameState.enemies = this.enemies;
   }
 
   // Handle window resize events
@@ -1146,15 +1044,126 @@ export class MainScene extends Phaser.Scene {
     console.log("Game resized to:", gameSize.width, gameSize.height);
   }
 
-  // Handle blueprint cancellation
-  private handleBlueprintCanceled(blueprint: any): void {
-    console.log("Blueprint cancellation event received", blueprint);
-
-    // Make sure the blueprint is removed from the blueprints array
-    const index = this.blueprints.indexOf(blueprint);
-    if (index !== -1) {
-      this.blueprints.splice(index, 1);
-      console.log("Blueprint removed from blueprints array");
+  // Habitat event handlers
+  private onHabitatPlaced(data: {
+    startX: number;
+    startY: number;
+    width: number;
+    height: number;
+  }): void {
+    if (this.habitatManager) {
+      this.habitatManager.onHabitatPlaced(data);
     }
+  }
+
+  private onHabitatExpanded(data: {
+    habitatId: string;
+    newTiles: { x: number; y: number }[];
+  }): void {
+    if (this.habitatManager) {
+      this.habitatManager.onHabitatExpanded(data);
+    }
+  }
+
+  private onHabitatUpdated(data: { habitatId: string }): void {
+    if (this.habitatManager) {
+      this.habitatManager.onHabitatUpdated(data);
+    }
+  }
+
+  private onHabitatExpansionPlaced(data: {
+    startX: number;
+    startY: number;
+    width: number;
+    height: number;
+    expansionId: string;
+    targetHabitatId: string;
+    tiles: { x: number; y: number }[];
+  }): void {
+    if (this.habitatManager) {
+      this.habitatManager.onHabitatExpansionPlaced(data);
+    }
+  }
+
+  private onHabitatMerged(data: {
+    primaryHabitatId: string;
+    mergedHabitatId: string;
+  }): void {
+    if (this.habitatManager) {
+      this.habitatManager.onHabitatMerged(data);
+
+      // Update the buildings reference in the habitat manager
+      this.habitatManager.updateBuildings(this.buildings);
+    }
+  }
+
+  private onHabitatSplit(data: {
+    originalHabitatId: string;
+    newHabitatId: string;
+  }): void {
+    if (this.habitatManager) {
+      this.habitatManager.onHabitatSplit(data);
+    }
+  }
+
+  // Building event handlers
+  private onBuildingDestroyed(building: Building): void {
+    // Remove the building from our list
+    const index = this.buildings.indexOf(building);
+    if (index !== -1) {
+      this.buildings.splice(index, 1);
+    }
+
+    // Remove the building from the scene
+    building.destroy();
+
+    // Show destruction effect
+    this.showDestructionEffect(building.x, building.y);
+  }
+
+  // Update references in managers when collections change
+  private updateManagerReferences(): void {
+    if (this.habitatManager) {
+      this.habitatManager.updateBuildings(this.buildings);
+    }
+
+    if (this.jobManager) {
+      this.jobManager.updateReferences(
+        this.robots,
+        this.resourceNodes,
+        this.blueprints
+      );
+    }
+
+    if (this.blueprintManager) {
+      this.blueprintManager.updateReferences(this.blueprints, this.buildings);
+    }
+
+    if (this.enemyManager) {
+      this.enemyManager.updateReferences(this.enemies);
+    }
+  }
+
+  // Add a method to show destruction effect
+  private showDestructionEffect(x: number, y: number): void {
+    // Create a particle emitter for the destruction effect
+    const particles = this.add.particles(x, y, "flare", {
+      speed: { min: 50, max: 150 },
+      angle: { min: 0, max: 360 },
+      scale: { start: 0.4, end: 0 },
+      lifespan: 500,
+      tint: [0xff0000, 0xff7700, 0xffff00],
+      blendMode: "ADD",
+      frequency: -1, // Emit all particles at once
+      quantity: 20,
+    });
+
+    // Emit particles once
+    particles.explode();
+
+    // Destroy the emitter after a short delay
+    this.time.delayedCall(1000, () => {
+      particles.destroy();
+    });
   }
 }

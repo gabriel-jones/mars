@@ -3,6 +3,7 @@ import { Building } from "./Building";
 import { TILE_SIZE } from "../../constants";
 import { Starship } from "../starship";
 import { BuildingManager } from "../../data/buildings";
+import { ResourceType } from "../../data/resources";
 
 export class LandingPad extends Building {
   private starship: Starship;
@@ -20,7 +21,16 @@ export class LandingPad extends Building {
     const alignedX = tileX * TILE_SIZE + (tileWidth * TILE_SIZE) / 2;
     const alignedY = tileY * TILE_SIZE + (tileHeight * TILE_SIZE) / 2;
 
-    super(scene, alignedX, alignedY, "landing-pad", tileWidth, tileHeight);
+    // Pass true for hasInventory
+    super(
+      scene,
+      alignedX,
+      alignedY,
+      "landing-pad",
+      tileWidth,
+      tileHeight,
+      true
+    );
 
     // Create the landing pad sprite
     this.sprite.setTexture("landingpad");
@@ -28,6 +38,9 @@ export class LandingPad extends Building {
 
     // Create a starship for this landing pad
     this.starship = new Starship(scene, alignedX, alignedY);
+
+    // Start the starship cycle
+    this.starship.startCycle();
 
     // Register with building manager
     BuildingManager.addBuilding({
@@ -41,6 +54,7 @@ export class LandingPad extends Building {
       tileWidth: tileWidth,
       tileHeight: tileHeight,
       tiles: this.calculateTiles(tileX, tileY, tileWidth, tileHeight),
+      hasInventory: true,
     });
 
     console.log(
@@ -66,16 +80,40 @@ export class LandingPad extends Building {
   }
 
   public update(time: number, delta: number): void {
-    // Update the starship
-    this.starship.update();
+    // Update the starship with time and delta parameters
+    if (this.starship) {
+      this.starship.update();
+
+      // Log starship state occasionally for debugging
+      if (Math.random() < 0.005) {
+        console.log(
+          `LandingPad updating starship, state: ${this.starship.getState()}`
+        );
+      }
+    }
+
+    // Sync the starship inventory with our inventory
+    this.syncStarshipInventory();
+  }
+
+  /**
+   * Sync the starship inventory with our inventory
+   */
+  private syncStarshipInventory(): void {
+    // Get the starship inventory
+    const starshipInventory = this.starship.getInventory();
+
+    // Update our inventory to match
+    this.inventory = { ...starshipInventory };
   }
 
   public getStarship(): Starship {
     return this.starship;
   }
 
+  // This method is kept for backward compatibility
   public getStarshipInventory(): { [key: string]: number } {
-    return this.starship.getInventory();
+    return this.getInventory();
   }
 
   public destroy(): void {

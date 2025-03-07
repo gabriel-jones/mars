@@ -688,27 +688,39 @@ export class DetailView {
     if (this.selectedEntity instanceof Building) {
       properties = this.getBuildingProperties(this.selectedEntity);
 
-      // Check if it's a landing pad with starship inventory
-      const buildingAny = this.selectedEntity as any;
+      // Use the generic inventory interface
       if (
-        buildingAny.buildingType === "landing-pad" &&
-        buildingAny.getStarshipInventory
+        this.selectedEntity.getHasInventory &&
+        this.selectedEntity.getHasInventory()
       ) {
         hasInventory = true;
-        const starshipInventory = buildingAny.getStarshipInventory();
-        inventory = Object.entries(starshipInventory).map(([type, amount]) => ({
-          type,
+        const buildingInventory = this.selectedEntity.getInventory();
+
+        // Convert the inventory object to an array of {type, amount}
+        inventory = Object.entries(buildingInventory).map(([type, amount]) => ({
+          type: type as ResourceType,
           amount: amount as number,
         }));
       }
-      // Try to get inventory for other buildings
-      else if (buildingAny.inventory && buildingAny.inventory.length > 0) {
-        hasInventory = true;
-        inventory = buildingAny.inventory;
-      }
     } else if (this.selectedEntity instanceof Blueprint) {
       properties = this.getBlueprintProperties(this.selectedEntity);
-      // Blueprints don't have inventory
+
+      // Use the generic inventory interface for blueprints too
+      if (
+        this.selectedEntity.getHasInventory &&
+        this.selectedEntity.getHasInventory()
+      ) {
+        hasInventory = true;
+        const blueprintInventory = this.selectedEntity.getInventory();
+
+        // Convert the inventory object to an array of {type, amount}
+        inventory = Object.entries(blueprintInventory).map(
+          ([type, amount]) => ({
+            type: type as ResourceType,
+            amount: amount as number,
+          })
+        );
+      }
     } else if (this.selectedEntity instanceof Robot) {
       properties = this.getRobotProperties(this.selectedEntity);
       // Try to get carried resource

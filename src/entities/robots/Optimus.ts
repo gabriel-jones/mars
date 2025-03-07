@@ -5,6 +5,7 @@ import { ResourceManager, ResourceType } from "../../data/resources";
 import { JobManager, Job, JobType } from "./JobManager";
 import { Blueprint } from "../buildings/Blueprint";
 import { TILE_SIZE } from "../../constants";
+import { HealthBarRenderer } from "../../interfaces/Health";
 
 // Optimus class - can perform tasks like a player
 export class Optimus extends Robot {
@@ -23,6 +24,16 @@ export class Optimus extends Robot {
   private wanderIntervalMin: number = 3000; // Minimum time between wandering (3 seconds)
   private wanderIntervalMax: number = 8000; // Maximum time between wandering (8 seconds)
   private wanderRadius: number = 5 * TILE_SIZE; // 5 blocks
+  private lastDamageTime: number = 0; // Track when the robot last took damage
+  private shieldRepairInterval: number = 10000; // 10 seconds in ms
+  private shieldRepairAmount: number = 5; // Amount to repair per update when eligible
+
+  // Set larger detection and attack ranges for Optimus robots
+  // private detectionRange: number = 450; // Increased from 300
+  // private attackRange: number = 350; // Increased from 250
+
+  // Optimus robots are more accurate than other robots
+  // private imprecisionFactor: number = 15; // Reduced from 20
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, "optimus", 150); // Using the optimus sprite
@@ -30,6 +41,36 @@ export class Optimus extends Robot {
     this.robotId = `optimus-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     // Initialize wander timer with a random offset to prevent all robots from moving at once
     this.wanderTimer = scene.time.now + Math.random() * this.wanderIntervalMax;
+    // Initialize last damage time
+    this.lastDamageTime = scene.time.now;
+
+    // Set larger detection and attack ranges for Optimus robots
+    this.detectionRange = 450; // Increased from 300
+    this.attackRange = 350; // Increased from 250
+
+    // Optimus robots are more accurate than other robots
+    this.imprecisionFactor = 15; // Reduced from 20
+
+    // Initialize shield for Optimus robots (blue shield)
+    this.initShield(75, 0x0088ff);
+  }
+
+  // Override damage method to track last damage time
+  public damage(amount: number): void {
+    // Update last damage time
+    this.lastDamageTime = this.scene.time.now;
+
+    // Call parent damage method
+    super.damage(amount);
+  }
+
+  // Override damageShield method to track last damage time
+  public damageShield(amount: number): void {
+    // Update last damage time
+    this.lastDamageTime = this.scene.time.now;
+
+    // Call parent damageShield method
+    super.damageShield(amount);
   }
 
   protected getRobotNameInternal(): string {
@@ -458,11 +499,102 @@ export class Optimus extends Robot {
 
   // Update the optimus robot
   public update(time: number, delta: number): void {
-    // Update state text
-    this.updateStateText();
+    // Skip update if robot is dead
+    if (!this.isAlive()) return;
+
+    // Update shield position
+    this.updateShieldPosition();
+
+    // Check if it's time to repair shield (if not at full shield and not damaged recently)
+    const timeSinceLastDamage = time - this.lastDamageTime;
+    if (
+      this.hasShield() &&
+      this.getCurrentShield() < this.getMaxShield() &&
+      timeSinceLastDamage > this.shieldRepairInterval
+    ) {
+      // Repair shield at a faster rate when in repair mode
+      this.rechargeShield(this.shieldRepairAmount);
+
+      // Update health bar to reflect shield changes
+      if (this.healthBar) {
+        const healthBarRenderer = new HealthBarRenderer(this.scene);
+        healthBarRenderer.updateHealthBar(this.healthBar, this);
+      }
+    }
+    // Normal slow recharge when not in repair mode
+    else if (
+      this.hasShield() &&
+      this.getCurrentShield() < this.getMaxShield()
+    ) {
+      this.rechargeShield(delta / 2000); // Convert delta (ms) to seconds, half the rate of player
+
+      // Update health bar to reflect shield changes
+      if (this.healthBar) {
+        const healthBarRenderer = new HealthBarRenderer(this.scene);
+        healthBarRenderer.updateHealthBar(this.healthBar, this);
+      }
+    }
+
+    // Scan for enemies more frequently (Optimus robots are more vigilant)
+    if (time - this.lastScanTime >= this.scanInterval / 2) {
+      this.scanForEnemies(time);
+    }
+
+    // If in defending state, attack enemies instead of normal behavior
+    if (this.robotState === RobotState.DEFENDING && this.enemyTarget) {
+      // Optimus robots will actively pursue enemies within their detection range
+      const enemySprite = this.enemyTarget.getSprite();
+      let enemyX, enemyY;
+
+      if (enemySprite instanceof Phaser.GameObjects.Container) {
+        enemyX = enemySprite.x;
+        enemyY = enemySprite.y;
+      } else {
+        enemyX = enemySprite.x;
+        enemyY = enemySprite.y;
+      }
+
+      const distance = Phaser.Math.Distance.Between(
+        this.container.x,
+        this.container.y,
+        enemyX,
+        enemyY
+      );
+
+      // If enemy is within detection range but outside attack range, move toward it
+      if (distance > this.attackRange && distance < this.detectionRange) {
+        // Calculate a position that's within attack range of the enemy
+        const angle = Phaser.Math.Angle.Between(
+          this.container.x,
+          this.container.y,
+          enemyX,
+          enemyY
+        );
+
+        // Move to a position that's at attack range distance from the enemy
+        const targetDistance = this.attackRange * 0.8; // Stay at 80% of attack range
+        const targetX = enemyX - Math.cos(angle) * targetDistance;
+        const targetY = enemyY - Math.sin(angle) * targetDistance;
+
+        this.moveToTarget(new Phaser.Math.Vector2(targetX, targetY));
+      }
+
+      this.attackEnemyTarget(time);
+
+      // Make sure health bar position is updated
+      this.updateHealthBar();
+
+      return; // Skip normal behavior while defending
+    }
 
     // Update dust effects
     this.updateDustEffects(time);
+
+    // Update state text
+    this.updateStateText();
+
+    // Update health bar
+    this.updateHealthBar();
 
     // Check if current job is completed or cancelled
     if (this.currentJob && this.carriedResource) {
@@ -710,5 +842,82 @@ export class Optimus extends Robot {
       this.currentTask = this.taskQueue.shift()!;
       this.currentTask();
     }
+  }
+
+  // Override scanForEnemies to make Optimus robots more aggressive
+  protected scanForEnemies(time: number): void {
+    // Call the parent method to do the basic scanning
+    super.scanForEnemies(time);
+
+    // If we're already in defending state, no need to do additional scanning
+    if (this.robotState === RobotState.DEFENDING) {
+      return;
+    }
+
+    // Get enemies from game state
+    const gameState = (window as any).gameState;
+    const enemies = gameState.enemies || [];
+
+    if (enemies.length === 0) {
+      return;
+    }
+
+    // Optimus robots will proactively scan for enemies even when working on other tasks
+    // They will prioritize defense over other tasks if enemies are detected
+    for (const enemy of enemies) {
+      if (!enemy || !enemy.isAlive()) continue;
+
+      const enemySprite = enemy.getSprite();
+
+      // Get enemy position
+      let enemyX, enemyY;
+      if (enemySprite instanceof Phaser.GameObjects.Container) {
+        enemyX = enemySprite.x;
+        enemyY = enemySprite.y;
+      } else {
+        enemyX = enemySprite.x;
+        enemyY = enemySprite.y;
+      }
+
+      const distance = Phaser.Math.Distance.Between(
+        this.container.x,
+        this.container.y,
+        enemyX,
+        enemyY
+      );
+
+      // Optimus robots will detect enemies at a greater distance
+      if (distance < this.detectionRange) {
+        // Switch to defending state immediately
+        this.enemyTarget = enemy;
+        this.robotState = RobotState.DEFENDING;
+        this.updateStateText();
+        this.equipWeapon();
+
+        console.log(
+          `Optimus robot detected enemy at distance ${distance.toFixed(
+            2
+          )} and is engaging`
+        );
+
+        // If we were carrying out a job, pause it
+        if (this.currentJob) {
+          console.log(`Optimus robot pausing job to engage enemy`);
+          // We don't cancel the job, just pause it by not executing it while in defending state
+        }
+
+        // Break out of the loop once we've found an enemy to engage
+        break;
+      }
+    }
+  }
+
+  // Override onDeath to clean up shield
+  protected onDeath(): void {
+    // Clean up shield effect
+    this.cleanupShieldEffect();
+
+    // Call parent onDeath if it exists
+    super.onDeath();
   }
 }

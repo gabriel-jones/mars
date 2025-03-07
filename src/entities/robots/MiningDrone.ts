@@ -89,11 +89,27 @@ export class MiningDrone extends Robot {
 
   // Update the mining drone
   public update(time: number, delta: number): void {
+    // Scan for enemies first
+    this.scanForEnemies(time);
+
+    // If in defending state, attack enemies instead of mining
+    if (this.robotState === RobotState.DEFENDING && this.enemyTarget) {
+      this.attackEnemyTarget(time);
+
+      // Make sure health bar position is updated
+      this.updateHealthBar();
+
+      return; // Skip normal mining behavior while defending
+    }
+
     // Update the state text
     this.updateStateText();
 
     // Update dust effects
     this.updateDustEffects(time);
+
+    // Update health bar
+    this.updateHealthBar();
 
     // If we're idle and don't have a pattern, generate one and start mining
     if (this.robotState === RobotState.IDLE && !this.patternGenerated) {

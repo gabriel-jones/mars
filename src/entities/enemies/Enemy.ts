@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { Agent } from "../Agent";
 import { DUST_COLOR } from "../../constants";
+import { HasHealth, HealthBarRenderer } from "../../interfaces/Health";
 
 // Enemy states
 export enum EnemyState {
@@ -20,7 +21,7 @@ interface TargetObject extends Phaser.GameObjects.GameObject {
 }
 
 // Base Enemy class
-export abstract class Enemy extends Agent {
+export abstract class Enemy extends Agent implements HasHealth {
   protected enemyState: EnemyState;
   public enemyType: EnemyType;
   protected target: TargetObject | null = null;
@@ -33,7 +34,6 @@ export abstract class Enemy extends Agent {
   protected label: Phaser.GameObjects.Text;
   protected preferredShootingDistance: number; // Distance at which enemies prefer to stop and shoot
   public isEnemy: boolean = true; // Flag to identify this as an enemy for collision detection
-  protected healthBar: Phaser.GameObjects.Graphics; // Health bar graphics
   protected currentTile: { x: number; y: number } = { x: 0, y: 0 };
 
   // Static map to track occupied tiles
@@ -54,31 +54,36 @@ export abstract class Enemy extends Agent {
     attackCooldown: number = 1000,
     preferredShootingDistance: number = 150 // Default preferred shooting distance
   ) {
-    // Create the enemy sprite
-    const sprite = scene.physics.add
-      .sprite(x, y, enemyType)
-      .setOrigin(0.5)
-      .setDepth(5);
-
-    // Call the parent constructor first
-    super(scene, sprite, maxHealth);
+    // Call the parent constructor with the sprite and maxHealth
+    super(
+      scene,
+      scene.physics.add
+        .sprite(x, y, enemyType)
+        .setDisplaySize(64, 64)
+        .setDepth(10),
+      maxHealth
+    );
 
     // Ensure the physics body is properly set up
-    if (sprite.body) {
+    if (
+      this.sprite instanceof Phaser.Physics.Arcade.Sprite &&
+      this.sprite.body
+    ) {
       // Set a proper hitbox for the enemy
-      sprite.body.setSize(sprite.width * 0.8, sprite.height * 0.8);
-      sprite.body.setOffset(sprite.width * 0.1, sprite.height * 0.1);
+      const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+      body.setSize(this.sprite.width * 0.8, this.sprite.height * 0.8);
+      body.setOffset(this.sprite.width * 0.1, this.sprite.height * 0.1);
 
       // Disable debug visualization
-      sprite.body.debugShowBody = false;
+      body.debugShowBody = false;
     }
 
     // Add isEnemy property to the sprite for collision detection
-    (sprite as any).isEnemy = true;
-    (sprite as any).enemyType = enemyType;
+    (this.sprite as any).isEnemy = true;
+    (this.sprite as any).enemyType = enemyType;
 
     // Store a reference to the Enemy instance on the sprite
-    (sprite as any).enemyInstance = this;
+    (this.sprite as any).enemyInstance = this;
 
     // Set enemy properties
     this.enemyType = enemyType;
@@ -101,25 +106,38 @@ export abstract class Enemy extends Agent {
 
     // Add a label showing the enemy type
     this.label = scene.add
-      .text(x, y - 40, this.getEnemyName(), {
+      .text(x, y + 40, this.getEnemyName(), {
         fontSize: "14px",
         color: "#FF0000",
         align: "center",
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        padding: { x: 4, y: 2 },
+        shadow: {
+          offsetX: 1,
+          offsetY: 1,
+          color: "#000000",
+          blur: 2,
+          fill: true,
+        },
       })
       .setOrigin(0.5)
       .setDepth(5);
 
-    // Create health bar
-    this.healthBar = scene.add.graphics();
-    this.healthBar.setDepth(5);
-    this.updateHealthBar();
-
     // Add state text (but make it invisible since we're using health bar)
     this.stateText = scene.add
-      .text(x, y - 25, "", {
+      .text(x, y + 55, "", {
         fontSize: "12px",
         color: "#FF0000",
         align: "center",
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        padding: { x: 4, y: 2 },
+        shadow: {
+          offsetX: 1,
+          offsetY: 1,
+          color: "#000000",
+          blur: 2,
+          fill: true,
+        },
       })
       .setAlpha(0)
       .setOrigin(0.5)
@@ -144,10 +162,11 @@ export abstract class Enemy extends Agent {
     // Update the position of the label and health bar to follow the enemy
     const spriteX = (this.sprite as Phaser.Physics.Arcade.Sprite).x;
     const spriteY = (this.sprite as Phaser.Physics.Arcade.Sprite).y;
-    this.label.setPosition(spriteX, spriteY - 40);
+    this.label.setPosition(spriteX, spriteY + 40);
+    this.stateText.setPosition(spriteX, spriteY + 55);
 
     // Update health bar position
-    this.updateHealthBar();
+    this.updateHealthBarPosition();
 
     // Update dust effects
     this.updateDustEffects(time);
@@ -188,6 +207,7 @@ export abstract class Enemy extends Agent {
   protected handleAttackingState(time: number, delta: number): void {
     // If no target or target is dead, go back to idle
     if (!this.target || !this.isTargetValid()) {
+      console.log("Enemy target lost or invalid, switching to IDLE state");
       this.target = null;
       this.enemyState = EnemyState.IDLE;
       this.updateStateText();
@@ -206,10 +226,26 @@ export abstract class Enemy extends Agent {
 
     // Check if in attack range
     if (this.isInAttackRange()) {
+      // Log occasionally for debugging
+      if (Math.random() < 0.05) {
+        console.log(
+          `Enemy in attack range, cooldown: ${time - this.lastAttackTime}/${
+            this.attackCooldown
+          }`
+        );
+      }
+
       // Attack if cooldown has passed
       if (time - this.lastAttackTime >= this.attackCooldown) {
+        console.log("Enemy attacking target!");
+        // Call the abstract attackTarget method that subclasses will implement
         this.attackTarget();
         this.lastAttackTime = time;
+      }
+    } else {
+      // Log occasionally for debugging
+      if (Math.random() < 0.05) {
+        console.log("Enemy not in attack range yet");
       }
     }
   }
@@ -223,6 +259,14 @@ export abstract class Enemy extends Agent {
 
     let closestTarget: TargetObject | null = null;
     let closestDistance = Number.MAX_VALUE;
+    let targetType = "none";
+
+    // Log available targets for debugging
+    console.log(
+      `Enemy searching for targets. Found player: ${!!player}, robots: ${
+        robots.length
+      }`
+    );
 
     // Check player
     if (player && player.active) {
@@ -236,34 +280,105 @@ export abstract class Enemy extends Agent {
       if (distance < closestDistance) {
         closestDistance = distance;
         closestTarget = player as unknown as TargetObject;
+        targetType = "player";
+        console.log(`Enemy targeting player at distance ${distance}`);
       }
     }
 
     // Check robots
-    for (const robot of robots) {
-      if (!robot || !robot.getSprite || typeof robot.getSprite !== "function")
-        continue;
+    if (robots && robots.length > 0) {
+      console.log(`Checking ${robots.length} robots for targeting`);
 
-      const robotSprite = robot.getSprite();
-      if (!robotSprite || !robotSprite.active) continue;
+      for (const robot of robots) {
+        if (!robot) {
+          console.log("Found null robot, skipping");
+          continue;
+        }
 
-      // Ensure the sprite has x and y properties
-      if ("x" in robotSprite && "y" in robotSprite) {
+        if (!robot.getSprite || typeof robot.getSprite !== "function") {
+          console.log("Robot missing getSprite method, skipping");
+          continue;
+        }
+
+        // Check if robot is alive - use a more flexible approach
+        let isRobotAlive = true;
+        if (robot.health !== undefined && robot.health <= 0) {
+          isRobotAlive = false;
+        } else if (
+          robot.isAlive &&
+          typeof robot.isAlive === "function" &&
+          !robot.isAlive()
+        ) {
+          isRobotAlive = false;
+        }
+
+        if (!isRobotAlive) {
+          console.log("Robot is dead, skipping");
+          continue;
+        }
+
+        const robotSprite = robot.getSprite();
+        if (!robotSprite || !robotSprite.active) {
+          console.log("Robot sprite inactive, skipping");
+          continue;
+        }
+
+        // Get the position of the robot sprite
+        let robotX, robotY;
+
+        if (robotSprite instanceof Phaser.GameObjects.Container) {
+          robotX = robotSprite.x;
+          robotY = robotSprite.y;
+        } else {
+          robotX = robotSprite.x;
+          robotY = robotSprite.y;
+        }
+
         const distance = Phaser.Math.Distance.Between(
           (this.sprite as Phaser.Physics.Arcade.Sprite).x,
           (this.sprite as Phaser.Physics.Arcade.Sprite).y,
-          robotSprite.x,
-          robotSprite.y
+          robotX,
+          robotY
         );
+
+        console.log(`Robot at (${robotX}, ${robotY}), distance: ${distance}`);
 
         if (distance < closestDistance) {
           closestDistance = distance;
           closestTarget = robotSprite as unknown as TargetObject;
+          targetType = "robot";
+
+          // Store a reference to the robot instance for damage
+          (closestTarget as any).robotInstance = robot;
+          console.log(`Enemy targeting robot at distance ${distance}`);
         }
+      }
+    } else {
+      console.log("No robots found in gameState");
+    }
+
+    // Only change target if we found something or we already had a target that's now invalid
+    if (closestTarget || !this.target || !this.isTargetValid()) {
+      this.target = closestTarget;
+
+      // If we found a target, switch to attacking state
+      if (closestTarget && this.enemyState !== EnemyState.ATTACKING) {
+        console.log(
+          `Enemy switching to ATTACKING state, targeting ${targetType}`
+        );
+        this.enemyState = EnemyState.ATTACKING;
+      } else if (!closestTarget && this.enemyState === EnemyState.ATTACKING) {
+        // If we lost our target, switch back to idle
+        console.log("Enemy switching back to IDLE state, no target found");
+        this.enemyState = EnemyState.IDLE;
       }
     }
 
-    this.target = closestTarget;
+    if (this.target) {
+      console.log(`Enemy set target: ${targetType}`);
+    } else {
+      console.log("Enemy found no target");
+    }
   }
 
   // Check if a tile is occupied by another enemy
@@ -366,113 +481,31 @@ export abstract class Enemy extends Agent {
       this.target.y
     );
 
-    return distance <= this.attackRange;
-  }
+    const inRange = distance <= this.attackRange;
 
-  // Attack the target
-  protected attackTarget(): void {
-    if (!this.target) return;
-
-    // Get positions
-    const enemyX = (this.sprite as Phaser.Physics.Arcade.Sprite).x;
-    const enemyY = (this.sprite as Phaser.Physics.Arcade.Sprite).y;
-    const targetX = this.target.x;
-    const targetY = this.target.y;
-
-    // Calculate angle to target
-    const angle = Phaser.Math.Angle.Between(enemyX, enemyY, targetX, targetY);
-
-    // Create a visual effect for the projectile
-    const projectile = this.scene.add.graphics();
-    projectile.fillStyle(0xff0000, 0.8); // Red color for enemy projectiles
-    projectile.fillCircle(enemyX, enemyY, 5);
-    projectile.setDepth(6);
-
-    // Animate the projectile
-    this.scene.tweens.add({
-      targets: projectile,
-      x: targetX - enemyX,
-      y: targetY - enemyY,
-      duration: 500,
-      ease: "Linear",
-      onUpdate: (tween) => {
-        const progress = tween.progress;
-        const currentX = enemyX + (targetX - enemyX) * progress;
-        const currentY = enemyY + (targetY - enemyY) * progress;
-
-        // Clear and redraw at new position
-        projectile.clear();
-        projectile.fillStyle(0xff0000, 0.8);
-        projectile.fillCircle(currentX, currentY, 5);
-      },
-      onComplete: () => {
-        // Remove the projectile
-        projectile.destroy();
-
-        // In the future, this will call the target's takeDamage method
-        console.log(
-          `${this.getEnemyName()} attacks for ${this.attackDamage} damage!`
-        );
-      },
-    });
-  }
-
-  // Check if target is valid (still exists and is alive)
-  protected isTargetValid(): boolean {
-    return !!this.target && this.target.active;
-  }
-
-  // Update the health bar
-  protected updateHealthBar(): void {
-    if (!this.healthBar) return;
-
-    const spriteX = (this.sprite as Phaser.Physics.Arcade.Sprite).x;
-    const spriteY = (this.sprite as Phaser.Physics.Arcade.Sprite).y;
-
-    // Clear previous drawing
-    this.healthBar.clear();
-
-    // Health bar dimensions
-    const width = 40;
-    const height = 6;
-    const x = spriteX - width / 2;
-    const y = spriteY + 25; // Position below the enemy
-
-    // Background (gray)
-    this.healthBar.fillStyle(0x333333, 0.8);
-    this.healthBar.fillRect(x, y, width, height);
-
-    // Calculate health percentage
-    const healthPercentage = Math.max(0, this.health / this.maxHealth);
-
-    // Health bar color based on health percentage
-    let color;
-    if (healthPercentage > 0.6) {
-      color = 0x00ff00; // Green
-    } else if (healthPercentage > 0.3) {
-      color = 0xffff00; // Yellow
-    } else {
-      color = 0xff0000; // Red
+    // Log occasionally for debugging
+    if (Math.random() < 0.01) {
+      console.log(
+        `Enemy distance to target: ${distance.toFixed(2)}, attack range: ${
+          this.attackRange
+        }, in range: ${inRange}`
+      );
     }
 
-    // Health bar (colored)
-    this.healthBar.fillStyle(color, 1);
-    this.healthBar.fillRect(x, y, width * healthPercentage, height);
-
-    // Border (white)
-    this.healthBar.lineStyle(1, 0xffffff, 0.8);
-    this.healthBar.strokeRect(x, y, width, height);
+    return inRange;
   }
 
   // Update state text (now just updates the health bar)
   protected updateStateText(): void {
-    this.updateHealthBar();
+    this.updateHealthBarPosition();
   }
 
   // Handle death
   protected onDeath(): void {
     this.enemyState = EnemyState.DEAD;
-    this.updateStateText();
+
+    // Clean up shield effect
+    this.cleanupShieldEffect();
 
     // Stop dust effects
     if (this.dustEffects) {
@@ -483,14 +516,43 @@ export abstract class Enemy extends Agent {
     // Stop movement
     (this.sprite as Phaser.Physics.Arcade.Sprite).setVelocity(0, 0);
 
-    // Play death animation or effect (to be implemented)
+    // Create explosion effect
+    this.showDestructionEffect();
+
+    // Hide the health bar immediately
+    if (this.healthBar) {
+      this.healthBar.setVisible(false);
+    }
 
     // Clean up shadow effects
     this.cleanupShadowEffects();
 
-    // Remove after a delay
-    this.scene.time.delayedCall(2000, () => {
-      this.destroy();
+    // Destroy immediately instead of waiting
+    this.destroy();
+  }
+
+  // Create explosion effect
+  private showDestructionEffect(): void {
+    const x = (this.sprite as Phaser.Physics.Arcade.Sprite).x;
+    const y = (this.sprite as Phaser.Physics.Arcade.Sprite).y;
+
+    // Create explosion particles
+    const particles = this.scene.add.particles(x, y, "flare", {
+      speed: { min: 50, max: 150 },
+      scale: { start: 0.4, end: 0 },
+      lifespan: 800,
+      blendMode: "ADD",
+      tint: this.enemyType === "ufo" ? 0x00ff00 : 0xff0000,
+      quantity: 15,
+      emitting: false,
+    });
+
+    // Explode once
+    particles.explode(20);
+
+    // Clean up particles after animation completes
+    this.scene.time.delayedCall(1000, () => {
+      particles.destroy();
     });
   }
 
@@ -503,6 +565,12 @@ export abstract class Enemy extends Agent {
 
     // Clean up shadow effects
     this.cleanupShadowEffects();
+
+    // Destroy the equipped tool if it exists
+    if (this.equippedTool) {
+      this.equippedTool.destroy();
+      this.equippedTool = null;
+    }
 
     // Remove from occupied tiles map
     const tileKey = `${this.currentTile.x},${this.currentTile.y}`;
@@ -518,9 +586,10 @@ export abstract class Enemy extends Agent {
       this.stateText.destroy();
     }
 
-    // Remove the health bar
+    // Destroy the health bar if it exists
     if (this.healthBar) {
       this.healthBar.destroy();
+      this.healthBar = null;
     }
 
     // Remove the sprite
@@ -545,8 +614,14 @@ export abstract class Enemy extends Agent {
       }`
     );
 
-    // Call the parent takeDamage method
-    this.takeDamage(amount);
+    // Directly modify health instead of calling takeDamage to avoid recursion
+    this.health -= amount;
+
+    // Check if health is below 0
+    if (this.health <= 0) {
+      this.health = 0;
+      this.onDeath();
+    }
 
     // Show damage feedback (flash red or green based on enemy type)
     if (this.sprite instanceof Phaser.Physics.Arcade.Sprite) {
@@ -565,8 +640,8 @@ export abstract class Enemy extends Agent {
       });
     }
 
-    // Update health bar
-    this.updateHealthBar();
+    // Update health bar position
+    this.updateHealthBarPosition();
 
     console.log(
       `Enemy ${this.getEnemyName()} (${
@@ -577,6 +652,26 @@ export abstract class Enemy extends Agent {
     // Log if enemy died from this damage
     if (this.health <= 0) {
       console.log(`${this.getEnemyName()} died from damage`);
+    }
+  }
+
+  // Check if target is valid (still exists and is alive)
+  protected isTargetValid(): boolean {
+    return !!this.target && this.target.active;
+  }
+
+  // Attack the target - abstract method to be implemented by subclasses
+  protected abstract attackTarget(): void;
+
+  // Override updateHealthBarPosition to ensure health bars are properly updated
+  protected updateHealthBarPosition(): void {
+    if (this.healthBar) {
+      const pos = this.getPosition();
+      this.healthBar.setPosition(pos.x, pos.y - 30); // Position above the enemy
+
+      // Update health bar visibility based on health status
+      const healthBarRenderer = new HealthBarRenderer(this.scene);
+      healthBarRenderer.updateHealthBar(this.healthBar, this);
     }
   }
 }

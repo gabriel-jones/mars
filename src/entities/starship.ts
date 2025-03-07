@@ -3,23 +3,33 @@ import { TILE_SIZE } from "../constants";
 import { ResourceType } from "../data/resources";
 
 export enum StarshipState {
-  LANDED = "landed",
-  TAKING_OFF = "taking_off",
-  FLYING = "flying",
-  LANDING = "landing",
+  MARS_LANDED = "mars_landed",
+  MARS_TAKEOFF = "mars_takeoff",
+  MARS_ORBIT = "mars_orbit",
+  MARS_TO_EARTH = "mars_to_earth",
+  EARTH_ORBIT = "earth_orbit",
+  EARTH_TO_MARS = "earth_to_mars",
+  MARS_LANDING = "mars_landing",
 }
 
 export class Starship extends Phaser.GameObjects.Container {
   private starshipSprite: Phaser.GameObjects.Sprite;
   private engineFlame: Phaser.GameObjects.Sprite;
   private currentState: StarshipState;
-  private landingTimer: Phaser.Time.TimerEvent;
-  private takeoffTimer: Phaser.Time.TimerEvent;
+  private stateTimer: Phaser.Time.TimerEvent;
   private landingCoordinates: { x: number; y: number };
   private flightHeight: number = 1000; // How high the ship flies off screen
-  private landingDuration: number = 5000; // 5 seconds for landing animation
-  private takeoffDuration: number = 5000; // 5 seconds for takeoff animation
-  private cycleInterval: number = 30000; // 30 seconds in milliseconds (for testing)
+  private animationDuration: number = 5000; // 5 seconds for animations
+
+  // Durations for each state (in milliseconds)
+  private stateDurations = {
+    marsOrbit: 5000, // 5 seconds in Mars orbit (reduced from 10s)
+    marsToEarth: 7000, // 7 seconds for Mars to Earth transfer (reduced from 15s)
+    earthOrbit: 5000, // 5 seconds in Earth orbit (reduced from 10s)
+    earthToMars: 7000, // 7 seconds for Earth to Mars transfer (reduced from 15s)
+  };
+
+  private robotsToDeliver: number = 2; // Number of robots to deliver each landing
 
   // Inventory for the starship with index signature
   public inventory: { [key in ResourceType]?: number } = {
@@ -27,17 +37,20 @@ export class Starship extends Phaser.GameObjects.Container {
     silicon: 150,
     titanium: 50,
     aluminium: 75,
+    water: 100,
+    regolith: 0,
   };
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y);
+    this.scene = scene;
+    this.landingCoordinates = { x, y };
 
     // Create the starship sprite
     this.starshipSprite = scene.add
       .sprite(0, 0, "starship")
       .setOrigin(0.5, 1) // Set origin to bottom center for landing effect
-      .setScale(1)
-      .setDisplaySize(TILE_SIZE * 2, TILE_SIZE * 8)
+      .setDisplaySize(TILE_SIZE * 2, TILE_SIZE * 8) // Set exact size in tiles
       .setDepth(5);
     this.add(this.starshipSprite);
 
@@ -47,38 +60,39 @@ export class Starship extends Phaser.GameObjects.Container {
       .setOrigin(0.5, 0) // Set origin to top center
       .setScale(0.8)
       .setVisible(false)
-      .setDepth(99); // Set depth lower than starship
+      .setDepth(4); // Set depth lower than starship
     this.add(this.engineFlame);
 
     // Position the flame at the bottom of the rocket
     this.engineFlame.setPosition(0, -25); // Position at the same point as the starship's bottom
 
     // Set initial state
-    this.currentState = StarshipState.LANDED;
-    this.landingCoordinates = { x, y };
+    this.currentState = StarshipState.MARS_LANDED;
 
     // Add to scene
     scene.add.existing(this);
 
-    // Start the cycle
+    // Start the cycle automatically
+    console.log("Starship created - starting cycle");
     this.startCycle();
   }
 
   preload() {
-    // Preload is handled in the MainScene
+    // Preload assets if needed
   }
 
   startCycle() {
     // Schedule first takeoff after a short delay
-    this.takeoffTimer = this.scene.time.delayedCall(5000, () => {
-      this.takeOff();
+    this.stateTimer = this.scene.time.delayedCall(5000, () => {
+      this.takeOffFromMars();
     });
   }
 
-  takeOff() {
-    if (this.currentState !== StarshipState.LANDED) return;
+  takeOffFromMars() {
+    if (this.currentState !== StarshipState.MARS_LANDED) return;
 
-    this.currentState = StarshipState.TAKING_OFF;
+    console.log("Starship taking off from Mars");
+    this.currentState = StarshipState.MARS_TAKEOFF;
 
     // Show engine flame
     this.engineFlame.setVisible(true);
@@ -98,28 +112,90 @@ export class Starship extends Phaser.GameObjects.Container {
     this.scene.tweens.add({
       targets: this,
       y: this.y - this.flightHeight,
-      duration: this.takeoffDuration,
+      duration: this.animationDuration,
       ease: "Cubic.easeIn",
       onComplete: () => {
-        // Ship has left the screen
-        this.currentState = StarshipState.FLYING;
+        // Ship has reached Mars orbit
+        console.log("Starship reached Mars orbit");
+        this.currentState = StarshipState.MARS_ORBIT;
         this.setVisible(false);
 
-        // Schedule landing
-        this.landingTimer = this.scene.time.delayedCall(
-          this.cycleInterval - this.takeoffDuration - this.landingDuration,
+        // Schedule Mars to Earth transfer
+        this.stateTimer = this.scene.time.delayedCall(
+          this.stateDurations.marsOrbit,
           () => {
-            this.land();
+            this.startMarsToEarthTransfer();
           }
         );
       },
     });
   }
 
-  land() {
-    if (this.currentState !== StarshipState.FLYING) return;
+  startMarsToEarthTransfer() {
+    if (this.currentState !== StarshipState.MARS_ORBIT) return;
 
-    this.currentState = StarshipState.LANDING;
+    console.log("Starship starting Mars to Earth transfer");
+    this.currentState = StarshipState.MARS_TO_EARTH;
+
+    // Schedule arrival at Earth orbit
+    this.stateTimer = this.scene.time.delayedCall(
+      this.stateDurations.marsToEarth,
+      () => {
+        this.arriveAtEarthOrbit();
+      }
+    );
+  }
+
+  arriveAtEarthOrbit() {
+    if (this.currentState !== StarshipState.MARS_TO_EARTH) return;
+
+    console.log("Starship arrived at Earth orbit");
+    this.currentState = StarshipState.EARTH_ORBIT;
+
+    // Schedule Earth to Mars transfer
+    this.stateTimer = this.scene.time.delayedCall(
+      this.stateDurations.earthOrbit,
+      () => {
+        this.startEarthToMarsTransfer();
+      }
+    );
+  }
+
+  startEarthToMarsTransfer() {
+    if (this.currentState !== StarshipState.EARTH_ORBIT) return;
+
+    console.log("Starship starting Earth to Mars transfer");
+    this.currentState = StarshipState.EARTH_TO_MARS;
+
+    // Schedule arrival back at Mars orbit
+    this.stateTimer = this.scene.time.delayedCall(
+      this.stateDurations.earthToMars,
+      () => {
+        this.arriveBackAtMarsOrbit();
+      }
+    );
+  }
+
+  arriveBackAtMarsOrbit() {
+    if (this.currentState !== StarshipState.EARTH_TO_MARS) return;
+
+    console.log("Starship arrived back at Mars orbit");
+    this.currentState = StarshipState.MARS_ORBIT;
+
+    // Schedule landing on Mars
+    this.stateTimer = this.scene.time.delayedCall(
+      this.stateDurations.marsOrbit / 2, // Shorter time before landing
+      () => {
+        this.landOnMars();
+      }
+    );
+  }
+
+  landOnMars() {
+    if (this.currentState !== StarshipState.MARS_ORBIT) return;
+
+    console.log("Starship landing on Mars");
+    this.currentState = StarshipState.MARS_LANDING;
 
     // Reset position above landing pad
     this.setPosition(
@@ -144,58 +220,84 @@ export class Starship extends Phaser.GameObjects.Container {
     this.scene.tweens.add({
       targets: this,
       y: this.landingCoordinates.y,
-      duration: this.landingDuration,
+      duration: this.animationDuration,
       ease: "Cubic.easeOut",
       onComplete: () => {
         // Ship has landed
-        this.currentState = StarshipState.LANDED;
+        console.log("Starship landed on Mars");
+        this.currentState = StarshipState.MARS_LANDED;
         this.engineFlame.setVisible(false);
 
+        // Deliver robots when the ship lands
+        this.deliverRobots();
+
         // Schedule next takeoff
-        this.takeoffTimer = this.scene.time.delayedCall(
-          this.cycleInterval,
+        this.stateTimer = this.scene.time.delayedCall(
+          this.stateDurations.marsOrbit, // Use same duration as orbit for landed state
           () => {
-            this.takeOff();
+            console.log("Scheduling next takeoff");
+            this.takeOffFromMars();
           }
         );
       },
     });
   }
 
-  update() {
-    // Any per-frame updates can go here
+  // Deliver Optimus robots when the starship lands
+  private deliverRobots(): void {
+    // Get the main scene
+    const mainScene = this.scene as any;
+
+    // Check if the scene has the createOptimusRobots method
+    if (mainScene.createOptimusRobots) {
+      mainScene.createOptimusRobots(this.robotsToDeliver);
+    }
   }
 
-  // Get the current state of the starship
+  update(time?: number, delta?: number) {
+    // Log the current state for debugging
+    if (Math.random() < 0.01) {
+      // Only log occasionally to avoid spam
+      console.log(
+        `Starship update called, current state: ${this.currentState}`
+      );
+    }
+  }
+
   public getState(): StarshipState {
     return this.currentState;
   }
 
-  // Get the inventory of the starship
   public getInventory(): { [key in ResourceType]?: number } {
     return this.inventory;
   }
 
-  // Add resources to the starship inventory
   public addToInventory(resourceType: ResourceType, amount: number): void {
     if (!this.inventory[resourceType]) {
       this.inventory[resourceType] = 0;
     }
-    this.inventory[resourceType] += amount;
+    this.inventory[resourceType]! += amount;
   }
 
-  // Remove resources from the starship inventory
   public removeFromInventory(
     resourceType: ResourceType,
     amount: number
   ): boolean {
     if (
       !this.inventory[resourceType] ||
-      this.inventory[resourceType] < amount
+      this.inventory[resourceType]! < amount
     ) {
       return false;
     }
-    this.inventory[resourceType] -= amount;
+    this.inventory[resourceType]! -= amount;
     return true;
+  }
+
+  public setRobotsToDeliver(count: number): void {
+    this.robotsToDeliver = count;
+  }
+
+  public getRobotsToDeliver(): number {
+    return this.robotsToDeliver;
   }
 }
