@@ -7,7 +7,7 @@ export const WORLD_HEIGHT = 100; // Example
 
 export const DUST_COLOR = 0xc2b280;
 
-export const NUM_INITIAL_ENEMIES = 0;
+export const NUM_INITIAL_ENEMIES = 8;
 export const NUM_INITIAL_OPTIMUS = 2;
 
 // Map dimensions

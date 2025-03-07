@@ -52,6 +52,30 @@ export class Blueprint extends Building implements HasHealth {
     // Store the building type
     this.buildingType = buildingType;
 
+    // Create resource text display
+    this.resourceText = scene.add.text(
+      0,
+      (tileHeight * TILE_SIZE) / 2 + 10,
+      "",
+      {
+        fontSize: "14px",
+        color: "#ffffff",
+        backgroundColor: "#00000080",
+        padding: { x: 5, y: 5 },
+        stroke: "#000000",
+        strokeThickness: 2,
+        fontFamily: DEFAULT_FONT,
+      }
+    );
+    this.resourceText.setOrigin(0.5, 0);
+    this.resourceText.setDepth(100); // Ensure it's on top of other elements
+    this.add(this.resourceText);
+
+    // Create progress bar (initially hidden)
+    this.progressBar = scene.add.graphics();
+    this.progressBar.setDepth(100);
+    this.add(this.progressBar);
+
     // Store habitat-specific data if provided
     if (buildingType === "habitat") {
       this.habitatId = options.habitatId;
@@ -102,30 +126,6 @@ export class Blueprint extends Building implements HasHealth {
     } else {
       console.error(`Could not find building definition for ${buildingType}`);
     }
-
-    // Create resource text display
-    this.resourceText = scene.add.text(
-      0,
-      (tileHeight * TILE_SIZE) / 2 + 10,
-      "",
-      {
-        fontSize: "14px",
-        color: "#ffffff",
-        backgroundColor: "#00000080",
-        padding: { x: 5, y: 5 },
-        stroke: "#000000",
-        strokeThickness: 2,
-        fontFamily: DEFAULT_FONT,
-      }
-    );
-    this.resourceText.setOrigin(0.5, 0);
-    this.resourceText.setDepth(100); // Ensure it's on top of other elements
-    this.add(this.resourceText);
-
-    // Create progress bar (initially hidden)
-    this.progressBar = scene.add.graphics();
-    this.progressBar.setDepth(100);
-    this.add(this.progressBar);
 
     // Update the resource text
     this.updateResourceText();
@@ -206,6 +206,8 @@ export class Blueprint extends Building implements HasHealth {
 
   // Update the resource text display
   private updateResourceText(): void {
+    if (!this.resourceText) return;
+
     let text = "Required:\n";
 
     this.requiredResources.forEach((req) => {
@@ -220,6 +222,8 @@ export class Blueprint extends Building implements HasHealth {
 
   // Update the progress bar
   private updateProgressBar(): void {
+    if (!this.progressBar) return;
+
     // Clear the previous progress bar
     this.progressBar.clear();
 
@@ -508,7 +512,14 @@ export class Blueprint extends Building implements HasHealth {
     });
 
     // Position the resource text and progress bar below the habitat
-    this.resourceText.setPosition(0, height / 2 + 10);
+    if (this.resourceText) {
+      this.resourceText.setPosition(0, height / 2 + 10);
+    }
+
+    // Update the progress bar position if it exists
+    if (this.progressBar) {
+      this.progressBar.setPosition(0, height / 2 + 30);
+    }
   }
 
   // Shield-related methods (blueprints don't have shields)

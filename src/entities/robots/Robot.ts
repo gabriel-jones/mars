@@ -650,19 +650,38 @@ export abstract class Robot extends Agent {
       this.healthBar = null;
     }
 
+    // Make the robot invisible immediately
+    if (this.container) {
+      this.container.setVisible(false);
+    }
+
     // Play death animation or effect
     this.showDestructionEffect();
 
-    // Immediately remove the robot from the game
-    // Get the MainScene instance to properly remove the robot from arrays
+    // Remove the robot from the RobotManager
     const mainScene = this.scene as any;
-    if (mainScene.robots) {
-      // Find and remove this robot from the robots array
-      const index = mainScene.robots.indexOf(this);
-      if (index !== -1) {
-        mainScene.robots.splice(index, 1);
+    if (mainScene.robotManager) {
+      mainScene.robotManager.removeRobot(this);
+    } else {
+      // Fallback to the old method if robotManager is not available
+      if (mainScene.robots) {
+        const index = mainScene.robots.indexOf(this);
+        if (index !== -1) {
+          mainScene.robots.splice(index, 1);
+        }
       }
     }
+
+    // Schedule the robot to be destroyed after the destruction effect
+    this.scene.time.delayedCall(1000, () => {
+      // Make sure the container is destroyed
+      if (this.container && this.container.active) {
+        this.container.destroy();
+      }
+
+      // Call destroy to clean up any remaining resources
+      this.destroy();
+    });
   }
 
   // Create explosion effect
@@ -716,17 +735,29 @@ export abstract class Robot extends Agent {
     try {
       if (this.stateText && this.stateText.active) {
         this.stateText.destroy();
+        // Set to undefined instead of null to avoid type errors
+        (this.stateText as any) = undefined;
       }
 
       if (this.label && this.label.active) {
         this.label.destroy();
+        // Set to undefined instead of null to avoid type errors
+        (this.label as any) = undefined;
       }
 
       if (this.carriedResourceSprite && this.carriedResourceSprite.active) {
         this.carriedResourceSprite.destroy();
+        this.carriedResourceSprite = null;
       }
     } catch (error) {
       console.warn("Error cleaning up robot UI elements:", error);
+    }
+
+    // Make sure the container is destroyed if it still exists
+    if (this.container && this.container.active) {
+      this.container.destroy();
+      // Set to undefined instead of null to avoid type errors
+      (this.container as any) = undefined;
     }
 
     // Call parent destroy method

@@ -189,9 +189,77 @@ export class RobotManager {
   }
 
   /**
+   * Removes a robot from the manager
+   */
+  public removeRobot(robot: Robot): void {
+    console.log(`Removing robot: ${robot.getRobotName()}`);
+
+    // Remove from main robots array
+    const index = this.robots.indexOf(robot);
+    if (index !== -1) {
+      this.robots.splice(index, 1);
+      console.log(
+        `Removed robot from main array. Remaining robots: ${this.robots.length}`
+      );
+    }
+
+    // Update gameState
+    gameState.robots = this.robots;
+
+    // If it's a mining drone, remove it from the mining drones array
+    if (robot instanceof MiningDrone) {
+      const droneIndex = this.miningDrones.indexOf(robot as MiningDrone);
+      if (droneIndex !== -1) {
+        this.miningDrones.splice(droneIndex, 1);
+        console.log(
+          `Removed mining drone. Remaining drones: ${this.miningDrones.length}`
+        );
+      }
+    }
+
+    // If it's an optimus, remove it from the optimuses array
+    if (robot instanceof Optimus) {
+      const optimusIndex = this.optimuses.indexOf(robot as Optimus);
+      if (optimusIndex !== -1) {
+        this.optimuses.splice(optimusIndex, 1);
+        console.log(
+          `Removed optimus. Remaining optimuses: ${this.optimuses.length}`
+        );
+      }
+    }
+  }
+
+  /**
    * Updates all robots
    */
   public update(time: number, delta: number): void {
+    // Filter out any destroyed robots or robots that are not alive
+    this.robots = this.robots.filter((robot) => {
+      // Check if the robot is alive and its container is still active
+      const isActive =
+        robot.isAlive() &&
+        (robot as any).container &&
+        (robot as any).container.active;
+      return isActive;
+    });
+
+    // Also filter the specialized arrays
+    this.optimuses = this.optimuses.filter((robot) => {
+      const isActive =
+        robot.isAlive() &&
+        (robot as any).container &&
+        (robot as any).container.active;
+      return isActive;
+    });
+
+    this.miningDrones = this.miningDrones.filter((robot) => {
+      const isActive =
+        robot.isAlive() &&
+        (robot as any).container &&
+        (robot as any).container.active;
+      return isActive;
+    });
+
     // Update all robots
     this.robots.forEach((robot) => robot.update(time, delta));
 
