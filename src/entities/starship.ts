@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { TILE_SIZE } from "../constants";
+import { ResourceType } from "../data/resources";
 
 export enum StarshipState {
   LANDED = "landed",
@@ -12,7 +13,6 @@ export class Starship extends Phaser.GameObjects.Container {
   private starshipSprite: Phaser.GameObjects.Sprite;
   private engineFlame: Phaser.GameObjects.Sprite;
   private currentState: StarshipState;
-  private landingPad: Phaser.GameObjects.Image;
   private landingTimer: Phaser.Time.TimerEvent;
   private takeoffTimer: Phaser.Time.TimerEvent;
   private landingCoordinates: { x: number; y: number };
@@ -21,16 +21,16 @@ export class Starship extends Phaser.GameObjects.Container {
   private takeoffDuration: number = 5000; // 5 seconds for takeoff animation
   private cycleInterval: number = 30000; // 30 seconds in milliseconds (for testing)
 
+  // Inventory for the starship with index signature
+  public inventory: { [key in ResourceType]?: number } = {
+    iron: 200,
+    silicon: 150,
+    titanium: 50,
+    aluminium: 75,
+  };
+
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y);
-
-    // Create landing pad using the SVG image instead of a rectangle
-    this.landingPad = scene.add
-      .image(x, y, "landingpad")
-      .setOrigin(0.5)
-      .setScale(1)
-      .setDisplaySize(TILE_SIZE * 4, TILE_SIZE * 4)
-      .setDepth(0);
 
     // Create the starship sprite
     this.starshipSprite = scene.add
@@ -164,5 +164,38 @@ export class Starship extends Phaser.GameObjects.Container {
 
   update() {
     // Any per-frame updates can go here
+  }
+
+  // Get the current state of the starship
+  public getState(): StarshipState {
+    return this.currentState;
+  }
+
+  // Get the inventory of the starship
+  public getInventory(): { [key in ResourceType]?: number } {
+    return this.inventory;
+  }
+
+  // Add resources to the starship inventory
+  public addToInventory(resourceType: ResourceType, amount: number): void {
+    if (!this.inventory[resourceType]) {
+      this.inventory[resourceType] = 0;
+    }
+    this.inventory[resourceType] += amount;
+  }
+
+  // Remove resources from the starship inventory
+  public removeFromInventory(
+    resourceType: ResourceType,
+    amount: number
+  ): boolean {
+    if (
+      !this.inventory[resourceType] ||
+      this.inventory[resourceType] < amount
+    ) {
+      return false;
+    }
+    this.inventory[resourceType] -= amount;
+    return true;
   }
 }

@@ -27,11 +27,14 @@ import { ResourceManager } from "../data/resources";
 import { Blueprint } from "../entities/buildings/Blueprint";
 import { Enemy, Alien } from "../entities/enemies";
 import { ToolInventoryDisplay } from "../ui/toolInventoryDisplay";
+import { DetailView } from "../ui/detailView";
+import { LandingPad } from "../entities/buildings/LandingPad";
 
 export class MainScene extends Phaser.Scene {
   private actionMenu: ActionMenu;
   private resourceDisplay: ResourceDisplay;
   private toolInventoryDisplay: ToolInventoryDisplay;
+  private detailView: DetailView;
   private fpsText: Phaser.GameObjects.Text;
   private uiCamera: Phaser.Cameras.Scene2D.Camera;
   private resourceNodes: ResourceNode[] = [];
@@ -76,6 +79,7 @@ export class MainScene extends Phaser.Scene {
     this.load.image("mining-station", "assets/mining-station.png");
     this.load.image("ice-drill", "assets/ice-drill.png");
     this.load.image("regolith-processor", "assets/regolith-processor.png");
+    this.load.image("landing-pad", "assets/landing-pad.png");
 
     // Starship
     this.load.image("starship", "assets/starship.png");
@@ -136,6 +140,9 @@ export class MainScene extends Phaser.Scene {
   }
 
   create() {
+    // Set default cursor
+    this.input.setDefaultCursor("default");
+
     // Initialize FPS counter
     this.fpsText = createFPS(this);
 
@@ -158,6 +165,9 @@ export class MainScene extends Phaser.Scene {
     gameState.highlightRect = createTileHighlight(this);
     gameState.currentTilePos = { x: -1, y: -1 };
 
+    // Listen for blueprint cancellation events
+    this.events.on("blueprint:canceled", this.handleBlueprintCanceled, this);
+
     // Make sure physics is enabled
     this.physics.world.enable([this.player.getSprite()]);
 
@@ -173,6 +183,7 @@ export class MainScene extends Phaser.Scene {
       this.game.config.height as number
     );
     this.uiCamera.setScroll(0, 0);
+    this.uiCamera.setName("UICamera");
 
     // Don't make the UI camera transparent - we need to see UI elements
     this.uiCamera.setBackgroundColor(0x000000);
@@ -189,6 +200,7 @@ export class MainScene extends Phaser.Scene {
       (this.game.config.height as number) * 2
     );
     this.cameras.main.startFollow(gameState.player, true);
+    this.cameras.main.setName("MainCamera");
 
     // Create build menu with map reference and UI camera
     this.actionMenu = new ActionMenu(this, gameState.map, (itemName, x, y) =>
@@ -212,11 +224,24 @@ export class MainScene extends Phaser.Scene {
       gameState.player.y
     );
 
-    // Create starship near spawn point
-    const starshipOffset = 200; // Distance from spawn point
-    const starshipX = this.spawnPoint.x + starshipOffset;
-    const starshipY = this.spawnPoint.y - starshipOffset; // Position above the spawn point
-    this.starship = new Starship(this, starshipX, starshipY);
+    // Create initial landing pad with starship near spawn point
+    const landingPadOffset = 200; // Distance from spawn point
+    const landingPadX = this.spawnPoint.x + landingPadOffset;
+    const landingPadY = this.spawnPoint.y - landingPadOffset; // Position above the spawn point
+
+    // Create the landing pad building
+    const initialLandingPad = BuildingFactory.createBuilding(
+      this,
+      landingPadX,
+      landingPadY,
+      "landing-pad"
+    ) as LandingPad;
+
+    // Add to buildings list
+    this.buildings.push(initialLandingPad);
+
+    // Store reference to the starship
+    this.starship = initialLandingPad.getStarship();
 
     // Add resource nodes near the spawn point
     this.addResourceNodesNearSpawn();
@@ -256,14 +281,36 @@ export class MainScene extends Phaser.Scene {
     // by not adding it to the ignore list
     this.uiCamera.ignore([gameState.player, gameState.groundLayer]);
 
-    // Handle window resize events
+    // Create detail view for entity selection
+    console.log("Creating DetailView...");
+    this.detailView = new DetailView(this);
+
+    // Add debug message to check UI camera setup
+    console.log("UI Camera setup:", {
+      bounds: this.uiCamera.getBounds(),
+      mainCamera: this.cameras.main.id,
+      uiCamera: this.uiCamera.id,
+      detailViewContainer: this.detailView.getContainer().name || "unnamed",
+    });
+
+    // Add resize handler
     this.scale.on("resize", this.handleResize, this);
+
+    // Log debug info about the scene
+    console.log("Scene setup complete. Debug info:", {
+      width: this.scale.width,
+      height: this.scale.height,
+      cameras: this.cameras.cameras.length,
+      mainCameraName: this.cameras.main.name,
+      uiCameraName: this.uiCamera.name,
+    });
 
     // Log the creation of UI elements
     console.log("UI elements created:", {
       actionMenu: !!this.actionMenu,
       resourceDisplay: !!this.resourceDisplay,
       toolInventoryDisplay: !!this.toolInventoryDisplay,
+      detailView: !!this.detailView,
     });
   }
 
@@ -272,35 +319,18 @@ export class MainScene extends Phaser.Scene {
     this.fpsText.setText(`FPS: ${Math.round(this.game.loop.actualFps)}`);
 
     // Update player movement
-    if (gameState.player) {
-      if (this.player) {
-        // Use the new Player class update method
-        this.player.update(time, delta);
-
-        // Log shadow update for debugging
-        if (time % 1000 < 20) {
-          console.log("Player update called, shadows should be updating");
-        }
-      } else {
-        // Fallback to the old function for backward compatibility
-        updatePlayerMovement(
-          gameState.player,
-          gameState.cursors,
-          gameState.wasdKeys,
-          time
-        );
-      }
+    if (this.player) {
+      // Use the Player class's update method to handle movement and shooting
+      this.player.update(time, delta);
     }
 
-    // Update tile highlight
-    if (gameState.highlightRect) {
-      gameState.currentTilePos = updateTileHighlight(
-        this,
-        gameState.highlightRect,
-        gameState.map,
-        gameState.currentTilePos
-      );
-    }
+    // Update tile highlight whenever the mouse is over the game area
+    gameState.currentTilePos = updateTileHighlight(
+      this,
+      gameState.highlightRect,
+      gameState.map,
+      gameState.currentTilePos
+    );
 
     // Update UI elements
     this.actionMenu.update();
@@ -308,6 +338,11 @@ export class MainScene extends Phaser.Scene {
     // Update the robots list if the panel is open
     if (this.actionMenu.isRobotsPanelOpen) {
       this.updateRobotsListInMenu();
+    }
+
+    // Update the starships list if the panel is open
+    if (this.actionMenu.isStarshipsPanelOpen) {
+      this.actionMenu.updateStarshipsList();
     }
 
     // Update resource display
@@ -353,6 +388,11 @@ export class MainScene extends Phaser.Scene {
             )
         : -1;
       this.toolInventoryDisplay.updateSelection(selectedIndex);
+    }
+
+    // Update detail view
+    if (this.detailView) {
+      this.detailView.update(time, delta);
     }
   }
 
@@ -890,27 +930,79 @@ export class MainScene extends Phaser.Scene {
 
   // Clean up resources when the scene is destroyed
   shutdown() {
-    // Remove event listeners
-    this.scale.off("resize", this.handleResize, this);
-
-    // Clean up player dust effects
-    if (this.player) {
-      // Player class handles its own cleanup
-    } else if (gameState.player) {
-      cleanupPlayerDustEffects(gameState.player);
+    // Clean up event listeners
+    this.input.off("pointerdown");
+    this.input.off("pointermove");
+    if (this.input.keyboard) {
+      this.input.keyboard.off("keydown");
     }
 
-    // Clean up the resource display
+    // Clean up UI elements
+    if (this.actionMenu) {
+      // Clean up action menu if needed
+    }
+
     if (this.resourceDisplay) {
-      this.resourceDisplay.destroy();
+      // Clean up resource display if needed
     }
 
-    // Clean up tool inventory display
     if (this.toolInventoryDisplay) {
       this.toolInventoryDisplay.destroy();
     }
 
-    // Clean up other resources as needed
+    if (this.detailView) {
+      this.detailView.destroy();
+    }
+
+    // Clean up player - skip if not initialized
+    if (typeof this.player !== "undefined" && this.player !== null) {
+      this.player.destroy();
+    }
+
+    // Clean up robots
+    if (this.robots) {
+      this.robots.forEach((robot) => {
+        robot.destroy();
+      });
+    }
+
+    // Clean up buildings
+    if (this.buildings) {
+      this.buildings.forEach((building) => {
+        building.destroy();
+      });
+    }
+
+    // Clean up blueprints
+    if (this.blueprints) {
+      this.blueprints.forEach((blueprint) => {
+        blueprint.destroy();
+      });
+    }
+
+    // Clean up enemies
+    if (this.enemies) {
+      this.enemies.forEach((enemy) => {
+        enemy.destroy();
+      });
+    }
+
+    // Clean up resource nodes
+    if (this.resourceNodes) {
+      this.resourceNodes.forEach((node) => {
+        node.destroy();
+      });
+    }
+
+    // Clean up terrain features
+    if (this.terrainFeatures) {
+      this.terrainFeatures.forEach((feature) => {
+        feature.destroy();
+      });
+    }
+
+    // Remove resize handler
+    this.scale.off("resize", this.handleResize, this);
   }
 
   private updateRobotsListInMenu() {
@@ -955,8 +1047,11 @@ export class MainScene extends Phaser.Scene {
     const ufoCount = 3;
     const alienCount = 3;
 
-    // Create UFOs
-    for (let i = 0; i < ufoCount; i++) {
+    // Clear existing enemies array to prevent duplicates when respawning
+    this.enemies = [];
+
+    // Create UFOs and Aliens
+    for (let i = 0; i < ufoCount + alienCount; i++) {
       // Generate random position at the edges of the map
       let x, y;
       const mapWidth = this.map.widthInPixels;
@@ -988,23 +1083,28 @@ export class MainScene extends Phaser.Scene {
           y = margin;
       }
 
-      // Create a UFO enemy
+      // Create an enemy (UFO or Alien)
       try {
-        const ufo = new Alien(
+        // Determine if this should be a UFO or Alien
+        const isUFO = i < ufoCount;
+
+        const enemy = new Alien(
           this,
           x,
           y,
-          80, // maxHealth
-          70 + Phaser.Math.Between(-10, 10), // speed with slight variation
-          120, // attackRange
-          15, // attackDamage
-          1500 // attackCooldown
+          isUFO ? 100 : 80, // maxHealth (UFOs are tougher)
+          isUFO
+            ? 90 + Phaser.Math.Between(-10, 10)
+            : 70 + Phaser.Math.Between(-10, 10), // speed (UFOs are faster)
+          isUFO ? 150 : 120, // attackRange (UFOs have longer range)
+          isUFO ? 20 : 15, // attackDamage (UFOs do more damage)
+          isUFO ? 2000 : 1500 // attackCooldown (UFOs attack slower)
         );
 
-        this.enemies.push(ufo);
-        console.log(`Created UFO at ${x}, ${y}`);
+        this.enemies.push(enemy);
+        console.log(`Created ${isUFO ? "UFO" : "Alien"} at ${x}, ${y}`);
       } catch (error) {
-        console.error("Error creating UFO:", error);
+        console.error(`Error creating enemy:`, error);
       }
     }
 
@@ -1037,11 +1137,24 @@ export class MainScene extends Phaser.Scene {
 
   // Handle window resize events
   private handleResize(gameSize: Phaser.Structs.Size): void {
-    console.log("Window resized:", gameSize.width, gameSize.height);
-
-    // Update tool inventory display
+    // Resize UI elements
     if (this.toolInventoryDisplay) {
       this.toolInventoryDisplay.resize();
+    }
+
+    // Log resize event for debugging
+    console.log("Game resized to:", gameSize.width, gameSize.height);
+  }
+
+  // Handle blueprint cancellation
+  private handleBlueprintCanceled(blueprint: any): void {
+    console.log("Blueprint cancellation event received", blueprint);
+
+    // Make sure the blueprint is removed from the blueprints array
+    const index = this.blueprints.indexOf(blueprint);
+    if (index !== -1) {
+      this.blueprints.splice(index, 1);
+      console.log("Blueprint removed from blueprints array");
     }
   }
 }

@@ -4,7 +4,8 @@ export type BuildingType =
   | "solar-panel"
   | "mining-station"
   | "ice-drill"
-  | "regolith-processor";
+  | "regolith-processor"
+  | "landing-pad";
 
 import { ResourceType } from "./resources";
 import { TerrainFeatureType } from "../entities/TerrainFeature";
@@ -104,6 +105,23 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     placementType: PlacementType.SingleTile,
     locationType: LocationType.Outside,
     buildEffort: 15000, // 15 seconds to build
+  },
+  {
+    buildingType: "landing-pad",
+    name: "Starship Landing Pad",
+    cost: [
+      { type: "iron", amount: 200 },
+      { type: "titanium", amount: 100 },
+      { type: "silicon", amount: 150 },
+      { type: "aluminium", amount: 75 },
+    ],
+    tileSize: {
+      width: 4,
+      height: 4,
+    },
+    placementType: PlacementType.SingleTile,
+    locationType: LocationType.Outside,
+    buildEffort: 30000, // 30 seconds to build
   },
 ];
 

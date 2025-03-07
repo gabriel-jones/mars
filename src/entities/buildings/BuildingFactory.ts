@@ -6,6 +6,7 @@ import { Habitat } from "./Habitat";
 import { SolarPanel } from "./SolarPanel";
 import { IceDrill } from "./IceDrill";
 import { RegolithProcessor } from "./RegolithProcessor";
+import { LandingPad } from "./LandingPad";
 import { Blueprint } from "./Blueprint";
 
 export class BuildingFactory {
@@ -54,6 +55,9 @@ export class BuildingFactory {
 
       case "regolith-processor":
         return new RegolithProcessor(scene, x, y, tileWidth, tileHeight);
+
+      case "landing-pad":
+        return new LandingPad(scene, x, y, tileWidth, tileHeight);
 
       default:
         // Create a generic building with the appropriate tile size

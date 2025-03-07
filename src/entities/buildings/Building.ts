@@ -44,6 +44,10 @@ export class Building extends Phaser.GameObjects.Container {
     scene.add.existing(this);
   }
 
+  public getBuildingType(): BuildingType {
+    return this.buildingType;
+  }
+
   protected getBuildingName(): string {
     // Default implementation, should be overridden by subclasses
     return this.buildingType;

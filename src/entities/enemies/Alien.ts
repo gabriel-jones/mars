@@ -44,9 +44,18 @@ export class Alien extends Enemy {
 
         // Make sure the physics body is enabled
         this.sprite.body.enable = true;
+
+        console.log(`Alien physics body enabled: ${this.sprite.body.enable}`);
+        console.log(
+          `Alien physics body dimensions: ${this.sprite.body.width}x${this.sprite.body.height}`
+        );
+      } else {
+        console.error("Alien sprite body is null or undefined!");
       }
 
       console.log(`Alien created at ${x}, ${y} with physics body enabled`);
+    } else {
+      console.error("Failed to create Alien sprite as Arcade.Sprite!");
     }
   }
 

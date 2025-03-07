@@ -288,13 +288,11 @@ export class Tool {
     const velocityY = Math.sin(angle) * speed;
 
     // Create a bullet as a simple rectangle for better visibility
-    const bulletWidth = 8;
-    const bulletHeight = 4;
     const bullet = this.scene.add.rectangle(
       startX,
       startY,
-      bulletWidth,
-      bulletHeight,
+      8, // bulletWidth
+      4, // bulletHeight
       0xffff00
     );
     bullet.setRotation(angle);
@@ -316,6 +314,41 @@ export class Tool {
     body.setCollideWorldBounds(true);
     body.onWorldBounds = true;
 
+    // Make sure the bullet has a proper hitbox - larger than visual for better hit detection
+    body.setSize(16, 16);
+    body.setOffset(-4, -6); // Center the hitbox on the bullet
+
+    // Enable debug visualization to see the physics body
+    body.debugShowBody = true;
+    body.debugBodyColor = 0xff0000;
+
+    // Add a visual debug rectangle to show the bullet's hitbox
+    const debugRect = this.scene.add.rectangle(
+      bullet.x,
+      bullet.y,
+      16,
+      16,
+      0xff0000,
+      0.3
+    );
+    debugRect.setDepth(20);
+
+    // Update the debug rectangle position with the bullet
+    const updateDebugRect = () => {
+      if (bullet.active) {
+        debugRect.setPosition(bullet.x, bullet.y);
+      } else {
+        debugRect.destroy();
+      }
+    };
+
+    // Add an update event to keep the debug rectangle with the bullet
+    const debugUpdater = this.scene.time.addEvent({
+      delay: 16,
+      callback: updateDebugRect,
+      loop: true,
+    });
+
     // Log that the bullet was created successfully
     console.log(
       `Bullet created successfully with velocity (${velocityX}, ${velocityY})`
@@ -326,6 +359,8 @@ export class Tool {
       if (body.gameObject === bullet) {
         console.log("Bullet hit world bounds, destroying");
         bullet.destroy();
+        debugRect.destroy();
+        debugUpdater.destroy();
         // Remove the listener to prevent memory leaks
         this.scene?.physics.world.off("worldbounds", worldBoundsListener);
       }
@@ -338,45 +373,89 @@ export class Tool {
       if (bullet && bullet.active) {
         console.log("Bullet lifetime expired, destroying");
         bullet.destroy();
+        debugRect.destroy();
+        debugUpdater.destroy();
       }
     });
 
-    // Find all enemies in the scene
-    const enemies = this.scene.children
-      .getChildren()
-      .filter(
-        (child) =>
-          child instanceof Phaser.Physics.Arcade.Sprite &&
-          (child as any).isEnemy === true
-      );
+    // Get enemies from gameState instead of searching through all scene children
+    const gameState = (window as any).gameState;
+    const enemies = gameState.enemies || [];
 
     console.log(
-      `Found ${enemies.length} enemies for bullet collision detection`
+      `Found ${enemies.length} enemies for bullet collision detection from gameState`
     );
 
     // Set up collision with enemies
     if (enemies.length > 0) {
-      enemies.forEach((enemy) => {
-        if (enemy instanceof Phaser.Physics.Arcade.Sprite) {
-          this.scene!.physics.add.overlap(
-            bullet,
-            enemy,
-            () => {
-              console.log(`Bullet hit enemy: ${(enemy as any).enemyType}`);
-              // Destroy the bullet
-              bullet.destroy();
+      console.log("Setting up bullet collision with enemies");
 
-              // Damage the enemy
-              if ((enemy as any).damage) {
-                (enemy as any).damage(10);
-                this.createBloodEffect(enemy as Phaser.Physics.Arcade.Sprite);
-              }
-            },
-            undefined,
-            this
-          );
-        }
+      // Log enemy positions for debugging
+      enemies.forEach((enemy: any, index: number) => {
+        const enemySprite = enemy.getSprite();
+        console.log(
+          `Enemy ${index} position: (${enemySprite.x}, ${enemySprite.y}), active: ${enemySprite.active}`
+        );
       });
+
+      // Use overlap instead of collider for more control
+      const processOverlap = (): boolean => {
+        // Check for overlap with each enemy
+        for (const enemy of enemies) {
+          const enemySprite = enemy.getSprite();
+
+          // Skip if enemy or bullet is not active
+          if (!enemySprite.active || !bullet.active) continue;
+
+          // Check for overlap between bullet and enemy sprite
+          const bulletBounds = bullet.getBounds();
+          const enemyBounds = enemySprite.getBounds();
+
+          if (Phaser.Geom.Rectangle.Overlaps(bulletBounds, enemyBounds)) {
+            console.log(
+              `Bullet hit enemy at position: (${enemySprite.x}, ${enemySprite.y})`
+            );
+
+            // Destroy the bullet
+            bullet.destroy();
+            debugRect.destroy();
+            debugUpdater.destroy();
+
+            // Damage the enemy
+            if (typeof enemy.damage === "function") {
+              enemy.damage(10);
+              this.createBloodEffect(enemySprite);
+              console.log(`Successfully damaged enemy`);
+            } else {
+              console.error("Damage method not found on enemy");
+            }
+
+            // We found and processed an overlap
+            return true;
+          }
+        }
+
+        // No overlap found
+        return false;
+      };
+
+      // Check for overlap every frame until bullet is destroyed
+      const overlapChecker = this.scene.time.addEvent({
+        delay: 16, // Check approximately every frame (60fps)
+        callback: () => {
+          if (!bullet.active) {
+            overlapChecker.destroy();
+            return;
+          }
+
+          if (processOverlap()) {
+            overlapChecker.destroy();
+          }
+        },
+        loop: true,
+      });
+
+      console.log("Bullet-enemy overlap checker created successfully");
     }
   }
 
@@ -498,8 +577,10 @@ export class Tool {
 export class ToolInventory {
   private tools: (Tool | null)[] = [null, null, null]; // 3 slots for tools
   private selectedIndex: number = -1; // -1 means no tool selected
+  private scene: Phaser.Scene;
 
   constructor(scene: Phaser.Scene) {
+    this.scene = scene;
     // Initialize with assault rifle in the first slot
     this.tools[0] = new Tool(
       ToolType.ASSAULT_RIFLE,
@@ -524,35 +605,54 @@ export class ToolInventory {
 
   // Select a tool by index (0-2)
   public selectTool(index: number): void {
-    // If the tool is already selected, deselect it
-    if (this.selectedIndex === index) {
-      this.deselectTool();
+    // Validate index
+    if (index < 0 || index >= this.tools.length) {
+      console.error(`Invalid tool index: ${index}`);
       return;
     }
 
-    // Hide the previously selected tool
-    if (this.selectedIndex !== -1 && this.tools[this.selectedIndex]) {
-      this.tools[this.selectedIndex]!.hide();
+    // Deselect current tool if any
+    if (this.selectedIndex !== -1) {
+      const currentTool = this.tools[this.selectedIndex];
+      if (currentTool) {
+        currentTool.hide();
+      }
     }
 
-    // Select the new tool if it exists
-    if (index >= 0 && index < this.tools.length && this.tools[index]) {
-      this.selectedIndex = index;
-      console.log(
-        `Selected tool at index ${index}: ${this.tools[index]!.name}`
-      );
-    } else {
-      this.selectedIndex = -1;
-      console.log(`Deselected tools (invalid index: ${index})`);
+    // Select new tool
+    this.selectedIndex = index;
+    const selectedTool = this.tools[this.selectedIndex];
+
+    // Update cursor based on selected tool
+    if (this.scene && selectedTool) {
+      if (selectedTool.type === "assault-rifle") {
+        this.scene.input.setDefaultCursor("crosshair");
+      } else {
+        this.scene.input.setDefaultCursor("default");
+      }
     }
+
+    console.log(
+      `Selected tool at index ${index}:`,
+      selectedTool?.name || "none"
+    );
   }
 
   // Deselect the current tool
   public deselectTool(): void {
-    if (this.selectedIndex !== -1 && this.tools[this.selectedIndex]) {
-      this.tools[this.selectedIndex]!.hide();
+    // Deselect current tool if any
+    if (this.selectedIndex !== -1) {
+      const currentTool = this.tools[this.selectedIndex];
+      if (currentTool) {
+        currentTool.hide();
+      }
+      this.selectedIndex = -1;
+
+      // Reset cursor to default
+      if (this.scene) {
+        this.scene.input.setDefaultCursor("default");
+      }
     }
-    this.selectedIndex = -1;
   }
 
   // Update the position of the selected tool

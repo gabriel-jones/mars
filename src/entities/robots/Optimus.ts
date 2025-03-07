@@ -12,7 +12,7 @@ export class Optimus extends Robot {
   private currentTask: (() => void) | null = null;
   private taskCompleteTime: number = 0;
   private resourceAmount: number = 0;
-  private resourceType: string = "";
+  private resourceType: ResourceType = "" as ResourceType;
   private targetResourceNode: ResourceNode | null = null;
   private targetBlueprint: Blueprint | null = null;
   private jobCheckTimer: number = 0;
@@ -40,7 +40,7 @@ export class Optimus extends Robot {
     return this.robotId;
   }
 
-  public getResourceType(): string {
+  public getResourceType(): ResourceType {
     return this.resourceType;
   }
 
@@ -83,7 +83,7 @@ export class Optimus extends Robot {
   // Add a task to deliver a resource to a blueprint
   public deliverResourceToBlueprint(
     blueprint: Blueprint,
-    resourceType: string,
+    resourceType: ResourceType,
     amount: number
   ): void {
     console.log(
@@ -380,7 +380,7 @@ export class Optimus extends Robot {
 
     // Clear our carried resource
     this.resourceAmount = 0;
-    this.resourceType = "";
+    this.resourceType = "" as ResourceType;
     this.clearCarriedResource();
   }
 
@@ -414,7 +414,7 @@ export class Optimus extends Robot {
 
     // Reset resource information
     this.resourceAmount = 0;
-    this.resourceType = "";
+    this.resourceType = "" as ResourceType;
   }
 
   // Make the robot wander around its home position
@@ -590,7 +590,7 @@ export class Optimus extends Robot {
 
         // Reset resource information
         this.resourceAmount = 0;
-        this.resourceType = "";
+        this.resourceType = "" as ResourceType;
 
         // Reset the target blueprint
         this.targetBlueprint = null;

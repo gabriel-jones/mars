@@ -9,8 +9,10 @@ export class Player extends Agent {
   private toolInventory: ToolInventory;
   private toolKeys: Phaser.Input.Keyboard.Key[] = [];
   private fireKey: Phaser.Input.Keyboard.Key;
+  private escKey: Phaser.Input.Keyboard.Key;
   private lastFireTime: number = 0;
   private fireRate: number = 150; // milliseconds between shots
+  private lastSelectedToolIndex: number = -1; // Track the last selected tool index
 
   constructor(
     scene: Phaser.Scene,
@@ -43,6 +45,11 @@ export class Player extends Agent {
     // Initialize fire key (space)
     this.fireKey = scene.input.keyboard!.addKey(
       Phaser.Input.Keyboard.KeyCodes.SPACE
+    );
+
+    // Initialize ESC key
+    this.escKey = scene.input.keyboard!.addKey(
+      Phaser.Input.Keyboard.KeyCodes.ESC
     );
 
     // Set up mouse input for firing
@@ -116,12 +123,26 @@ export class Player extends Agent {
     // Update tool selection
     this.updateToolSelection();
 
+    // Update cursor based on selected tool
+    this.updateCursor();
+
     // Update selected tool position
     this.updateSelectedToolPosition();
 
     // Check for firing input (space key)
     if (this.fireKey.isDown) {
       this.tryToFire();
+    }
+
+    // Check for ESC key to deselect tool
+    if (Phaser.Input.Keyboard.JustDown(this.escKey)) {
+      console.log("ESC key pressed, deselecting tool");
+      this.toolInventory.deselectTool();
+      this.lastSelectedToolIndex = -1;
+      this.scene.input.setDefaultCursor("default");
+
+      // Emit an event to notify the DetailView to clear selection
+      this.scene.events.emit("tool:deselected");
     }
 
     // Update dust effects
@@ -163,11 +184,31 @@ export class Player extends Agent {
 
   // Update tool selection based on key presses
   private updateToolSelection(): void {
+    // Check if any tool key is just pressed
     for (let i = 0; i < this.toolKeys.length; i++) {
       if (Phaser.Input.Keyboard.JustDown(this.toolKeys[i])) {
         console.log(`Tool key ${i + 1} pressed`);
-        this.toolInventory.selectTool(i);
-        break;
+
+        // If the same tool is already selected, deselect it (toggle behavior)
+        if (this.lastSelectedToolIndex === i) {
+          console.log(`Tool ${i} already selected, deselecting`);
+          this.toolInventory.deselectTool();
+          this.lastSelectedToolIndex = -1;
+          this.scene.input.setDefaultCursor("default");
+
+          // Emit an event to notify the DetailView to clear selection
+          this.scene.events.emit("tool:deselected");
+        } else {
+          // Select the new tool
+          this.toolInventory.selectTool(i);
+          this.lastSelectedToolIndex = i;
+
+          // Emit an event to notify the DetailView to show the tool
+          const selectedTool = this.toolInventory.getSelectedTool();
+          if (selectedTool) {
+            this.scene.events.emit("tool:selected", selectedTool);
+          }
+        }
       }
     }
   }
@@ -309,9 +350,26 @@ export class Player extends Agent {
 
   // Clean up resources
   public destroy(): void {
-    super.destroy();
+    // Reset cursor to default when player is destroyed
+    if (this.scene) {
+      this.scene.input.setDefaultCursor("default");
+    }
+
+    // Destroy tool inventory
     this.toolInventory.destroy();
-    this.toolKeys = [];
+
+    // Call parent destroy method
+    super.destroy();
+  }
+
+  // Update cursor based on selected tool
+  private updateCursor(): void {
+    const selectedTool = this.toolInventory.getSelectedTool();
+    if (selectedTool && selectedTool.type === "assault-rifle") {
+      this.scene.input.setDefaultCursor("crosshair");
+    } else {
+      this.scene.input.setDefaultCursor("default");
+    }
   }
 }
 

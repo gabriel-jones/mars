@@ -33,6 +33,14 @@ export abstract class Enemy extends Agent {
   protected label: Phaser.GameObjects.Text;
   protected preferredShootingDistance: number; // Distance at which enemies prefer to stop and shoot
   public isEnemy: boolean = true; // Flag to identify this as an enemy for collision detection
+  protected healthBar: Phaser.GameObjects.Graphics; // Health bar graphics
+  protected currentTile: { x: number; y: number } = { x: 0, y: 0 };
+
+  // Static map to track occupied tiles
+  private static occupiedTiles: Map<string, Enemy> = new Map();
+
+  // Tile size for grid movement
+  private static readonly TILE_SIZE: number = 64; // Match your game's tile size
 
   constructor(
     scene: Phaser.Scene,
@@ -52,8 +60,25 @@ export abstract class Enemy extends Agent {
       .setOrigin(0.5)
       .setDepth(5);
 
-    // Call the parent constructor
+    // Call the parent constructor first
     super(scene, sprite, maxHealth);
+
+    // Ensure the physics body is properly set up
+    if (sprite.body) {
+      // Set a proper hitbox for the enemy
+      sprite.body.setSize(sprite.width * 0.8, sprite.height * 0.8);
+      sprite.body.setOffset(sprite.width * 0.1, sprite.height * 0.1);
+
+      // Disable debug visualization
+      sprite.body.debugShowBody = false;
+    }
+
+    // Add isEnemy property to the sprite for collision detection
+    (sprite as any).isEnemy = true;
+    (sprite as any).enemyType = enemyType;
+
+    // Store a reference to the Enemy instance on the sprite
+    (sprite as any).enemyInstance = this;
 
     // Set enemy properties
     this.enemyType = enemyType;
@@ -63,6 +88,16 @@ export abstract class Enemy extends Agent {
     this.attackDamage = attackDamage;
     this.attackCooldown = attackCooldown;
     this.preferredShootingDistance = preferredShootingDistance;
+
+    // Initialize current tile position
+    this.currentTile = {
+      x: Math.floor(x / Enemy.TILE_SIZE),
+      y: Math.floor(y / Enemy.TILE_SIZE),
+    };
+
+    // Register this enemy's position in the occupied tiles map
+    const tileKey = `${this.currentTile.x},${this.currentTile.y}`;
+    Enemy.occupiedTiles.set(tileKey, this);
 
     // Add a label showing the enemy type
     this.label = scene.add
@@ -74,14 +109,19 @@ export abstract class Enemy extends Agent {
       .setOrigin(0.5)
       .setDepth(5);
 
-    // Add state text
+    // Create health bar
+    this.healthBar = scene.add.graphics();
+    this.healthBar.setDepth(5);
+    this.updateHealthBar();
+
+    // Add state text (but make it invisible since we're using health bar)
     this.stateText = scene.add
-      .text(x, y - 25, "IDLE", {
+      .text(x, y - 25, "", {
         fontSize: "12px",
         color: "#FF0000",
         align: "center",
       })
-      .setAlpha(0.75)
+      .setAlpha(0)
       .setOrigin(0.5)
       .setDepth(5);
 
@@ -101,14 +141,13 @@ export abstract class Enemy extends Agent {
     // Update shadow effects
     this.updateShadowEffects();
 
-    // Update the position of the label and state text to follow the enemy
+    // Update the position of the label and health bar to follow the enemy
     const spriteX = (this.sprite as Phaser.Physics.Arcade.Sprite).x;
     const spriteY = (this.sprite as Phaser.Physics.Arcade.Sprite).y;
     this.label.setPosition(spriteX, spriteY - 40);
-    this.stateText.setPosition(spriteX, spriteY - 25);
 
-    // Update state text
-    this.updateStateText();
+    // Update health bar position
+    this.updateHealthBar();
 
     // Update dust effects
     this.updateDustEffects(time);
@@ -227,6 +266,21 @@ export abstract class Enemy extends Agent {
     this.target = closestTarget;
   }
 
+  // Check if a tile is occupied by another enemy
+  private static isTileOccupied(
+    tileX: number,
+    tileY: number,
+    excludeEnemy: Enemy
+  ): boolean {
+    const tileKey = `${tileX},${tileY}`;
+    if (!Enemy.occupiedTiles.has(tileKey)) {
+      return false;
+    }
+
+    // Check if the tile is occupied by a different enemy
+    return Enemy.occupiedTiles.get(tileKey) !== excludeEnemy;
+  }
+
   // Move towards the target
   protected moveTowardsTarget(delta: number): void {
     if (!this.target) return;
@@ -244,20 +298,57 @@ export abstract class Enemy extends Agent {
       targetY
     );
 
+    // Calculate the current tile position
+    const newTileX = Math.floor(enemyX / Enemy.TILE_SIZE);
+    const newTileY = Math.floor(enemyY / Enemy.TILE_SIZE);
+
+    // Check if the enemy has moved to a new tile
+    if (newTileX !== this.currentTile.x || newTileY !== this.currentTile.y) {
+      // Remove from old tile
+      const oldTileKey = `${this.currentTile.x},${this.currentTile.y}`;
+      Enemy.occupiedTiles.delete(oldTileKey);
+
+      // Update current tile
+      this.currentTile = { x: newTileX, y: newTileY };
+
+      // Register in new tile
+      const newTileKey = `${newTileX},${newTileY}`;
+      Enemy.occupiedTiles.set(newTileKey, this);
+    }
+
     // Only move if we're further than the preferred shooting distance
     if (distance > this.preferredShootingDistance) {
       // Calculate direction to target
       const angle = Phaser.Math.Angle.Between(enemyX, enemyY, targetX, targetY);
 
-      // Calculate velocity based on angle
-      const velocityX = Math.cos(angle) * this.speed;
-      const velocityY = Math.sin(angle) * this.speed;
+      // Calculate the next position
+      const nextX = enemyX + Math.cos(angle) * this.speed * (delta / 1000);
+      const nextY = enemyY + Math.sin(angle) * this.speed * (delta / 1000);
 
-      // Apply velocity
-      (this.sprite as Phaser.Physics.Arcade.Sprite).setVelocity(
-        velocityX,
-        velocityY
-      );
+      // Calculate the next tile
+      const nextTileX = Math.floor(nextX / Enemy.TILE_SIZE);
+      const nextTileY = Math.floor(nextY / Enemy.TILE_SIZE);
+
+      // Check if the next tile is different from the current tile and is occupied
+      if (
+        (nextTileX !== this.currentTile.x ||
+          nextTileY !== this.currentTile.y) &&
+        Enemy.isTileOccupied(nextTileX, nextTileY, this)
+      ) {
+        // The next tile is occupied, try to find an alternative path
+        // For simplicity, just stop moving for now
+        (this.sprite as Phaser.Physics.Arcade.Sprite).setVelocity(0, 0);
+      } else {
+        // The path is clear, proceed normally
+        const velocityX = Math.cos(angle) * this.speed;
+        const velocityY = Math.sin(angle) * this.speed;
+
+        // Apply velocity
+        (this.sprite as Phaser.Physics.Arcade.Sprite).setVelocity(
+          velocityX,
+          velocityY
+        );
+      }
     } else {
       // Stop moving when at preferred shooting distance
       (this.sprite as Phaser.Physics.Arcade.Sprite).setVelocity(0, 0);
@@ -331,13 +422,51 @@ export abstract class Enemy extends Agent {
     return !!this.target && this.target.active;
   }
 
-  // Update the state text
-  protected updateStateText(): void {
-    if (this.stateText) {
-      this.stateText.setText(
-        `${this.enemyState.toUpperCase()} (${this.health}/${this.maxHealth})`
-      );
+  // Update the health bar
+  protected updateHealthBar(): void {
+    if (!this.healthBar) return;
+
+    const spriteX = (this.sprite as Phaser.Physics.Arcade.Sprite).x;
+    const spriteY = (this.sprite as Phaser.Physics.Arcade.Sprite).y;
+
+    // Clear previous drawing
+    this.healthBar.clear();
+
+    // Health bar dimensions
+    const width = 40;
+    const height = 6;
+    const x = spriteX - width / 2;
+    const y = spriteY + 25; // Position below the enemy
+
+    // Background (gray)
+    this.healthBar.fillStyle(0x333333, 0.8);
+    this.healthBar.fillRect(x, y, width, height);
+
+    // Calculate health percentage
+    const healthPercentage = Math.max(0, this.health / this.maxHealth);
+
+    // Health bar color based on health percentage
+    let color;
+    if (healthPercentage > 0.6) {
+      color = 0x00ff00; // Green
+    } else if (healthPercentage > 0.3) {
+      color = 0xffff00; // Yellow
+    } else {
+      color = 0xff0000; // Red
     }
+
+    // Health bar (colored)
+    this.healthBar.fillStyle(color, 1);
+    this.healthBar.fillRect(x, y, width * healthPercentage, height);
+
+    // Border (white)
+    this.healthBar.lineStyle(1, 0xffffff, 0.8);
+    this.healthBar.strokeRect(x, y, width, height);
+  }
+
+  // Update state text (now just updates the health bar)
+  protected updateStateText(): void {
+    this.updateHealthBar();
   }
 
   // Handle death
@@ -365,26 +494,38 @@ export abstract class Enemy extends Agent {
     });
   }
 
-  // Destroy the enemy
+  // Clean up resources
   public destroy(): void {
+    console.log(`Destroying enemy: ${this.getEnemyName()}`);
+
     // Clean up dust effects
     this.cleanupDustEffects();
 
     // Clean up shadow effects
     this.cleanupShadowEffects();
 
-    // Remove text
-    if (this.label) this.label.destroy();
-    if (this.stateText) this.stateText.destroy();
+    // Remove from occupied tiles map
+    const tileKey = `${this.currentTile.x},${this.currentTile.y}`;
+    Enemy.occupiedTiles.delete(tileKey);
 
-    // Remove sprite
+    // Remove the label
+    if (this.label) {
+      this.label.destroy();
+    }
+
+    // Remove the state text
+    if (this.stateText) {
+      this.stateText.destroy();
+    }
+
+    // Remove the health bar
+    if (this.healthBar) {
+      this.healthBar.destroy();
+    }
+
+    // Remove the sprite
     if (this.sprite) {
-      if (
-        "destroy" in this.sprite &&
-        typeof this.sprite.destroy === "function"
-      ) {
-        this.sprite.destroy();
-      }
+      this.sprite.destroy();
     }
   }
 
@@ -398,6 +539,12 @@ export abstract class Enemy extends Agent {
 
   // Take damage and show visual feedback
   public damage(amount: number): void {
+    console.log(
+      `${this.getEnemyName()} taking ${amount} damage. Current health: ${
+        this.health
+      }`
+    );
+
     // Call the parent takeDamage method
     this.takeDamage(amount);
 
@@ -418,13 +565,18 @@ export abstract class Enemy extends Agent {
       });
     }
 
-    // Update health display
-    this.updateStateText();
+    // Update health bar
+    this.updateHealthBar();
 
     console.log(
       `Enemy ${this.getEnemyName()} (${
         this.enemyType
       }) took ${amount} damage. Health: ${this.health}/${this.maxHealth}`
     );
+
+    // Log if enemy died from this damage
+    if (this.health <= 0) {
+      console.log(`${this.getEnemyName()} died from damage`);
+    }
   }
 }

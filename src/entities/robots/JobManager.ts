@@ -325,4 +325,34 @@ export class JobManager {
       );
     }
   }
+
+  // Cancel a job by ID
+  public cancelJob(jobId: string): boolean {
+    console.log(`Canceling job ${jobId}`);
+
+    // Check if the job exists
+    if (!this.jobs.has(jobId)) {
+      console.warn(`Job ${jobId} not found, cannot cancel`);
+      return false;
+    }
+
+    // Get the job
+    const job = this.jobs.get(jobId)!;
+
+    // If the job is assigned to a robot, we need to notify the robot
+    if (job.assignedRobotId) {
+      console.log(
+        `Job ${jobId} is assigned to robot ${job.assignedRobotId}, notifying robot`
+      );
+      // The robot will need to handle this notification in its update loop
+      // For now, we'll just mark the job as completed
+      job.completed = true;
+    }
+
+    // Remove the job from the jobs map
+    this.jobs.delete(jobId);
+
+    console.log(`Job ${jobId} canceled successfully`);
+    return true;
+  }
 }

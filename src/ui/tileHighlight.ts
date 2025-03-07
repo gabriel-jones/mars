@@ -18,6 +18,7 @@ export function createTileHighlight(
   highlightRect.setStrokeStyle(3, HIGHLIGHT_COLOR, 0.5);
   highlightRect.setOrigin(0);
   highlightRect.setVisible(false);
+  highlightRect.setDepth(1000); // Set a very high depth to ensure it's always on top
   return highlightRect;
 }
 
@@ -37,23 +38,22 @@ export function updateTileHighlight(
   const tileX = map.worldToTileX(worldPoint.x)!;
   const tileY = map.worldToTileY(worldPoint.y)!;
 
-  // Only update if the tile position has changed
+  // Convert tile position back to world position for the highlight
+  const tileWorldX = map.tileToWorldX(tileX)!;
+  const tileWorldY = map.tileToWorldY(tileY)!;
+
+  // Make sure the tile is within the map bounds
+  if (tileX >= 0 && tileX < map.width && tileY >= 0 && tileY < map.height) {
+    // Update highlight position - center on tile
+    highlightRect.setPosition(tileWorldX, tileWorldY);
+    highlightRect.setVisible(true);
+  } else {
+    // Hide the highlight if outside the map
+    highlightRect.setVisible(false);
+  }
+
+  // Only return a new position if it has changed
   if (tileX !== currentTilePos.x || tileY !== currentTilePos.y) {
-    // Convert tile position back to world position for the highlight
-    const tileWorldX = map.tileToWorldX(tileX)!;
-    const tileWorldY = map.tileToWorldY(tileY)!;
-
-    // Make sure the tile is within the map bounds
-    if (tileX >= 0 && tileX < map.width && tileY >= 0 && tileY < map.height) {
-      // Update highlight position - center on tile
-      highlightRect.setPosition(tileWorldX, tileWorldY);
-      highlightRect.setVisible(true);
-    } else {
-      // Hide the highlight if outside the map
-      highlightRect.setVisible(false);
-    }
-
-    // Return the new tile position
     return { x: tileX, y: tileY };
   }
 

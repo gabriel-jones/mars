@@ -273,4 +273,33 @@ export class Blueprint extends Building {
       }
     }
   }
+
+  // Destroy the blueprint and clean up resources
+  public destroy(): void {
+    console.log(`Destroying blueprint for ${this.buildingType}`);
+
+    // Cancel the building job if it exists
+    if (this.buildingJob) {
+      JobManager.getInstance().cancelJob(this.buildingJob);
+      this.buildingJob = null;
+    }
+
+    // Destroy the resource text
+    if (this.resourceText) {
+      this.resourceText.destroy();
+    }
+
+    // Destroy the progress bar
+    if (this.progressBar) {
+      this.progressBar.destroy();
+    }
+
+    // Call the parent destroy method to clean up the sprite
+    super.destroy();
+  }
+
+  // Get the building type
+  public getBuildingType(): BuildingType {
+    return this.buildingType;
+  }
 }
