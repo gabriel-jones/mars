@@ -15,6 +15,60 @@ export class HabitatManager {
   }
 
   /**
+   * Register all habitat-related event listeners
+   */
+  public registerEventListeners(): void {
+    // Register Phaser event listeners
+    this.scene.events.on("habitatPlaced", this.onHabitatPlaced, this);
+    this.scene.events.on("habitatExpanded", this.onHabitatExpanded, this);
+    this.scene.events.on("habitatUpdated", this.onHabitatUpdated, this);
+    this.scene.events.on(
+      "habitatExpansionPlaced",
+      this.onHabitatExpansionPlaced,
+      this
+    );
+
+    // Register window event listeners
+    if (typeof window !== "undefined") {
+      window.addEventListener("habitatMerged", this.handleHabitatMergedEvent);
+      window.addEventListener("habitatSplit", this.handleHabitatSplitEvent);
+    }
+  }
+
+  /**
+   * Unregister all habitat-related event listeners
+   */
+  public unregisterEventListeners(): void {
+    // Unregister Phaser event listeners
+    this.scene.events.off("habitatPlaced", this.onHabitatPlaced, this);
+    this.scene.events.off("habitatExpanded", this.onHabitatExpanded, this);
+    this.scene.events.off("habitatUpdated", this.onHabitatUpdated, this);
+    this.scene.events.off(
+      "habitatExpansionPlaced",
+      this.onHabitatExpansionPlaced,
+      this
+    );
+
+    // Unregister window event listeners
+    if (typeof window !== "undefined") {
+      window.removeEventListener(
+        "habitatMerged",
+        this.handleHabitatMergedEvent
+      );
+      window.removeEventListener("habitatSplit", this.handleHabitatSplitEvent);
+    }
+  }
+
+  // Event handler functions for window events
+  private handleHabitatMergedEvent = (e: any): void => {
+    this.onHabitatMerged(e.detail);
+  };
+
+  private handleHabitatSplitEvent = (e: any): void => {
+    this.onHabitatSplit(e.detail);
+  };
+
+  /**
    * Handles the habitatPlaced event
    */
   public onHabitatPlaced(data: {
@@ -158,6 +212,9 @@ export class HabitatManager {
 
     // Destroy the merged habitat instance
     mergedHabitatInstance.destroy();
+
+    // Update the buildings reference
+    this.updateBuildings(this.buildings);
   }
 
   /**

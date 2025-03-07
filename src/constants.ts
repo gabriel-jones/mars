@@ -10,6 +10,8 @@ export const DUST_COLOR = 0xc2b280;
 export const NUM_INITIAL_ENEMIES = 8;
 export const NUM_INITIAL_OPTIMUS = 2;
 
+export const NUM_ICE_DEPOSITS = 8;
+
 // Map dimensions
 export const MAP_WIDTH = 50;
 export const MAP_HEIGHT = 50;

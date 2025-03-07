@@ -53,8 +53,59 @@ export class Optimus extends Robot {
     // Optimus robots are more accurate than other robots
     this.imprecisionFactor = 15; // Reduced from 20
 
-    // Initialize shield for Optimus robots (blue shield)
-    this.initShield(75, 0x0088ff);
+    // Initialize shield for Optimus robots with custom implementation
+    this.initCustomShield(75, 0x0088ff);
+  }
+
+  // Custom shield implementation for Optimus robots
+  private initCustomShield(maxShield: number, shieldColor: number): void {
+    // Set shield properties
+    this.maxShield = maxShield;
+    this.shield = maxShield;
+    this.shieldActive = true;
+    this.shieldColor = shieldColor;
+
+    // Remove any existing shield effect
+    if (this.shieldEffect) {
+      this.shieldEffect.destroy();
+      this.shieldEffect = null;
+    }
+
+    // Get the sprite from the container
+    const sprite = this.container.getByName("sprite");
+    let width = 64;
+    let height = 64;
+
+    if (sprite && sprite instanceof Phaser.GameObjects.Sprite) {
+      width = sprite.displayWidth;
+      height = sprite.displayHeight;
+    }
+
+    // Create a shield effect
+    this.shieldEffect = this.scene.add.ellipse(
+      0,
+      0,
+      width * 1.1, // Slightly larger than the sprite
+      height * 1.1, // Slightly larger than the sprite
+      this.shieldColor,
+      0.2 // Higher opacity for better visibility
+    );
+
+    // Add a more visible stroke
+    this.shieldEffect.setStrokeStyle(2, this.shieldColor, 0.6);
+
+    // Set depth to be just above the sprite
+    this.shieldEffect.setDepth(15);
+
+    // Initially invisible until taking damage
+    this.shieldEffect.setVisible(false);
+
+    // Add the shield effect to the scene (not the container)
+    // This allows it to be positioned independently
+    this.scene.add.existing(this.shieldEffect);
+
+    // Update shield position immediately
+    this.updateCustomShieldPosition();
   }
 
   // Override damage method to track last damage time
@@ -62,17 +113,45 @@ export class Optimus extends Robot {
     // Update last damage time
     this.lastDamageTime = this.scene.time.now;
 
+    // Set shield visibility timer to show shield effect if shield is active
+    if (this.shieldActive && this.shield > 0) {
+      this.shieldVisibilityTimer = this.scene.time.now + 300; // Show for 300ms
+    }
+
     // Call parent damage method
     super.damage(amount);
   }
 
-  // Override damageShield method to track last damage time
+  // Override damageShield method to track last damage time and handle shield visibility
   public damageShield(amount: number): void {
     // Update last damage time
     this.lastDamageTime = this.scene.time.now;
 
-    // Call parent damageShield method
-    super.damageShield(amount);
+    // Only proceed if we have a shield
+    if (this.shieldActive && this.shield > 0) {
+      // Calculate actual damage (can't go below 0)
+      const actualDamage = Math.min(this.shield, amount);
+      this.shield -= actualDamage;
+
+      // Set shield visibility timer to show shield effect
+      this.shieldVisibilityTimer = this.scene.time.now + 300; // Show for 300ms
+
+      // Show shield effect when hit
+      if (this.shieldEffect) {
+        this.shieldEffect.setVisible(true);
+      }
+
+      // If shield is depleted, deactivate it
+      if (this.shield <= 0) {
+        this.shieldActive = false;
+        if (this.shieldEffect) {
+          this.shieldEffect.setVisible(false);
+        }
+      }
+    } else {
+      // If no shield, pass damage to health
+      super.damage(amount);
+    }
   }
 
   protected getRobotNameInternal(): string {
@@ -588,6 +667,9 @@ export class Optimus extends Robot {
 
   // Update the optimus robot
   public update(time: number, delta: number): void {
+    // Update shield position if it exists
+    this.updateCustomShieldPosition();
+
     // Skip update if robot is dead
     if (!this.isAlive()) return;
 
@@ -1080,11 +1162,22 @@ export class Optimus extends Robot {
 
   // Override onDeath to clean up shield
   protected onDeath(): void {
-    // Clean up shield effect
-    this.cleanupShieldEffect();
-
-    // Call parent onDeath if it exists
+    // Call parent onDeath method
     super.onDeath();
+
+    // Clean up shield effect
+    if (this.shieldEffect) {
+      this.shieldEffect.destroy();
+      this.shieldEffect = null;
+    }
+
+    // Additional cleanup specific to Optimus
+    if (this.currentJob) {
+      // Cancel the job so another robot can take it
+      const jobManager = JobManager.getInstance();
+      jobManager.cancelJob(this.currentJob.id);
+      this.currentJob = null;
+    }
   }
 
   // Handle watering a tile in a grow zone
@@ -1162,6 +1255,38 @@ export class Optimus extends Robot {
       this.updateStateText();
       this.taskCompleteTime =
         this.scene.time.now + this.currentJob!.workDuration;
+    }
+  }
+
+  // Custom method to update shield position
+  private updateCustomShieldPosition(): void {
+    if (this.shieldEffect) {
+      // Get the world position of the robot
+      const worldPos = this.container.getWorldTransformMatrix();
+      const x = worldPos.tx;
+      const y = worldPos.ty;
+
+      // Position the shield at the robot's world position
+      this.shieldEffect.setPosition(x, y);
+
+      // Check if shield should be visible based on timer
+      const currentTime = this.scene.time.now;
+      const showShield =
+        this.shield > 0 && currentTime < this.shieldVisibilityTimer;
+
+      if (showShield) {
+        // Make shield visible with pulse effect
+        this.shieldEffect.setVisible(true);
+
+        // Calculate fade based on time remaining
+        const timeRemaining = this.shieldVisibilityTimer - currentTime;
+        const alpha = Math.min(0.7, timeRemaining / 100); // Fade out as timer expires
+
+        this.shieldEffect.setAlpha(alpha);
+      } else {
+        // Hide shield if inactive, depleted, or timer expired
+        this.shieldEffect.setVisible(false);
+      }
     }
   }
 }

@@ -3,16 +3,15 @@ import { TILE_SIZE } from "../constants";
 
 // Enum for different types of terrain features
 export enum TerrainFeatureType {
-  IceDeposit = "ice_deposit",
+  IceDeposit = "ice-deposit",
   // Add more terrain feature types here as needed
 }
 
 export class TerrainFeature extends Phaser.GameObjects.Container {
   private featureType: TerrainFeatureType;
-  private emojiText: Phaser.GameObjects.Text;
+  private sprite: Phaser.GameObjects.Sprite;
   private pulseEffect: Phaser.Tweens.Tween;
   private label: Phaser.GameObjects.Text;
-  private background: Phaser.GameObjects.Rectangle;
   public tileX: number;
   public tileY: number;
   private static featuresByTile: Map<string, TerrainFeature> = new Map();
@@ -46,27 +45,16 @@ export class TerrainFeature extends Phaser.GameObjects.Container {
     // Register this feature in the tile map
     TerrainFeature.featuresByTile.set(tileKey, this);
 
-    // Create background rectangle with semi-transparent color
-    this.background = scene.add.rectangle(
-      0,
-      0,
-      TILE_SIZE,
-      TILE_SIZE,
-      0xadd8e6, // Light blue color
-      0.25 // 25% opacity
-    );
-    this.add(this.background);
-
     // Create the visual representation based on feature type
     if (featureType === TerrainFeatureType.IceDeposit) {
-      // Create ice deposit visual
-      this.emojiText = scene.add
-        .text(0, 0, "❄️", {
-          // Ice/snow emoji
-          fontSize: "32px",
-        })
-        .setOrigin(0.5);
-      this.add(this.emojiText);
+      // Create ice deposit visual using the texture
+      this.sprite = scene.add
+        .sprite(0, 0, "ice-deposit")
+        .setOrigin(0.5)
+        .setDepth(0)
+        .setDisplaySize(TILE_SIZE, TILE_SIZE);
+      this.add(this.sprite);
+
       // Add a label showing the feature type
       this.label = scene.add
         .text(0, 30, "Ice Deposit", {
@@ -105,16 +93,10 @@ export class TerrainFeature extends Phaser.GameObjects.Container {
       this.label = null as any;
     }
 
-    // Clean up the emoji text if it exists
-    if (this.emojiText && this.emojiText.active) {
-      this.emojiText.destroy();
-      this.emojiText = null as any;
-    }
-
-    // Clean up the background if it exists
-    if (this.background && this.background.active) {
-      this.background.destroy();
-      this.background = null as any;
+    // Clean up the sprite if it exists
+    if (this.sprite && this.sprite.active) {
+      this.sprite.destroy();
+      this.sprite = null as any;
     }
 
     // Stop any active tweens

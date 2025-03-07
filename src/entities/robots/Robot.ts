@@ -71,14 +71,21 @@ export abstract class Robot extends Agent {
     const sprite = scene.add
       .sprite(0, 0, robotType)
       .setOrigin(0.5)
-      .setDisplaySize(TILE_SIZE, TILE_SIZE)
+      .setDisplaySize(
+        robotType === "optimus" ? TILE_SIZE * 1.25 : TILE_SIZE,
+        robotType === "optimus" ? TILE_SIZE * 1.25 : TILE_SIZE
+      )
       .setDepth(5);
+    sprite.setName("sprite");
     container.add(sprite);
+
+    // Adjust label position based on robot type
+    const labelOffset = robotType === "optimus" ? 50 : 40;
 
     // Add a label showing the robot type
     this.label = scene.add
-      .text(0, 40, this.getRobotName(), {
-        fontSize: "14px",
+      .text(0, labelOffset, this.getRobotName(), {
+        fontSize: robotType === "optimus" ? "16px" : "14px",
         color: "#FFFFFF",
         align: "center",
         backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -95,9 +102,9 @@ export abstract class Robot extends Agent {
       .setOrigin(0.5);
     container.add(this.label);
 
-    // Add state text
+    // Add state text with adjusted position
     this.stateText = scene.add
-      .text(0, 55, "IDLE", {
+      .text(0, labelOffset + 15, "IDLE", {
         fontSize: "12px",
         color: "#FFFFFF",
         align: "center",

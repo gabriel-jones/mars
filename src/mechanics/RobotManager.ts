@@ -299,6 +299,26 @@ export class RobotManager {
   public getRobotInfoForUI(): any[] {
     return this.robots.map((robot) => {
       let carrying = "";
+      let carryingType = "";
+      let inventory = {};
+      let equippedTool = "None";
+      let availableTools: string[] = [];
+      let health = 0;
+      let maxHealth = 100;
+      let shield = 0;
+      let maxShield = 0;
+
+      // Get health information
+      if (robot.getCurrentHealth && robot.getMaxHealth) {
+        health = robot.getCurrentHealth();
+        maxHealth = robot.getMaxHealth();
+      }
+
+      // Get shield information if available
+      if (robot.hasShield && robot.hasShield()) {
+        shield = robot.getCurrentShield();
+        maxShield = robot.getMaxShield();
+      }
 
       // Check if the robot is an Optimus
       if (robot instanceof Optimus) {
@@ -310,6 +330,18 @@ export class RobotManager {
           const resourceType = (robot as any).getResourceType();
           const resourceAmount = (robot as any).getResourceAmount();
           carrying = `${resourceType} (${resourceAmount})`;
+          carryingType = resourceType;
+
+          // Add to inventory
+          inventory = {
+            [resourceType]: resourceAmount,
+          };
+        }
+
+        // Get equipped tool information
+        if ((robot as any).assaultRifle) {
+          equippedTool = "Assault Rifle";
+          availableTools = ["Assault Rifle"];
         }
       }
 
@@ -320,8 +352,19 @@ export class RobotManager {
           (robot as any).getResourceAmount &&
           (robot as any).getResourceAmount();
         if (resourceAmount > 0) {
-          carrying = `${(robot as any).getResourceType()} (${resourceAmount})`;
+          const resourceType = (robot as any).getResourceType();
+          carrying = `${resourceType} (${resourceAmount})`;
+          carryingType = resourceType;
+
+          // Add to inventory
+          inventory = {
+            [resourceType]: resourceAmount,
+          };
         }
+
+        // Mining drones have a mining tool
+        equippedTool = "Mining Tool";
+        availableTools = ["Mining Tool"];
       }
 
       return {
@@ -333,6 +376,14 @@ export class RobotManager {
           ? (robot as any).getRobotState()
           : "unknown",
         carrying: carrying,
+        carryingType: carryingType,
+        health: health,
+        maxHealth: maxHealth,
+        shield: shield,
+        maxShield: maxShield,
+        inventory: inventory,
+        equippedTool: equippedTool,
+        availableTools: availableTools,
       };
     });
   }

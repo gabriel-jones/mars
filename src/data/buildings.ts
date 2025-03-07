@@ -54,8 +54,8 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     buildingType: "habitat",
     name: "Habitat",
     cost: [
-      { type: "silicon", amount: 100 },
-      { type: "iron", amount: 25 },
+      { type: "silicon", amount: 4 },
+      { type: "iron", amount: 4 },
     ],
     placementType: PlacementType.RangeSelect,
     locationType: LocationType.Outside,
@@ -66,8 +66,8 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     buildingType: "solar-panel",
     name: "Solar Panel",
     cost: [
-      { type: "silicon", amount: 50 },
-      { type: "aluminium", amount: 15 },
+      { type: "silicon", amount: 8 },
+      { type: "aluminium", amount: 4 },
     ],
     placementType: PlacementType.RangeSelect,
     locationType: LocationType.Outside,
@@ -77,7 +77,7 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
   {
     buildingType: "mining-station",
     name: "Mining Station",
-    cost: [{ type: "iron", amount: 50 }],
+    cost: [{ type: "iron", amount: 64 }],
     placementType: PlacementType.SingleTile,
     locationType: LocationType.Outside,
     buildEffort: 8000, // 8 seconds to build
@@ -87,8 +87,8 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     buildingType: "ice-drill",
     name: "Ice Drill",
     cost: [
-      { type: "iron", amount: 50 },
-      { type: "titanium", amount: 10 },
+      { type: "iron", amount: 64 },
+      { type: "titanium", amount: 4 },
     ],
     placementType: PlacementType.SingleTile,
     locationType: LocationType.Outside,
@@ -102,8 +102,8 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     buildingType: "regolith-processor",
     name: "Regolith Processor",
     cost: [
-      { type: "iron", amount: 75 },
-      { type: "silicon", amount: 30 },
+      { type: "iron", amount: 64 },
+      { type: "silicon", amount: 32 },
     ],
     tileSize: {
       width: 2,
@@ -118,8 +118,11 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     buildingType: "landing-pad",
     name: "Landing Pad",
     cost: [
-      { type: "iron", amount: 100 },
-      { type: "titanium", amount: 25 },
+      { type: "silicon", amount: 256 },
+      { type: "iron", amount: 256 },
+      { type: "aluminium", amount: 64 },
+      { type: "magnesium", amount: 64 },
+      { type: "titanium", amount: 32 },
     ],
     tileSize: {
       width: 4,
@@ -133,7 +136,7 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
   {
     buildingType: "grow-zone",
     name: "Grow Zone",
-    cost: [{ type: "iron", amount: 50 }],
+    cost: [{ type: "iron", amount: 8 }],
     placementType: PlacementType.RangeSelect,
     locationType: LocationType.Both, // Can be placed anywhere
     buildEffort: 1000, // 1 seconds to build
@@ -142,10 +145,7 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
   {
     buildingType: "inventory-zone",
     name: "Inventory Zone",
-    cost: [
-      { type: "iron", amount: 75 },
-      { type: "silicon", amount: 25 },
-    ],
+    cost: [{ type: "silicon", amount: 4 }],
     placementType: PlacementType.RangeSelect,
     locationType: LocationType.Both, // Can be placed anywhere
     buildEffort: 5000, // 5 seconds to build

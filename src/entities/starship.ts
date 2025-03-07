@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { TILE_SIZE } from "../constants";
 import { ResourceType } from "../data/resources";
+import { TransferItem } from "../ui/earthMenu";
 
 export enum StarshipState {
   MARS_LANDED = "mars_landed",
@@ -30,6 +31,9 @@ export class Starship extends Phaser.GameObjects.Container {
   };
 
   private robotsToDeliver: number = 2; // Number of robots to deliver each landing
+
+  // Transfer queue for Earth resources
+  private transferQueue: TransferItem[] = [];
 
   // Inventory for the starship with index signature
   public inventory: { [key in ResourceType]?: number } = {
@@ -143,11 +147,13 @@ export class Starship extends Phaser.GameObjects.Container {
   }
 
   arriveAtEarthOrbit() {
-    if (this.currentState !== StarshipState.MARS_TO_EARTH) return;
-
+    console.log("Starship arrived at Earth orbit");
     this.currentState = StarshipState.EARTH_ORBIT;
 
-    // Schedule Earth to Mars transfer
+    // Process the transfer queue
+    this.processTransferQueue();
+
+    // Set a timer to start the return journey
     this.stateTimer = this.scene.time.delayedCall(
       this.stateDurations.earthOrbit,
       () => {
@@ -290,5 +296,49 @@ export class Starship extends Phaser.GameObjects.Container {
 
   public getRobotsToDeliver(): number {
     return this.robotsToDeliver;
+  }
+
+  // Add method to set the transfer queue
+  public setTransferQueue(queue: TransferItem[]): void {
+    this.transferQueue = [...queue];
+    console.log(`Transfer queue set with ${this.transferQueue.length} items`);
+  }
+
+  // Add method to get the transfer queue
+  public getTransferQueue(): TransferItem[] {
+    return this.transferQueue;
+  }
+
+  // Add method to clear the transfer queue
+  public clearTransferQueue(): void {
+    this.transferQueue = [];
+  }
+
+  // Add method to process the transfer queue when in Earth orbit
+  public processTransferQueue(): void {
+    if (this.currentState !== StarshipState.EARTH_ORBIT) {
+      console.log("Cannot process transfer queue - not in Earth orbit");
+      return;
+    }
+
+    console.log(
+      `Processing transfer queue with ${this.transferQueue.length} items`
+    );
+
+    // Process each item in the queue
+    this.transferQueue.forEach((item) => {
+      // Add the resources to the inventory
+      if (!this.inventory[item.resourceType]) {
+        this.inventory[item.resourceType] = 0;
+      }
+
+      this.inventory[item.resourceType]! += item.amount;
+      console.log(
+        `Added ${item.amount} ${item.resourceType} to starship inventory`
+      );
+    });
+
+    // Clear the queue after processing
+    this.clearTransferQueue();
   }
 }

@@ -12,6 +12,7 @@ import {
   TILE_SIZE,
   MAP_WIDTH,
   MAP_HEIGHT,
+  NUM_ICE_DEPOSITS,
 } from "../constants";
 import { createFPS } from "../ui/fps";
 import { Starship } from "../entities/starship";
@@ -82,10 +83,11 @@ export class MainScene extends Phaser.Scene {
     // this.load.image("potatoes", "assets/potatoes.png");
     // this.load.image("beans", "assets/beans.png");
 
-    // Terrain textures
+    // Terrain
     this.load.image("terrain-low", "assets/terrain-low.png");
     this.load.image("terrain-medium", "assets/terrain-medium.png");
     this.load.image("terrain-high", "assets/terrain-high.png");
+    this.load.image("ice-deposit", "assets/ice-deposit.png");
 
     // Player
     this.load.image("player", "assets/player.png");
@@ -183,6 +185,9 @@ export class MainScene extends Phaser.Scene {
     this.load.image("build-mini", "assets/build-mini.png");
     this.load.image("starship-mini", "assets/starship-mini.png");
     this.load.image("optimus-mini", "assets/optimus-mini.png");
+    this.load.image("earth-mini", "assets/earth-mini.png");
+    this.load.image("mars-mini", "assets/mars-mini.png");
+    this.load.image("sun-mini", "assets/sun-mini.png");
   }
 
   create() {
@@ -428,23 +433,14 @@ export class MainScene extends Phaser.Scene {
     });
 
     // Set up event listeners for habitat events
-    this.events.on("habitatPlaced", this.onHabitatPlaced, this);
-    this.events.on("habitatExpanded", this.onHabitatExpanded, this);
-    this.events.on("habitatUpdated", this.onHabitatUpdated, this);
-    this.events.on(
-      "habitatExpansionPlaced",
-      this.onHabitatExpansionPlaced,
-      this
-    );
+    if (this.habitatManager) {
+      this.habitatManager.registerEventListeners();
+    }
 
     // Listen for custom events from BuildingManager
     if (typeof window !== "undefined") {
-      window.addEventListener("habitatMerged", (e: any) =>
-        this.onHabitatMerged(e.detail)
-      );
-      window.addEventListener("habitatSplit", (e: any) =>
-        this.onHabitatSplit(e.detail)
-      );
+      // These events are now handled by HabitatManager
+      // No need to add event listeners here
     }
 
     // Listen for building destroyed events
@@ -694,7 +690,7 @@ export class MainScene extends Phaser.Scene {
     const map = gameState.map;
 
     // Number of ice deposits to place
-    const numDeposits = 32;
+    const numDeposits = NUM_ICE_DEPOSITS;
 
     // Get all valid tiles for placement
     const validTiles = [];
@@ -923,23 +919,14 @@ export class MainScene extends Phaser.Scene {
     this.scale.off("resize", this.handleResize, this);
 
     // Remove habitat event listeners
-    this.events.off("habitatPlaced", this.onHabitatPlaced, this);
-    this.events.off("habitatExpanded", this.onHabitatExpanded, this);
-    this.events.off("habitatUpdated", this.onHabitatUpdated, this);
-    this.events.off(
-      "habitatExpansionPlaced",
-      this.onHabitatExpansionPlaced,
-      this
-    );
+    if (this.habitatManager) {
+      this.habitatManager.unregisterEventListeners();
+    }
 
     // Remove custom event listeners
     if (typeof window !== "undefined") {
-      window.removeEventListener("habitatMerged", (e: any) =>
-        this.onHabitatMerged(e.detail)
-      );
-      window.removeEventListener("habitatSplit", (e: any) =>
-        this.onHabitatSplit(e.detail)
-      );
+      // These events are now handled by HabitatManager
+      // No need to remove event listeners here
     }
 
     // Remove building destroyed event listener
@@ -973,68 +960,6 @@ export class MainScene extends Phaser.Scene {
 
     // Log resize event for debugging
     console.log("Game resized to:", gameSize.width, gameSize.height);
-  }
-
-  // Habitat event handlers
-  private onHabitatPlaced(data: {
-    startX: number;
-    startY: number;
-    width: number;
-    height: number;
-  }): void {
-    if (this.habitatManager) {
-      this.habitatManager.onHabitatPlaced(data);
-    }
-  }
-
-  private onHabitatExpanded(data: {
-    habitatId: string;
-    newTiles: { x: number; y: number }[];
-  }): void {
-    if (this.habitatManager) {
-      this.habitatManager.onHabitatExpanded(data);
-    }
-  }
-
-  private onHabitatUpdated(data: { habitatId: string }): void {
-    if (this.habitatManager) {
-      this.habitatManager.onHabitatUpdated(data);
-    }
-  }
-
-  private onHabitatExpansionPlaced(data: {
-    startX: number;
-    startY: number;
-    width: number;
-    height: number;
-    expansionId: string;
-    targetHabitatId: string;
-    tiles: { x: number; y: number }[];
-  }): void {
-    if (this.habitatManager) {
-      this.habitatManager.onHabitatExpansionPlaced(data);
-    }
-  }
-
-  private onHabitatMerged(data: {
-    primaryHabitatId: string;
-    mergedHabitatId: string;
-  }): void {
-    if (this.habitatManager) {
-      this.habitatManager.onHabitatMerged(data);
-
-      // Update the buildings reference in the habitat manager
-      this.habitatManager.updateBuildings(this.buildings);
-    }
-  }
-
-  private onHabitatSplit(data: {
-    originalHabitatId: string;
-    newHabitatId: string;
-  }): void {
-    if (this.habitatManager) {
-      this.habitatManager.onHabitatSplit(data);
-    }
   }
 
   // Building event handlers

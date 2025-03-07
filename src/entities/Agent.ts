@@ -126,21 +126,32 @@ export abstract class Agent implements HasHealth {
       width = this.sprite.displayWidth;
       height = this.sprite.displayHeight;
     } else if (this.sprite instanceof Phaser.GameObjects.Container) {
-      // Estimate size for container
-      width = 64;
-      height = 64;
+      // For containers, try to find the sprite and get its dimensions
+      const spriteInContainer = this.sprite.getByName("sprite");
+      if (
+        spriteInContainer &&
+        spriteInContainer instanceof Phaser.GameObjects.Sprite
+      ) {
+        width = spriteInContainer.displayWidth;
+        height = spriteInContainer.displayHeight;
+      } else {
+        // Fallback to default size
+        width = 64;
+        height = 64;
+      }
     }
 
-    // Create ellipse for shield effect
+    // Create ellipse for shield effect - make it exactly the same size as the sprite
+    // with just a tiny bit extra for the glow effect
     this.shieldEffect = this.scene.add.ellipse(
       0,
       0,
-      width * 1.4,
-      height * 1.4,
+      width * 1.02, // Almost exactly the same size as the sprite
+      height * 1.02, // Almost exactly the same size as the sprite
       this.shieldColor,
       0.2
     );
-    this.shieldEffect.setStrokeStyle(2, this.shieldColor, 0.8);
+    this.shieldEffect.setStrokeStyle(1, this.shieldColor, 0.6); // Thinner stroke
 
     // Set depth to be higher than sprite (sprite depth is typically 10)
     this.shieldEffect.setDepth(15);
