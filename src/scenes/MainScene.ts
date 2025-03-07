@@ -185,6 +185,11 @@ export class MainScene extends Phaser.Scene {
 
     // Other
     this.load.image("bulldozer", "assets/bulldozer-mini.png");
+
+    // Mini icons for action menu
+    this.load.image("build-mini", "assets/build-mini.png");
+    this.load.image("starship-mini", "assets/starship-mini.png");
+    this.load.image("optimus-mini", "assets/optimus-mini.png");
   }
 
   create() {

@@ -14,6 +14,7 @@ interface ButtonConfig {
   x: number;
   y: number;
   onClick: () => void;
+  icon?: string; // Optional icon key
 }
 
 // Define the robot info interface
@@ -87,7 +88,7 @@ export class ActionMenu {
     }
 
     // Create buttons with fixed position - now centered at the bottom
-    const buttonSpacing = 120;
+    const buttonSpacing = 160; // Increase spacing between buttons
     const buttonY = this.scene.cameras.main.height - 50;
 
     // Build button
@@ -96,6 +97,7 @@ export class ActionMenu {
       x: this.scene.cameras.main.width / 2 - buttonSpacing,
       y: buttonY,
       onClick: () => this.toggleMenu("construction"),
+      icon: "build-mini",
     });
     this.buildButton.setScrollFactor(0);
 
@@ -105,6 +107,7 @@ export class ActionMenu {
       x: this.scene.cameras.main.width / 2,
       y: buttonY,
       onClick: () => this.toggleMenu("robots"),
+      icon: "optimus-mini",
     });
     this.robotsButton.setScrollFactor(0);
 
@@ -114,6 +117,7 @@ export class ActionMenu {
       x: this.scene.cameras.main.width / 2 + buttonSpacing,
       y: buttonY,
       onClick: () => this.toggleMenu("starships"),
+      icon: "starship-mini",
     });
     this.starshipsButton.setScrollFactor(0);
 
@@ -143,39 +147,64 @@ export class ActionMenu {
     // Create container for the button
     const button = this.scene.add.container(config.x, config.y);
 
+    // Button width - make it wider if there's an icon
+    const buttonWidth = config.icon ? 150 : 130;
+
     // Button background
     const buttonBg = this.scene.add
-      .rectangle(0, 0, 120, 40, 0x444444)
-      .setOrigin(0.5);
+      .rectangle(0, 0, buttonWidth, 40, 0x444444)
+      .setOrigin(0.5)
+      .setName("buttonBg");
 
     // Button border
     const buttonBorder = this.scene.add
-      .rectangle(0, 0, 124, 44, 0x888888)
+      .rectangle(0, 0, buttonWidth + 4, 44, 0x888888)
       .setOrigin(0.5)
-      .setStrokeStyle(2, 0xffffff);
+      .setStrokeStyle(2, 0xffffff)
+      .setName("buttonBorder");
 
-    // Button text
+    // Add elements to the container
+    button.add([buttonBorder, buttonBg]);
+
+    // Add icon if provided
+    if (config.icon) {
+      const icon = this.scene.add
+        .image(-55, 0, config.icon)
+        .setDisplaySize(24, 24) // Set a consistent size for the icon
+        .setName("buttonIcon");
+      button.add(icon);
+    }
+
+    // Button text - adjust position if icon is present
+    const textX = config.icon ? 5 : 0; // Move text to the right if icon is present
     const buttonText = this.scene.add
-      .text(0, 0, config.text, {
+      .text(textX, 0, config.text, {
         fontSize: "20px",
         color: "#ffffff",
         fontStyle: "bold",
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setName("buttonText");
 
-    // Add all elements to the container
-    button.add([buttonBorder, buttonBg, buttonText]);
+    // Add text to the container
+    button.add(buttonText);
 
     // Make the button interactive with a specific hit area
     button.setInteractive(
-      new Phaser.Geom.Rectangle(-60, -20, 120, 40),
+      new Phaser.Geom.Rectangle(-buttonWidth / 2, -20, buttonWidth, 40),
       Phaser.Geom.Rectangle.Contains
     );
 
     // Add hover effects
     button.on("pointerover", () => {
-      buttonBg.setFillStyle(0x666666);
-      buttonBorder.setStrokeStyle(3, 0xffffff);
+      const bg = button.getByName("buttonBg") as Phaser.GameObjects.Rectangle;
+      const border = button.getByName(
+        "buttonBorder"
+      ) as Phaser.GameObjects.Rectangle;
+      if (bg && border) {
+        bg.setFillStyle(0x666666);
+        border.setStrokeStyle(3, 0xffffff);
+      }
     });
 
     button.on("pointerout", () => {
@@ -185,8 +214,14 @@ export class ActionMenu {
         (config.text === "ROBOTS" && this.activeMenu !== "robots") ||
         (config.text === "SHIPS" && this.activeMenu !== "starships")
       ) {
-        buttonBg.setFillStyle(0x444444);
-        buttonBorder.setStrokeStyle(2, 0xffffff);
+        const bg = button.getByName("buttonBg") as Phaser.GameObjects.Rectangle;
+        const border = button.getByName(
+          "buttonBorder"
+        ) as Phaser.GameObjects.Rectangle;
+        if (bg && border) {
+          bg.setFillStyle(0x444444);
+          border.setStrokeStyle(2, 0xffffff);
+        }
       }
     });
 
@@ -539,19 +574,51 @@ export class ActionMenu {
     // Reset all buttons first
     this.resetButtonHighlights();
 
-    // Get the background of the button (first child is border, second is background)
-    const buttonBg = button.getAt(1) as Phaser.GameObjects.Rectangle;
-    const buttonBorder = button.getAt(0) as Phaser.GameObjects.Rectangle;
-    const buttonText = button.getAt(2) as Phaser.GameObjects.Text;
+    try {
+      // Get the elements by name
+      const buttonBorder = button.getByName(
+        "buttonBorder"
+      ) as Phaser.GameObjects.Rectangle;
+      const buttonBg = button.getByName(
+        "buttonBg"
+      ) as Phaser.GameObjects.Rectangle;
+      const buttonText = button.getByName("buttonText");
 
-    if (buttonBg && buttonBorder && buttonText) {
-      // More distinct active button style
-      buttonBg.setFillStyle(0x336633); // Darker green background
-      buttonBorder.setStrokeStyle(3, 0x88ff88); // Brighter green border
-      buttonText.setColor("#ffffff"); // White text
+      // Update background and border
+      if (buttonBg && buttonBorder) {
+        // More distinct active button style
+        buttonBg.setFillStyle(0x336633); // Darker green background
+        buttonBorder.setStrokeStyle(3, 0x88ff88); // Brighter green border
+      }
 
-      // Add a glow effect
-      buttonText.setShadow(0, 0, "#88ff88", 8, true, true);
+      // Always recreate the text to avoid setColor issues
+      if (buttonText) {
+        // Get the text properties
+        const oldText = buttonText.text || "";
+        const oldX = buttonText.x || 0;
+        const oldY = buttonText.y || 0;
+
+        // Remove the old text
+        button.remove(buttonText, true);
+
+        // Create new text with white color and glow effect
+        const newText = this.scene.add
+          .text(oldX, oldY, oldText, {
+            fontSize: "20px",
+            color: "#ffffff",
+            fontStyle: "bold",
+          })
+          .setOrigin(0.5)
+          .setName("buttonText");
+
+        // Add shadow/glow effect
+        newText.setShadow(0, 0, "#88ff88", 8, true, true);
+
+        // Add the new text to the button
+        button.add(newText);
+      }
+    } catch (error) {
+      console.error("Error highlighting button:", error);
     }
   }
 
@@ -559,15 +626,47 @@ export class ActionMenu {
   private resetButtonHighlights(): void {
     [this.buildButton, this.robotsButton, this.starshipsButton].forEach(
       (button) => {
-        const buttonBg = button.getAt(1) as Phaser.GameObjects.Rectangle;
-        const buttonBorder = button.getAt(0) as Phaser.GameObjects.Rectangle;
-        const buttonText = button.getAt(2) as Phaser.GameObjects.Text;
+        try {
+          // Find elements by name
+          const buttonBorder = button.getByName(
+            "buttonBorder"
+          ) as Phaser.GameObjects.Rectangle;
+          const buttonBg = button.getByName(
+            "buttonBg"
+          ) as Phaser.GameObjects.Rectangle;
+          const buttonText = button.getByName("buttonText");
 
-        if (buttonBg && buttonBorder && buttonText) {
-          buttonBg.setFillStyle(0x444444);
-          buttonBorder.setStrokeStyle(2, 0xffffff);
-          buttonText.setColor("#ffffff");
-          buttonText.setShadow(0, 0, "transparent", 0);
+          // Reset background and border
+          if (buttonBg && buttonBorder) {
+            buttonBg.setFillStyle(0x444444);
+            buttonBorder.setStrokeStyle(2, 0xffffff);
+          }
+
+          // Always recreate the text to avoid setColor issues
+          if (buttonText) {
+            // Get the text properties
+            const oldText = buttonText.text || "";
+            const oldX = buttonText.x || 0;
+            const oldY = buttonText.y || 0;
+
+            // Remove the old text
+            button.remove(buttonText, true);
+
+            // Create new text with white color
+            const newText = this.scene.add
+              .text(oldX, oldY, oldText, {
+                fontSize: "20px",
+                color: "#ffffff",
+                fontStyle: "bold",
+              })
+              .setOrigin(0.5)
+              .setName("buttonText");
+
+            // Add the new text to the button
+            button.add(newText);
+          }
+        } catch (error) {
+          console.error("Error resetting button:", error);
         }
       }
     );
