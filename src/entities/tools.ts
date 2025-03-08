@@ -573,7 +573,7 @@ export class Tool {
           for (const enemy of gameState.enemies) {
             if (enemy && enemy.getSprite) {
               const enemySprite = enemy.getSprite();
-              this.scene.physics.add.collider(
+              this.scene.physics.add.overlap(
                 bullet,
                 enemySprite,
                 (bullet, enemySprite) => {

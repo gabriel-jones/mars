@@ -43,6 +43,9 @@ export const OPTIMUS_ATTACK_RANGE = 500; // Increased from 350 - Range to attack
 export const OPTIMUS_MAX_SHOOTING_RANGE = 900; // Maximum distance at which Optimus can shoot
 export const OPTIMUS_IMPRECISION_FACTOR = 15; // Accuracy factor for Optimus (lower is more accurate)
 
+// Mining drone
+export const MINING_DRONE_MINING_DURATION = 1000; // 1 second to mine
+export const MINING_DRONE_MAX_RESOURCE_CAPACITY = 50; // Maximum amount of regolith a mining drone can carry
 // Enemy visibility and combat settings
 export const ENEMY_PREFERRED_SHOOTING_DISTANCE = 300; // Increased from 150 - Distance at which enemies prefer to stop and shoot
 export const ENEMY_MAX_SHOOTING_RANGE = 600; // Increased from 500 - Maximum distance at which enemies can shoot

@@ -1,7 +1,11 @@
 import * as Phaser from "phaser";
 import { Robot, RobotState } from "./Robot";
 import { ResourceType } from "../../data/resources";
-import { TILE_SIZE, ROBOT_VELOCITY } from "../../constants";
+import {
+  TILE_SIZE,
+  ROBOT_VELOCITY,
+  MINING_DRONE_MINING_DURATION,
+} from "../../constants";
 import { MINING_RADIUS, MiningStation } from "../buildings/MiningStation";
 import { getResourceRichnessAt } from "../../terrain";
 import { DEPTH } from "../../depth";
@@ -13,8 +17,8 @@ export class MiningDrone extends Robot {
 
   // Resource handling
   private resourceAmount: number = 0;
-  private maxResourceCapacity: number = 10;
-  private miningDuration: number = 1500; // 1.5 seconds to mine
+  private maxResourceCapacity: number = MINING_DRONE_MAX_RESOURCE_CAPACITY;
+  private miningDuration: number = MINING_DRONE_MINING_DURATION; // 1.5 seconds to mine
   private miningCompleteTime: number = 0;
   private resourceType: ResourceType = "regolith"; // Default to regolith
 
