@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { DEPTH } from "../depth";
 
 /**
  * Interface for entities that have health
@@ -47,7 +48,7 @@ export class HealthBarRenderer {
     const container = this.scene.add.container(0, offsetY);
 
     // Set a high depth to ensure it's visible above other elements
-    container.setDepth(20);
+    container.setDepth(DEPTH.HEALTH_BAR);
 
     // Create background (border) for health bar
     const background = this.scene.add.rectangle(

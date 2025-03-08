@@ -3,6 +3,7 @@ import { DEFAULT_FONT } from "../constants";
 import { CloseButton } from "./closeButton";
 import { HealthBarRenderer } from "../interfaces/Health";
 import { ResourceType, RESOURCE_DEFINITIONS } from "../data/resources";
+import { DEPTH } from "../depth";
 
 export interface RobotInfo {
   name: string;
@@ -35,7 +36,7 @@ export class RobotsMenu {
     this.scene = scene;
     this.container = this.scene.add.container(0, 0);
     this.container.setVisible(false);
-    this.container.setDepth(100);
+    this.container.setDepth(DEPTH.UI);
     this.container.setScrollFactor(0);
 
     // Create health bar renderer

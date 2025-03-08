@@ -31,6 +31,7 @@ interface GameState {
     inventory: ResourceCount[];
     events: Phaser.Events.EventEmitter;
   };
+  money: number; // Add money property
 }
 
 // Initialize empty game state
@@ -41,6 +42,7 @@ export const gameState = {
     inventory: [],
     events: new Phaser.Events.EventEmitter(),
   },
+  money: 5_000_000_000, // Initialize with 5 billion
 } as unknown as GameState;
 
 // Make gameState accessible globally for debugging and for robots to access

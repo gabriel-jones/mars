@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { TILE_SIZE } from "../constants";
 import { ResourceType } from "../data/resources";
 import { TransferItem } from "../ui/earthMenu";
+import { DEPTH } from "../depth";
 
 export enum StarshipState {
   MARS_LANDED = "mars_landed",
@@ -55,7 +56,7 @@ export class Starship extends Phaser.GameObjects.Container {
       .sprite(0, 0, "starship")
       .setOrigin(0.5, 1) // Set origin to bottom center for landing effect
       .setDisplaySize(TILE_SIZE * 2, TILE_SIZE * 8) // Set exact size in tiles
-      .setDepth(5);
+      .setDepth(DEPTH.STARSHIP);
     this.add(this.starshipSprite);
 
     // Create engine flame sprite
@@ -64,7 +65,7 @@ export class Starship extends Phaser.GameObjects.Container {
       .setOrigin(0.5, 0) // Set origin to top center
       .setScale(0.8)
       .setVisible(false)
-      .setDepth(4); // Set depth lower than starship
+      .setDepth(DEPTH.STARSHIP - 1); // Set depth lower than starship
     this.add(this.engineFlame);
 
     // Position the flame at the bottom of the rocket

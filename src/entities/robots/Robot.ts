@@ -11,6 +11,7 @@ import { Agent } from "../Agent";
 import { Tool, ToolType } from "../tools";
 import { Enemy } from "../enemies/Enemy";
 import { HealthBarRenderer } from "../../interfaces/Health";
+import { DEPTH } from "../../depth";
 
 // Robot states
 export enum RobotState {
@@ -75,7 +76,7 @@ export abstract class Robot extends Agent {
         robotType === "optimus" ? TILE_SIZE * 1.25 : TILE_SIZE,
         robotType === "optimus" ? TILE_SIZE * 1.25 : TILE_SIZE
       )
-      .setDepth(5);
+      .setDepth(DEPTH.AGENT);
     sprite.setName("sprite");
     container.add(sprite);
 
@@ -832,7 +833,7 @@ export abstract class Robot extends Agent {
     this.updateHealthBarPosition();
 
     // Set a high depth to ensure it's visible above other elements when needed
-    this.healthBar.setDepth(20);
+    this.healthBar.setDepth(DEPTH.HEALTH_BAR);
 
     console.log(`Health bar created for ${this.getRobotName()}`);
   }
@@ -862,40 +863,5 @@ export abstract class Robot extends Agent {
 
       // No need to update appearance here as it's already done in updateHealthBarPosition
     }
-  }
-
-  // Visualize the detection range for debugging
-  protected visualizeDetectionRange(): void {
-    // Remove any existing visualization
-    const existingGraphics = this.scene.children.getByName(
-      "detection-range-" + this.getRobotName()
-    );
-    if (existingGraphics) {
-      existingGraphics.destroy();
-    }
-
-    // Create a circle to represent the detection range
-    const graphics = this.scene.add.graphics();
-    graphics.setName("detection-range-" + this.getRobotName());
-    graphics.lineStyle(2, 0x00ff00, 0.3);
-    graphics.strokeCircle(
-      this.container.x,
-      this.container.y,
-      this.detectionRange
-    );
-
-    // Create a circle to represent the attack range
-    graphics.lineStyle(2, 0xff0000, 0.3);
-    graphics.strokeCircle(this.container.x, this.container.y, this.attackRange);
-
-    // Set a low depth so it doesn't obscure other elements
-    graphics.setDepth(1);
-
-    // Automatically remove after a short time
-    this.scene.time.delayedCall(500, () => {
-      if (graphics) {
-        graphics.destroy();
-      }
-    });
   }
 }

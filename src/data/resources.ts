@@ -171,6 +171,7 @@ export class ResourceManager {
     RESOURCE_ADDED: "resource-added",
     RESOURCE_USED: "resource-used",
     INVENTORY_CHANGED: "inventory-changed",
+    MONEY_CHANGED: "money-changed",
   };
 
   static getResources(): Resource[] {
@@ -258,5 +259,56 @@ export class ResourceManager {
 
   static getAllResourceNodes(): any[] {
     return this.resourceNodes;
+  }
+
+  /**
+   * Get the current money amount
+   */
+  static getMoney(): number {
+    return gameState.money;
+  }
+
+  /**
+   * Add money to the player's account
+   * @param amount Amount to add (positive number)
+   */
+  static addMoney(amount: number): void {
+    if (amount <= 0) return;
+
+    gameState.money += amount;
+
+    // Emit money changed event
+    gameState.resources.events.emit(this.EVENTS.MONEY_CHANGED, gameState.money);
+  }
+
+  /**
+   * Spend money from the player's account
+   * @param amount Amount to spend (positive number)
+   * @returns true if successful, false if insufficient funds
+   */
+  static spendMoney(amount: number): boolean {
+    if (amount <= 0) return true;
+
+    if (gameState.money >= amount) {
+      gameState.money -= amount;
+
+      // Emit money changed event
+      gameState.resources.events.emit(
+        this.EVENTS.MONEY_CHANGED,
+        gameState.money
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if player has enough money
+   * @param amount Amount to check
+   * @returns true if player has enough money
+   */
+  static hasMoney(amount: number): boolean {
+    return gameState.money >= amount;
   }
 }

@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { Tool, ToolInventory } from "../entities/tools";
 import { TILE_SIZE, DEFAULT_FONT } from "../constants";
+import { DEPTH } from "../depth";
 
 export class ToolInventoryDisplay {
   private scene: Phaser.Scene;
@@ -67,7 +68,7 @@ export class ToolInventoryDisplay {
       );
       background.setStrokeStyle(2, this.COLORS.slotBorder, 0.7);
       background.setScrollFactor(0);
-      background.setDepth(95);
+      background.setDepth(DEPTH.UI);
       this.slotBackgrounds.push(background);
 
       // Create slot number (1, 2, 3)
@@ -83,54 +84,22 @@ export class ToolInventoryDisplay {
         }
       );
       numberText.setScrollFactor(0);
-      numberText.setDepth(96);
+      numberText.setDepth(DEPTH.UI);
       this.slotNumbers.push(numberText);
 
       // Create icon if tool exists
       const tool = tools[i];
       if (tool) {
         // Try different texture keys
-        const textureKeys = [`${tool.type}-icon`, `${tool.type}-icon-rect`];
 
         let icon: Phaser.GameObjects.Sprite | null = null;
 
-        // Try each texture key
-        for (const key of textureKeys) {
-          if (this.scene.textures.exists(key)) {
-            console.log(`Using texture ${key} for tool ${tool.type}`);
-            icon = this.scene.add.sprite(x, y, key);
-
-            // Set display size with proper aspect ratio for assault rifle
-            if (tool.type === "assault-rifle") {
-              icon.setDisplaySize(this.slotSize * 0.7, this.slotSize * 0.7); // Square shape
-            } else {
-              icon.setDisplaySize(this.slotSize * 0.7, this.slotSize * 0.7); // Square for other tools
-            }
-
-            icon.setScrollFactor(0);
-            icon.setDepth(97);
-            this.slotIcons.push(icon);
-            break;
-          }
-        }
-
-        // If no texture worked, create a placeholder
-        if (!icon) {
-          console.log(
-            `No texture found for tool ${tool.type}, using placeholder`
-          );
-          const placeholder = this.scene.add.rectangle(
-            x,
-            y,
-            this.slotSize * 0.7,
-            this.slotSize * 0.7,
-            this.COLORS.border, // Use the green color for placeholder
-            0.7
-          );
-          placeholder.setScrollFactor(0);
-          placeholder.setDepth(97);
-          this.slotIcons.push(placeholder as any);
-        }
+        icon = this.scene.add
+          .sprite(x, y, tool.type)
+          .setDisplaySize(this.slotSize * 0.7, this.slotSize * 0.7)
+          .setScrollFactor(0)
+          .setDepth(DEPTH.UI);
+        this.slotIcons.push(icon);
       } else {
         // Empty slot
         this.slotIcons.push(null as any);

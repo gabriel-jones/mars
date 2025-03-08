@@ -5,6 +5,7 @@ import { MainScene } from "../../scenes/MainScene";
 import { Building } from "./Building";
 import { TILE_SIZE, DEFAULT_FONT } from "../../constants";
 import { getResourceRichnessAt } from "../../terrain";
+import { DEPTH } from "../../depth";
 
 export const MINING_RADIUS = 3;
 
@@ -181,7 +182,7 @@ export class MiningStation extends Building {
       previewAlpha
     );
     this.previewRect.setStrokeStyle(2, isValid ? 0x00ff00 : 0xff0000);
-    this.previewRect.setDepth(10);
+    this.previewRect.setDepth(DEPTH.BUILDING);
 
     // Create a preview text
     this.previewText = scene.add.text(
@@ -196,7 +197,7 @@ export class MiningStation extends Building {
       }
     );
     this.previewText.setOrigin(0.5);
-    this.previewText.setDepth(11);
+    this.previewText.setDepth(DEPTH.BUILDING + 1);
   }
 
   // Static method to clean up the preview

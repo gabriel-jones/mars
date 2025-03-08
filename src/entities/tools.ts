@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { DEPTH } from "../depth";
 
 // Enum for tool types
 export enum ToolType {
@@ -86,7 +87,7 @@ export class Tool {
           this.characteristics.size,
           this.characteristics.size
         ); // Square shape
-        this.sprite.setDepth(20); // Higher than player
+        this.sprite.setDepth(DEPTH.TOOL); // Higher than player
 
         // Initialize with default orientation (facing right)
         this.sprite.setFlipX(false);
@@ -94,11 +95,11 @@ export class Tool {
         // Create laser pointer elements (initially invisible)
         this.laserLine = scene.add.line(0, 0, 0, 0, 0, 0, 0xff0000, 0.5);
         this.laserLine.setVisible(false);
-        this.laserLine.setDepth(19); // Below the weapon
+        this.laserLine.setDepth(DEPTH.TOOL - 1); // Below the weapon
 
         this.laserDot = scene.add.circle(0, 0, 3, 0xff0000, 1);
         this.laserDot.setVisible(false);
-        this.laserDot.setDepth(19); // Below the weapon
+        this.laserDot.setDepth(DEPTH.TOOL - 1); // Below the weapon
       } catch (error) {
         // If that fails, try to use the rect texture
         console.error(
@@ -108,7 +109,7 @@ export class Tool {
         try {
           this.sprite = scene.add.sprite(0, 0, `${textureKey}-rect`);
           this.sprite.setVisible(false);
-          this.sprite.setDepth(20); // Higher than player
+          this.sprite.setDepth(DEPTH.TOOL); // Higher than player
 
           // Initialize with default orientation (facing right)
           this.sprite.setFlipX(false);
@@ -116,11 +117,11 @@ export class Tool {
           // Create laser pointer elements (initially invisible)
           this.laserLine = scene.add.line(0, 0, 0, 0, 0, 0, 0xff0000, 0.5);
           this.laserLine.setVisible(false);
-          this.laserLine.setDepth(19); // Below the weapon
+          this.laserLine.setDepth(DEPTH.TOOL - 1); // Below the weapon
 
           this.laserDot = scene.add.circle(0, 0, 3, 0xff0000, 1);
           this.laserDot.setVisible(false);
-          this.laserDot.setDepth(19); // Below the weapon
+          this.laserDot.setDepth(DEPTH.TOOL - 1); // Below the weapon
         } catch (rectError) {
           // If that fails, try to use the fallback texture
           console.error(
@@ -130,7 +131,7 @@ export class Tool {
           try {
             this.sprite = scene.add.sprite(0, 0, `${textureKey}-fallback`);
             this.sprite.setVisible(false);
-            this.sprite.setDepth(20); // Higher than player
+            this.sprite.setDepth(DEPTH.TOOL); // Higher than player
 
             // Initialize with default orientation (facing right)
             this.sprite.setFlipX(false);
@@ -138,11 +139,11 @@ export class Tool {
             // Create laser pointer elements (initially invisible)
             this.laserLine = scene.add.line(0, 0, 0, 0, 0, 0, 0xff0000, 0.5);
             this.laserLine.setVisible(false);
-            this.laserLine.setDepth(19); // Below the weapon
+            this.laserLine.setDepth(DEPTH.TOOL - 1); // Below the weapon
 
             this.laserDot = scene.add.circle(0, 0, 3, 0xff0000, 1);
             this.laserDot.setVisible(false);
-            this.laserDot.setDepth(19); // Below the weapon
+            this.laserDot.setDepth(DEPTH.TOOL - 1); // Below the weapon
           } catch (fallbackError) {
             console.error(
               `Failed to create sprite for tool: ${name} with fallback texture: ${textureKey}-fallback`,
@@ -209,12 +210,12 @@ export class Tool {
 
       if (!this.laserLine && this.scene) {
         this.laserLine = this.scene.add.line(0, 0, 0, 0, 0, 0, 0xff0000, alpha);
-        this.laserLine.setDepth(10);
+        this.laserLine.setDepth(DEPTH.TOOL - 1);
       }
 
       if (!this.laserDot && this.scene) {
         this.laserDot = this.scene.add.circle(0, 0, 3, 0xff0000, alpha);
-        this.laserDot.setDepth(10);
+        this.laserDot.setDepth(DEPTH.TOOL - 1);
       }
     }
 
@@ -480,7 +481,7 @@ export class Tool {
       bullet.setRotation(angle);
     }
 
-    bullet.setDepth(15);
+    bullet.setDepth(DEPTH.BULLET);
 
     // Enable physics on the bullet
     this.scene.physics.add.existing(bullet);
@@ -515,7 +516,7 @@ export class Tool {
       bulletColor,
       0.3
     );
-    debugRect.setDepth(20);
+    debugRect.setDepth(DEPTH.BULLET + 1);
 
     // Update the debug rectangle position with the bullet
     const updateDebugRect = () => {
@@ -755,7 +756,7 @@ export class Tool {
     muzzleFlash.setTint(flashColor);
     muzzleFlash.setScale(flashScale);
     muzzleFlash.setRotation(angle);
-    muzzleFlash.setDepth(25); // Above everything
+    muzzleFlash.setDepth(DEPTH.TOOL + 1); // Above everything
 
     // Animate the muzzle flash
     this.scene.tweens.add({

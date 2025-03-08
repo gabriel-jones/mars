@@ -4,6 +4,7 @@ import { DustEffects } from "../effects/DustEffects";
 import { Agent } from "./Agent";
 import { ToolInventory, Tool, ToolType } from "./tools";
 import { HealthBarRenderer } from "../interfaces/Health";
+import { DEPTH } from "../depth";
 
 // Player class that extends Agent
 export class Player extends Agent {
@@ -23,7 +24,7 @@ export class Player extends Agent {
     const sprite = scene.physics.add
       .sprite(x, y, "player")
       .setDisplaySize(64, 64)
-      .setDepth(10);
+      .setDepth(DEPTH.PLAYER);
     sprite.setCollideWorldBounds(true);
 
     // Call the parent constructor

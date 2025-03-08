@@ -14,6 +14,7 @@ import {
 import { TILE_SIZE, DEFAULT_FONT } from "../../constants";
 import { JobManager, JobType } from "../robots/JobManager";
 import { HasHealth } from "../../interfaces/Health";
+import { DEPTH } from "../../depth";
 
 // Blueprint class - represents a building in the planning phase
 export class Blueprint extends Building implements HasHealth {
@@ -68,12 +69,12 @@ export class Blueprint extends Building implements HasHealth {
       }
     );
     this.resourceText.setOrigin(0.5, 0);
-    this.resourceText.setDepth(100); // Ensure it's on top of other elements
+    this.resourceText.setDepth(DEPTH.BLUEPRINT); // Ensure it's on top of other elements
     this.add(this.resourceText);
 
     // Create progress bar (initially hidden)
     this.progressBar = scene.add.graphics();
-    this.progressBar.setDepth(100);
+    this.progressBar.setDepth(DEPTH.BLUEPRINT);
     this.add(this.progressBar);
 
     // Store habitat-specific data if provided

@@ -13,6 +13,7 @@ import { gameState } from "../state";
 import { TILE_SIZE } from "../constants";
 import { MiningStation, MINING_RADIUS } from "../entities/buildings";
 import { TerrainFeature } from "../entities/TerrainFeature";
+import { DEPTH } from "../depth";
 
 export class BuildingPlacer {
   private scene: Phaser.Scene;
@@ -97,7 +98,7 @@ export class BuildingPlacer {
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(100);
+      .setDepth(DEPTH.BLUEPRINT);
 
     // Prevent immediate placement by setting a flag and adding a delay
     this.canPlace = false;
@@ -168,7 +169,7 @@ export class BuildingPlacer {
           .setStrokeStyle(2, 0xffffff)
           .setOrigin(0, 0)
           .setAlpha(0.5)
-          .setDepth(100); // Make sure it's visible above other elements
+          .setDepth(DEPTH.BLUEPRINT); // Make sure it's visible above other elements
 
         console.log("Range preview created successfully:", this.rangePreview);
         return true;
@@ -342,7 +343,7 @@ export class BuildingPlacer {
             )
             .setOrigin(0.5)
             .setScrollFactor(0)
-            .setDepth(100);
+            .setDepth(DEPTH.BLUEPRINT);
 
           // Fade out and destroy after 3 seconds
           this.scene.tweens.add({
@@ -866,7 +867,7 @@ export class BuildingPlacer {
     this.bulldozeSprite.setOrigin(0.5);
     this.bulldozeSprite.setAlpha(0.8);
     this.bulldozeSprite.setScale(0.5);
-    this.bulldozeSprite.setDepth(100);
+    this.bulldozeSprite.setDepth(DEPTH.BLUEPRINT);
 
     // Add instruction text
     this.instructionText = this.scene.add
@@ -883,7 +884,7 @@ export class BuildingPlacer {
       )
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(100);
+      .setDepth(DEPTH.BLUEPRINT);
   }
 
   exitBulldozeMode() {
@@ -976,7 +977,7 @@ export class BuildingPlacer {
               0.3
             );
             this.rangePreview.setStrokeStyle(2, 0xff0000);
-            this.rangePreview.setDepth(10);
+            this.rangePreview.setDepth(DEPTH.BLUEPRINT);
           }
         } else {
           // Update the position of the existing highlight
@@ -1050,7 +1051,7 @@ export class BuildingPlacer {
               )
               .setOrigin(0.5)
               .setScrollFactor(0)
-              .setDepth(100);
+              .setDepth(DEPTH.BLUEPRINT);
 
             // Fade out and destroy after 2 seconds
             this.scene.tweens.add({
@@ -1116,7 +1117,7 @@ export class BuildingPlacer {
               )
               .setOrigin(0.5)
               .setScrollFactor(0)
-              .setDepth(100);
+              .setDepth(DEPTH.BLUEPRINT);
 
             // Fade out and destroy after 2 seconds
             this.scene.tweens.add({

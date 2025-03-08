@@ -17,6 +17,7 @@ import { Blueprint } from "../entities/buildings/Blueprint";
 import { JobManager } from "../entities/robots/JobManager";
 import { InventoryZone } from "../entities/buildings/InventoryZone";
 import { Building } from "../entities/buildings/Building";
+import { DEPTH } from "../depth";
 
 /**
  * RobotManager handles all robot-related functionality
@@ -153,7 +154,7 @@ export class RobotManager {
     );
     notification.setOrigin(0.5);
     notification.setScrollFactor(0);
-    notification.setDepth(1000);
+    notification.setDepth(DEPTH.MESSAGE);
 
     // Fade out and remove after a few seconds
     this.scene.tweens.add({

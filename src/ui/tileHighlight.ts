@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { TILE_SIZE } from "../constants";
+import { DEPTH } from "../depth";
 
 const HIGHLIGHT_COLOR = 0xffffff;
 
@@ -18,7 +19,7 @@ export function createTileHighlight(
   highlightRect.setStrokeStyle(3, HIGHLIGHT_COLOR, 0.5);
   highlightRect.setOrigin(0);
   highlightRect.setVisible(false);
-  highlightRect.setDepth(1000); // Set a very high depth to ensure it's always on top
+  highlightRect.setDepth(DEPTH.BLUEPRINT); // Set a very high depth to ensure it's always on top
   return highlightRect;
 }
 

@@ -7,6 +7,7 @@ import {
 } from "../../data/resources";
 import { ResourceNode } from "../resourceNode";
 import { TILE_SIZE, DEFAULT_FONT } from "../../constants";
+import { DEPTH } from "../../depth";
 
 export class RegolithProcessor extends Building {
   private processingText: Phaser.GameObjects.Text;
@@ -63,7 +64,7 @@ export class RegolithProcessor extends Building {
     }
 
     // Set the sprite's depth to ensure it renders above the smoke
-    this.sprite.setDepth(10);
+    this.sprite.setDepth(DEPTH.BUILDING);
   }
 
   getLabelText(): string {
@@ -87,7 +88,7 @@ export class RegolithProcessor extends Building {
         gravityY: -30, // Negative gravity to make smoke rise
         angle: { min: 260, max: 280 }, // Emit upward
       })
-      .setDepth(100);
+      .setDepth(DEPTH.BUILDING - 1);
   }
 
   // Start smoke effect

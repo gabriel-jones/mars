@@ -4,6 +4,7 @@ import { DEFAULT_FONT } from "../constants";
 import { CloseButton } from "./closeButton";
 import { BuildingPlacer } from "../mechanics/buildingPlacer";
 import { ResourceManager } from "../data/resources";
+import { DEPTH } from "../depth";
 
 export class BuildMenu {
   private scene: Phaser.Scene;
@@ -15,13 +16,19 @@ export class BuildMenu {
   private buildingPlacer: BuildingPlacer;
   private bulldozeButton: Phaser.GameObjects.Container;
   private isBulldozeModeActive: boolean = false;
+  private onMenuClosed: () => void;
 
-  constructor(scene: Phaser.Scene, buildingPlacer: BuildingPlacer) {
+  constructor(
+    scene: Phaser.Scene,
+    buildingPlacer: BuildingPlacer,
+    onMenuClosed?: () => void
+  ) {
     this.scene = scene;
     this.buildingPlacer = buildingPlacer;
+    this.onMenuClosed = onMenuClosed || (() => {});
     this.container = this.scene.add.container(0, 0);
     this.container.setVisible(false);
-    this.container.setDepth(100);
+    this.container.setDepth(DEPTH.UI);
     this.container.setScrollFactor(0);
 
     // Create the panel
@@ -157,7 +164,10 @@ export class BuildMenu {
     return container;
   }
 
-  private toggleBulldozeMode(forceState?: boolean): void {
+  private toggleBulldozeMode(
+    forceState?: boolean,
+    shouldHideMenu: boolean = true
+  ): void {
     // If forceState is provided, use it, otherwise toggle the current state
     this.isBulldozeModeActive =
       forceState !== undefined ? forceState : !this.isBulldozeModeActive;
@@ -181,6 +191,11 @@ export class BuildMenu {
       this.scene.input.setDefaultCursor(
         "url(assets/bulldozer-cursor.png), auto"
       );
+
+      // Hide the menu and notify the action menu
+      if (shouldHideMenu) {
+        this.hide(true);
+      }
     } else {
       // Deactivate bulldoze mode
       this.buildingPlacer.exitBulldozeMode();
@@ -335,26 +350,31 @@ export class BuildMenu {
   private selectBuildingItem(buildingType: BuildingType): void {
     // Deactivate bulldoze mode if it's active
     if (this.isBulldozeModeActive) {
-      this.toggleBulldozeMode(false);
+      this.toggleBulldozeMode(false, false);
     }
 
     // Set the building placer to place this building type
     this.buildingPlacer.selectBuildingType(buildingType);
 
-    // Hide the menu
-    this.hide();
+    // Hide the menu and notify the action menu
+    this.hide(true);
   }
 
   public show(): void {
     this.container.setVisible(true);
   }
 
-  public hide(): void {
+  public hide(notifyActionMenu: boolean = false): void {
     this.container.setVisible(false);
 
     // Deactivate bulldoze mode if it's active
     if (this.isBulldozeModeActive) {
-      this.toggleBulldozeMode(false);
+      this.toggleBulldozeMode(false, false);
+    }
+
+    // Notify the action menu if requested
+    if (notifyActionMenu) {
+      this.onMenuClosed();
     }
   }
 

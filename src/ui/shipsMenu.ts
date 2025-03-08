@@ -7,6 +7,7 @@ import {
   Resource,
 } from "../data/resources";
 import { StarshipState } from "../entities/starship";
+import { DEPTH } from "../depth";
 
 export interface StarshipInfo {
   id: number;
@@ -33,7 +34,7 @@ export class ShipsMenu {
     this.scene = scene;
     this.container = this.scene.add.container(0, 0);
     this.container.setVisible(false);
-    this.container.setDepth(100);
+    this.container.setDepth(DEPTH.UI);
     this.container.setScrollFactor(0);
 
     // Create the panel

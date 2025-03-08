@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { DEPTH } from "../depth";
 
 export class DustEffects {
   private scene: Phaser.Scene;
@@ -98,7 +99,7 @@ export class DustEffects {
     for (let i = 0; i < this.dustCount; i++) {
       const particle = this.scene.add.sprite(0, 0, "dust-particle");
       particle.setVisible(false);
-      particle.setDepth(5);
+      particle.setDepth(DEPTH.DUST);
       particle.setScale(this.dustSize);
       particle.setTint(this.dustColor);
       this.dustParticles.push(particle);
@@ -123,7 +124,7 @@ export class DustEffects {
       particle.visible = false;
 
       // Set depth to be below the entity
-      particle.setDepth(5);
+      particle.setDepth(DEPTH.DUST);
 
       // Add to array
       this.workingDustParticles.push(particle);
@@ -142,7 +143,7 @@ export class DustEffects {
       particle.visible = false;
 
       // Set depth to be below the entity
-      particle.setDepth(5);
+      particle.setDepth(DEPTH.DUST);
 
       this.movementDustParticles.push(particle);
     }

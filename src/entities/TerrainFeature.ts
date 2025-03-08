@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { TILE_SIZE } from "../constants";
+import { DEPTH } from "../depth";
 
 // Enum for different types of terrain features
 export enum TerrainFeatureType {
@@ -51,7 +52,7 @@ export class TerrainFeature extends Phaser.GameObjects.Container {
       this.sprite = scene.add
         .sprite(0, 0, "ice-deposit")
         .setOrigin(0.5)
-        .setDepth(0)
+        .setDepth(DEPTH.TERRAIN)
         .setDisplaySize(TILE_SIZE, TILE_SIZE);
       this.add(this.sprite);
 

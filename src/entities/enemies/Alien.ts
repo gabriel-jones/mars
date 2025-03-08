@@ -180,6 +180,11 @@ export class Alien extends Enemy {
     // Set the tool's rotation
     this.equippedTool.setRotation(angle);
 
+    // Flip the tool sprite if facing left
+    // The sprite is facing right by default, so flip if angle is in left hemisphere
+    const shouldFlip = Math.abs(angle) > Math.PI / 2;
+    this.equippedTool.setFlipX(shouldFlip);
+
     // Show the raygun when in attacking state
     if (this.enemyState === EnemyState.ATTACKING) {
       this.equippedTool.show(handPosition.x, handPosition.y, false);

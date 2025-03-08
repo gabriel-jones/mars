@@ -8,6 +8,7 @@ import { TILE_SIZE } from "../../constants";
 import { HealthBarRenderer } from "../../interfaces/Health";
 import { GrowZone } from "../buildings/GrowZone";
 import { InventoryZone } from "../buildings/InventoryZone";
+import { DEPTH } from "../../depth";
 
 // Optimus class - can perform tasks like a player
 export class Optimus extends Robot {
@@ -95,7 +96,7 @@ export class Optimus extends Robot {
     this.shieldEffect.setStrokeStyle(2, this.shieldColor, 0.6);
 
     // Set depth to be just above the sprite
-    this.shieldEffect.setDepth(15);
+    this.shieldEffect.setDepth(DEPTH.SHIELD);
 
     // Initially invisible until taking damage
     this.shieldEffect.setVisible(false);

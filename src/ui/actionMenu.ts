@@ -112,7 +112,10 @@ export class ActionMenu {
     this.earthButton.setScrollFactor(0);
 
     // Create menu instances
-    this.buildMenu = new BuildMenu(scene, this.buildingPlacer);
+    this.buildMenu = new BuildMenu(scene, this.buildingPlacer, () => {
+      this.resetButtonHighlights();
+      this.activeMenu = "none";
+    });
     this.robotsMenu = new RobotsMenu(scene);
     this.shipsMenu = new ShipsMenu(scene);
 
@@ -243,7 +246,7 @@ export class ActionMenu {
 
   // Close all menus
   private closeAllMenus(): void {
-    this.buildMenu.hide();
+    this.buildMenu.hide(false);
     this.robotsMenu.hide();
     this.shipsMenu.hide();
     this.earthMenu.hide();

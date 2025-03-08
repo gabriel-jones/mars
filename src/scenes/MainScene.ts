@@ -4,6 +4,7 @@ import { createTileHighlight, updateTileHighlight } from "../ui/tileHighlight";
 import { gameState } from "../state";
 import { ActionMenu } from "../ui/actionMenu";
 import { ResourceDisplay } from "../ui/resourceDisplay";
+import { MoneyDisplay } from "../ui/moneyDisplay";
 import { createTerrain } from "../terrain";
 import { ResourceNode } from "../entities/resourceNode";
 import { RESOURCE_DEFINITIONS, ResourceType } from "../data/resources";
@@ -34,10 +35,12 @@ import { JobManager as GameJobManager } from "../mechanics/JobManager";
 import { BlueprintManager } from "../mechanics/BlueprintManager";
 import { EnemyManager } from "../mechanics/EnemyManager";
 import { RobotManager } from "../mechanics/RobotManager";
+import { DEPTH } from "../depth";
 
 export class MainScene extends Phaser.Scene {
   private actionMenu: ActionMenu;
   private resourceDisplay: ResourceDisplay;
+  private moneyDisplay: MoneyDisplay;
   private toolInventoryDisplay: ToolInventoryDisplay;
   private detailView: DetailView;
   private fpsText: Phaser.GameObjects.Text;
@@ -228,8 +231,17 @@ export class MainScene extends Phaser.Scene {
     // Make sure the ground layer is invisible since we're using sprites
     groundLayer.setVisible(false);
 
-    // Create resource display
+    // Create money display
+    this.moneyDisplay = new MoneyDisplay(this);
+
+    // Create resource display (positioned below money display)
     this.resourceDisplay = new ResourceDisplay(this);
+
+    // Adjust resource display position to be below money display
+    const resourceContainer = this.resourceDisplay.getContainer();
+    if (resourceContainer) {
+      resourceContainer.setY(this.moneyDisplay.getHeight() + 10);
+    }
 
     // Set world bounds based on the map dimensions
     this.physics.world.setBounds(
@@ -288,7 +300,7 @@ export class MainScene extends Phaser.Scene {
     this.buildings.push(initialLandingPad);
 
     // Store a reference to the starship
-    this.starship = initialLandingPad.getStarship();
+    this.starship = initialLandingPad.getStarship().setDepth(DEPTH.STARSHIP);
 
     // Center the main camera on the spawn point and set appropriate bounds
     this.cameras.main.setBounds(
@@ -558,6 +570,11 @@ export class MainScene extends Phaser.Scene {
 
     // Update manager references
     this.updateManagerReferences();
+
+    // Update money display
+    if (this.moneyDisplay) {
+      this.moneyDisplay.update();
+    }
   }
 
   private handleItemPlaced(itemName: string, x: number, y: number) {
@@ -927,6 +944,11 @@ export class MainScene extends Phaser.Scene {
 
     // Remove building destroyed event listener
     this.events.off("buildingDestroyed", this.onBuildingDestroyed, this);
+
+    // Clean up money display
+    if (this.moneyDisplay) {
+      this.moneyDisplay.destroy();
+    }
   }
 
   private updateRobotsListInMenu() {

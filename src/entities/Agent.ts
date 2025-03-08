@@ -4,6 +4,7 @@ import { ShadowEffects } from "../effects/ShadowEffects";
 import { DUST_COLOR, TILE_SIZE } from "../constants";
 import { HasHealth, HealthBarRenderer } from "../interfaces/Health";
 import { Tool, ToolType } from "./tools";
+import { DEPTH } from "../depth";
 
 // Base Agent class for all entities with health (player, robots, enemies)
 export abstract class Agent implements HasHealth {
@@ -154,7 +155,7 @@ export abstract class Agent implements HasHealth {
     this.shieldEffect.setStrokeStyle(1, this.shieldColor, 0.6); // Thinner stroke
 
     // Set depth to be higher than sprite (sprite depth is typically 10)
-    this.shieldEffect.setDepth(15);
+    this.shieldEffect.setDepth(DEPTH.SHIELD);
 
     // Initially invisible until taking damage
     this.shieldEffect.setVisible(false);

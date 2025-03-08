@@ -308,4 +308,11 @@ export class ResourceDisplay {
       this.container.destroy();
     }
   }
+
+  /**
+   * Get the container for camera management and positioning
+   */
+  getContainer(): Phaser.GameObjects.Container {
+    return this.container;
+  }
 }

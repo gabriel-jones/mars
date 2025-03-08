@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { Agent } from "../Agent";
 import { DUST_COLOR } from "../../constants";
 import { HasHealth, HealthBarRenderer } from "../../interfaces/Health";
+import { DEPTH } from "../../depth";
 
 // Enemy states
 export enum EnemyState {
@@ -60,7 +61,7 @@ export abstract class Enemy extends Agent implements HasHealth {
       scene.physics.add
         .sprite(x, y, enemyType)
         .setDisplaySize(64, 64)
-        .setDepth(10),
+        .setDepth(DEPTH.AGENT),
       maxHealth
     );
 
@@ -121,7 +122,7 @@ export abstract class Enemy extends Agent implements HasHealth {
         },
       })
       .setOrigin(0.5)
-      .setDepth(5);
+      .setDepth(DEPTH.AGENT);
 
     // Add state text (but make it invisible since we're using health bar)
     this.stateText = scene.add
@@ -141,7 +142,7 @@ export abstract class Enemy extends Agent implements HasHealth {
       })
       .setAlpha(0)
       .setOrigin(0.5)
-      .setDepth(5);
+      .setDepth(DEPTH.AGENT);
 
     // Initialize dust effects
     this.initDustEffects();

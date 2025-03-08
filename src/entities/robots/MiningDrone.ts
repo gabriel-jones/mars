@@ -5,6 +5,7 @@ import { TILE_SIZE, ROBOT_VELOCITY, DUST_COLOR } from "../../constants";
 import { MINING_RADIUS, MiningStation } from "../buildings/MiningStation";
 import { getResourceRichnessAt } from "../../terrain";
 import { DustEffects } from "../../effects/DustEffects";
+import { DEPTH } from "../../depth";
 
 // Mining Drone class - specialized for mining regolith
 export class MiningDrone extends Robot {
@@ -48,7 +49,7 @@ export class MiningDrone extends Robot {
     );
 
     // Set the robot's depth to ensure it renders above dust particles
-    this.container.setDepth(10);
+    this.container.setDepth(DEPTH.AGENT);
 
     // Configure Mars-appropriate dust effects
     this.configureDustEffects(scene);

@@ -16,6 +16,7 @@ import {
 } from "../entities/buildings/GrowZone";
 import { RangeSelectionBuilding } from "../entities/buildings/RangeSelectionBuilding";
 import { DEFAULT_FONT } from "../constants";
+import { DEPTH } from "../depth";
 
 // Define a type for selectable entities
 export type SelectableEntity =
@@ -69,7 +70,7 @@ export class DetailView {
     // Create container for all detail view elements
     this.container = scene.add.container(0, 0);
     this.container.name = "detailViewContainer"; // Add a name for debugging
-    this.container.setDepth(1000); // Set a high depth to ensure it's on top
+    this.container.setDepth(DEPTH.UI); // Set a high depth to ensure it's on top
 
     // Create background panel - we'll resize it dynamically based on content
     this.background = scene.add.rectangle(

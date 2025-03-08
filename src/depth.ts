@@ -1,0 +1,16 @@
+export const DEPTH = {
+  FPS: 2_000,
+  STARSHIP: 1_000,
+  MESSAGE: 900,
+  UI: 800,
+  BLUEPRINT: 100,
+  TOOL: 20,
+  BULLET: 15,
+  BUILDING: 10,
+  HEALTH_BAR: 9,
+  SHIELD: 8,
+  AGENT: 7,
+  PLAYER: 6,
+  DUST: 5,
+  TERRAIN: 0,
+};

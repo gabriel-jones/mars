@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { ResourceType, RESOURCE_DEFINITIONS } from "../data/resources";
 import { DEFAULT_FONT } from "../constants";
 import { CloseButton } from "./closeButton";
+import { DEPTH } from "../depth";
 
 // Define the transfer item interface
 export interface TransferItem {
@@ -44,7 +45,7 @@ export class EarthMenu {
     // Create the container and add it to the scene
     this.container = this.scene.add.container(0, 0);
     this.container.setVisible(false);
-    this.container.setDepth(100);
+    this.container.setDepth(DEPTH.UI);
 
     console.log("Earth menu container created");
 
@@ -469,7 +470,7 @@ export class EarthMenu {
     this.container.setPosition(x, y);
 
     // Ensure it's at the front
-    this.container.setDepth(100);
+    this.container.setDepth(DEPTH.UI);
 
     // Log to confirm the menu is being shown
     console.log("Earth menu shown");
