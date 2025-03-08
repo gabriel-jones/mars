@@ -30,6 +30,10 @@ export class Optimus extends Robot {
   private lastDamageTime: number = 0; // Track when the robot last took damage
   private shieldRepairInterval: number = 10000; // 10 seconds in ms
   private shieldRepairAmount: number = 5; // Amount to repair per update when eligible
+  private resourceCheckTimer: number = 0;
+  private resourceCheckInterval: number = 15000; // Check for loose resources every 15 seconds (increased from 5 seconds)
+  private mergeCheckTimer: number = 0;
+  private mergeCheckInterval: number = 30000; // Check for merge opportunities every 30 seconds (increased from 8 seconds)
 
   // Set larger detection and attack ranges for Optimus robots
   // private detectionRange: number = 450; // Increased from 300
@@ -44,6 +48,12 @@ export class Optimus extends Robot {
     this.robotId = `optimus-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     // Initialize wander timer with a random offset to prevent all robots from moving at once
     this.wanderTimer = scene.time.now + Math.random() * this.wanderIntervalMax;
+    // Initialize resource check timer with a random offset to prevent all robots from checking at once
+    this.resourceCheckTimer =
+      scene.time.now + Math.random() * this.resourceCheckInterval;
+    // Initialize merge check timer with a random offset
+    this.mergeCheckTimer =
+      scene.time.now + Math.random() * this.mergeCheckInterval;
     // Initialize last damage time
     this.lastDamageTime = scene.time.now;
 
@@ -196,20 +206,32 @@ export class Optimus extends Robot {
   // Add a task to pick up a resource node
   public pickupResourceNode(resourceNode: ResourceNode): void {
     this.addTask(() => {
+      console.log(
+        `Robot ${this.robotId} moving to pick up resource at (${resourceNode.x}, ${resourceNode.y})`
+      );
       this.targetResourceNode = resourceNode;
       this.moveToTarget(
         new Phaser.Math.Vector2(resourceNode.x, resourceNode.y)
       );
-      // The actual pickup will happen in update when we reach the target
+      // Set state to MOVING
+      this.robotState = RobotState.MOVING;
+      this.updateStateText();
+      // The actual pickup will happen in onReachTarget when we reach the target
     });
   }
 
   // Add a task to deliver a resource to another node
   public deliverResourceToNode(targetNode: ResourceNode): void {
     this.addTask(() => {
+      console.log(
+        `Robot ${this.robotId} moving to deliver resource to node at (${targetNode.x}, ${targetNode.y})`
+      );
       this.targetResourceNode = targetNode;
       this.moveToTarget(new Phaser.Math.Vector2(targetNode.x, targetNode.y));
-      // The actual delivery will happen in update when we reach the target
+      // Set state to MOVING
+      this.robotState = RobotState.MOVING;
+      this.updateStateText();
+      // The actual delivery will happen in onReachTarget when we reach the target
     });
   }
 
@@ -234,7 +256,11 @@ export class Optimus extends Robot {
       );
       this.moveToTarget(new Phaser.Math.Vector2(blueprint.x, blueprint.y));
 
-      // The actual delivery will happen in update when we reach the target
+      // Set state to MOVING
+      this.robotState = RobotState.MOVING;
+      this.updateStateText();
+
+      // The actual delivery will happen in onReachTarget when we reach the target
       this.targetBlueprint = blueprint;
     });
   }
@@ -244,17 +270,44 @@ export class Optimus extends Robot {
    * @param inventoryZone The inventory zone to deliver to
    */
   public deliverResourceToInventoryZone(inventoryZone: InventoryZone): void {
-    // Add task to move to the inventory zone
-    this.addTask(() => {
-      this.moveToTarget(
-        new Phaser.Math.Vector2(inventoryZone.x, inventoryZone.y)
+    // Check if we have a resource to deliver
+    if (!this.resourceType || this.resourceAmount <= 0) {
+      console.log(
+        `Robot ${this.robotId} has no resource to deliver to inventory zone`
       );
+      return;
+    }
+
+    // Find an available tile in the inventory zone
+    const tilePosition = inventoryZone.findAvailableTilePosition(
+      this.resourceType
+    );
+
+    if (!tilePosition) {
+      console.log(
+        `Robot ${this.robotId} couldn't find an available tile in inventory zone`
+      );
+      return;
+    }
+
+    // Clear any existing tasks
+    this.taskQueue = [];
+
+    // Add task to move to the specific tile in the inventory zone
+    this.addTask(() => {
+      console.log(
+        `Robot ${this.robotId} moving to tile at (${tilePosition.x}, ${tilePosition.y}) in inventory zone`
+      );
+      this.moveToTarget(tilePosition);
+
+      // Set state to MOVING
+      this.robotState = RobotState.MOVING;
+      this.updateStateText();
     });
 
-    // Add task to deliver the resource
-    this.addTask(() => {
-      this.deliverResourceToInventory(inventoryZone);
-    });
+    // We don't need to add a separate task for delivery
+    // The onReachTarget method will handle the delivery when the robot reaches the target
+    // This ensures we don't have timing issues with the task queue
   }
 
   /**
@@ -270,16 +323,21 @@ export class Optimus extends Robot {
       return;
     }
 
+    // Get the resource object
+    const resource = ResourceManager.getResource(this.resourceType);
+    if (!resource) {
+      console.log(
+        `Robot ${this.robotId} has invalid resource type: ${this.resourceType}`
+      );
+      return;
+    }
+
     // Create a temporary resource node to represent the carried resource
     const tempNode = new ResourceNode(
       this.scene,
       this.container.x,
       this.container.y,
-      ResourceManager.getResource(this.resourceType) || {
-        type: this.resourceType,
-        name: this.resourceType,
-        emoji: "📦",
-      },
+      resource,
       this.resourceAmount
     );
 
@@ -292,6 +350,15 @@ export class Optimus extends Robot {
       );
 
       // Clear the carried resource
+      if (this.carriedResource) {
+        this.carriedResource.destroy();
+        this.carriedResource = null;
+      }
+
+      // Clear the carried resource sprite
+      this.clearCarriedResource();
+
+      // Reset resource information
       this.resourceType = "" as ResourceType;
       this.resourceAmount = 0;
 
@@ -302,14 +369,43 @@ export class Optimus extends Robot {
 
       // Set state back to idle
       this.robotState = RobotState.IDLE;
+      this.updateStateText();
+
+      // Mark the job as completed if it's a delivery job
+      if (
+        this.currentJob &&
+        this.currentJob.type === JobType.DELIVER_TO_INVENTORY
+      ) {
+        console.log(
+          `Robot ${this.robotId} completing inventory delivery job ${this.currentJob.id}`
+        );
+        JobManager.getInstance().completeJob(this.currentJob.id);
+        this.currentJob = null;
+      }
     } else {
       console.log(
         `Robot ${this.robotId} failed to deliver ${this.resourceAmount} ${this.resourceType} to inventory zone - no space`
       );
 
       // The temporary node will be destroyed automatically if it couldn't be added
+      // Drop the resource at the robot's current position
+      this.dropResource();
+
       // Set state back to idle
       this.robotState = RobotState.IDLE;
+      this.updateStateText();
+
+      // Cancel the job if it's a delivery job
+      if (
+        this.currentJob &&
+        this.currentJob.type === JobType.DELIVER_TO_INVENTORY
+      ) {
+        console.log(
+          `Robot ${this.robotId} cancelling inventory delivery job ${this.currentJob.id} - no space`
+        );
+        JobManager.getInstance().cancelJob(this.currentJob.id);
+        this.currentJob = null;
+      }
     }
   }
 
@@ -325,12 +421,13 @@ export class Optimus extends Robot {
 
     // Define preferred job types based on robot type
     const preferredJobTypes = [
-      JobType.BUILD,
-      JobType.DELIVER_RESOURCE,
+      JobType.BUILD, // Building is highest priority
+      JobType.DELIVER_RESOURCE, // Delivering resources to blueprints is high priority
+      JobType.DELIVER_TO_INVENTORY, // Inventory organization is medium priority
+      JobType.MERGE_STACKS, // Merging stacks is lower priority
       JobType.WATER_TILE,
       JobType.PLANT_SEED,
       JobType.HARVEST_CROP,
-      JobType.MERGE_STACKS,
       JobType.WORK_MACHINE,
     ];
 
@@ -519,7 +616,16 @@ export class Optimus extends Robot {
 
     // Get the resource type and amount
     const resource = resourceNode.getResource();
+    if (!resource) {
+      console.log(`Robot ${this.robotId} tried to pick up invalid resource`);
+      return;
+    }
+
     const availableAmount = resourceNode.getAmount();
+    if (availableAmount <= 0) {
+      console.log(`Robot ${this.robotId} tried to pick up empty resource`);
+      return;
+    }
 
     // Determine how much to pick up
     let amountToPickup = availableAmount;
@@ -563,6 +669,10 @@ export class Optimus extends Robot {
     // Remove the picked up amount from the original resource node
     // This will only destroy the node if it's completely empty
     resourceNode.harvest(amountToPickup);
+
+    // Set state to CARRYING
+    this.robotState = RobotState.CARRYING;
+    this.updateStateText();
   }
 
   // Drop the currently carried resource back to the ground
@@ -629,41 +739,127 @@ export class Optimus extends Robot {
 
   // Make the robot wander around its home position
   private wanderAroundHome(): void {
-    // Check if the robot is already too far from home
-    const distanceFromHome = Phaser.Math.Distance.Between(
-      this.container.x,
-      this.container.y,
-      this.homePosition.x,
-      this.homePosition.y
-    );
-
-    // If the robot is already at the edge of the wander radius, return home first
-    if (distanceFromHome >= this.wanderRadius * 0.8) {
-      console.log(
-        `Robot ${this.robotId} too far from home, returning before wandering again`
-      );
-      this.returnHome();
+    // Only wander if we're idle
+    if (this.robotState !== RobotState.IDLE) {
       return;
     }
 
-    // Calculate a random position within the wander radius
+    // Calculate a random position around the home position
     const angle = Math.random() * Math.PI * 2; // Random angle in radians
-    const distance = Math.random() * this.wanderRadius; // Random distance within radius
+    const distance = Math.random() * this.wanderRadius; // Random distance within wander radius
+    const targetX = this.homePosition.x + Math.cos(angle) * distance;
+    const targetY = this.homePosition.y + Math.sin(angle) * distance;
 
-    // Calculate new position
-    const newX = this.homePosition.x + Math.cos(angle) * distance;
-    const newY = this.homePosition.y + Math.sin(angle) * distance;
+    // Move to the random position
+    this.moveToTarget(new Phaser.Math.Vector2(targetX, targetY));
 
-    console.log(`Robot ${this.robotId} wandering to (${newX}, ${newY})`);
+    // Set state to wandering
+    this.robotState = RobotState.WANDERING;
+    this.updateStateText();
 
-    // Move to the new position
-    this.moveToTarget(new Phaser.Math.Vector2(newX, newY));
-
-    // Set the next wander time with a random interval
-    const nextInterval =
+    // Reset wander timer with random interval
+    this.wanderTimer =
+      this.scene.time.now +
       this.wanderIntervalMin +
       Math.random() * (this.wanderIntervalMax - this.wanderIntervalMin);
-    this.wanderTimer = this.scene.time.now + nextInterval;
+  }
+
+  /**
+   * Check for loose resources and create inventory delivery jobs
+   * This helps keep the base organized by moving resources to inventory zones
+   */
+  private checkForLooseResources(): void {
+    // Only check if we're idle
+    if (
+      this.robotState !== RobotState.IDLE ||
+      this.taskQueue.length > 0 ||
+      this.currentJob
+    ) {
+      return;
+    }
+
+    // Get all resource nodes in the scene
+    const resourceNodes: ResourceNode[] = [];
+    this.scene.children.list.forEach((child) => {
+      if (child instanceof ResourceNode) {
+        resourceNodes.push(child);
+      }
+    });
+
+    // Skip if no resources found
+    if (resourceNodes.length === 0) {
+      return;
+    }
+
+    // Get all inventory zones in the scene
+    const inventoryZones: InventoryZone[] = [];
+    this.scene.children.list.forEach((child) => {
+      if (child instanceof InventoryZone) {
+        inventoryZones.push(child);
+      }
+    });
+
+    // Skip if no inventory zones found
+    if (inventoryZones.length === 0) {
+      return;
+    }
+
+    // Create delivery jobs for loose resources
+    const jobManager = JobManager.getInstance();
+    const jobsCreated = jobManager.createInventoryDeliveryJobsForLooseResources(
+      resourceNodes,
+      inventoryZones
+    );
+
+    if (jobsCreated > 0) {
+      console.log(
+        `Created ${jobsCreated} inventory delivery jobs for loose resources`
+      );
+
+      // Immediately check for a job to pick up
+      this.findAndAssignJob();
+    }
+  }
+
+  /**
+   * Check for merge opportunities in inventory zones
+   * This helps keep inventory zones organized by merging stacks of the same resource type
+   */
+  private checkForMergeOpportunities(): void {
+    // Only check if we're idle
+    if (
+      this.robotState !== RobotState.IDLE ||
+      this.taskQueue.length > 0 ||
+      this.currentJob
+    ) {
+      return;
+    }
+
+    // Get all inventory zones in the scene
+    const inventoryZones: InventoryZone[] = [];
+    this.scene.children.list.forEach((child) => {
+      if (child instanceof InventoryZone) {
+        inventoryZones.push(child);
+      }
+    });
+
+    // Skip if no inventory zones found
+    if (inventoryZones.length === 0) {
+      return;
+    }
+
+    // Create merge jobs for resources in inventory zones
+    const jobManager = JobManager.getInstance();
+    const jobsCreated = jobManager.createInventoryMergeJobs(inventoryZones);
+
+    if (jobsCreated > 0) {
+      console.log(
+        `Created ${jobsCreated} merge jobs for resources in inventory zones`
+      );
+
+      // Immediately check for a job to pick up
+      this.findAndAssignJob();
+    }
   }
 
   // Update the optimus robot
@@ -784,168 +980,20 @@ export class Optimus extends Robot {
       }
     }
 
-    // Check for jobs periodically when idle
-    if (
-      this.robotState === RobotState.IDLE &&
-      this.taskQueue.length === 0 &&
-      !this.currentJob
-    ) {
-      if (this.scene.time.now > this.jobCheckTimer) {
-        // Look for and assign a job
-        this.findAndAssignJob();
-
-        // Set the next job check time
-        this.jobCheckTimer = this.scene.time.now + this.jobCheckInterval;
-      }
-
-      // Wander around when idle and not already moving
-      if (this.scene.time.now > this.wanderTimer && !this.target) {
-        this.wanderAroundHome();
-        // Note: wanderTimer is now set inside wanderAroundHome
-      }
-    }
-
-    // If we're moving or carrying, check if we've reached the target
+    // If we're moving, check if we've reached the target
     if (
       (this.robotState === RobotState.MOVING ||
+        this.robotState === RobotState.RETURNING ||
+        this.robotState === RobotState.WANDERING ||
         this.robotState === RobotState.CARRYING) &&
-      this.hasReachedTarget()
+      this.target
     ) {
-      this.stopMoving();
-
-      // If we have a target resource node and we're not carrying anything, pick it up
-      if (this.targetResourceNode && !this.carriedResource) {
-        this.pickupResource(this.targetResourceNode);
-        this.targetResourceNode = null;
-
-        // For pickup tasks (part of MERGE_STACKS), don't enter working state
-        // Just go straight to carrying and continue to the next task
-        this.robotState = RobotState.CARRYING;
-        this.updateStateText();
-
-        // If we have more tasks, immediately process the next one (which should be delivery)
-        if (this.taskQueue.length > 0) {
-          this.currentTask = this.taskQueue.shift()!;
-          this.currentTask();
-        }
-      }
-      // If we're carrying a resource and have reached the target, deliver it
-      else if (this.carriedResource && this.targetResourceNode) {
-        this.deliverResource(this.targetResourceNode);
-        this.targetResourceNode = null;
-        this.robotState = RobotState.IDLE;
-        this.updateStateText();
-      }
-      // If we're carrying a resource and have reached a blueprint, deliver to the blueprint
-      else if (this.carriedResource && this.targetBlueprint) {
-        console.log(
-          `Robot ${this.robotId} reached blueprint with carried resource`
-        );
-
-        // Get the resource type and amount from the carried resource
-        const resourceType = this.resourceType as ResourceType;
-        const amount = this.resourceAmount;
-
-        console.log(`Robot ${this.robotId} carrying ${amount} ${resourceType}`);
-
-        // Add the resource to the blueprint
-        const amountAdded = this.targetBlueprint.addResource(
-          resourceType,
-          amount
-        );
-
-        console.log(
-          `Robot ${this.robotId} delivered ${amountAdded} ${resourceType} to blueprint`
-        );
-
-        // If we couldn't deliver all resources (blueprint might be full or doesn't need more)
-        if (amountAdded < amount) {
-          const remainingAmount = amount - amountAdded;
-          console.log(
-            `Robot ${this.robotId} has ${remainingAmount} ${resourceType} remaining`
-          );
-
-          // Create a new resource node with the remaining resources
-          const resource = ResourceManager.getResource(resourceType);
-          if (resource && remainingAmount > 0) {
-            console.log(
-              `Dropping ${remainingAmount} ${resource} that didn't fit`
-            );
-
-            // Create a new resource node with the remaining resources
-            new ResourceNode(
-              this.scene,
-              this.container.x,
-              this.container.y,
-              resource,
-              remainingAmount
-            );
-          }
-        }
-
-        // Clear the carried resource
-        if (this.carriedResource) {
-          this.carriedResource.destroy();
-          this.carriedResource = null;
-        }
-
-        // Clear the carried resource sprite
-        this.clearCarriedResource();
-
-        // Reset resource information
-        this.resourceAmount = 0;
-        this.resourceType = "" as ResourceType;
-
-        // Reset the target blueprint
-        this.targetBlueprint = null;
-
-        // Mark the job as completed
-        if (
-          this.currentJob &&
-          this.currentJob.type === JobType.DELIVER_RESOURCE
-        ) {
-          console.log(
-            `Robot ${this.robotId} completing job ${this.currentJob.id}`
-          );
-          JobManager.getInstance().completeJob(this.currentJob.id);
-          this.currentJob = null;
-        }
-
-        this.robotState = RobotState.IDLE;
-        this.updateStateText();
-      }
-      // Otherwise, check if we need to work on this job
-      else if (this.currentJob && this.currentJob.workDuration > 0) {
-        console.log(
-          `Robot ${this.robotId} starting work on job ${this.currentJob.id} of type ${this.currentJob.type}`
-        );
-
-        this.robotState = RobotState.WORKING;
-        this.updateStateText();
-
-        // Set a timer for task completion based on the job's work duration
-        this.taskCompleteTime =
-          this.scene.time.now + this.currentJob.workDuration;
-      }
-      // If no work duration, just go idle
-      else {
-        console.log(`Robot ${this.robotId} has no work to do, going idle`);
-
-        // Clear any current job since there's nothing to do
-        if (this.currentJob) {
-          console.log(
-            `Robot ${this.robotId} clearing job ${this.currentJob.id} with no work duration`
-          );
-          this.currentJob = null;
-        }
-
-        // Clear any target references to prevent getting stuck
-        this.target = null;
-        this.targetResourceNode = null;
-        this.targetBlueprint = null;
-
-        this.robotState = RobotState.IDLE;
-        this.updateStateText();
+      if (this.hasReachedTarget()) {
+        this.stopMoving();
+        this.onReachTarget();
+      } else {
+        // Continue moving towards the target
+        // No need to call any method here as the robot's velocity is already set
       }
     }
 
@@ -1074,22 +1122,52 @@ export class Optimus extends Robot {
       }
     }
 
-    // If we're returning and have reached home, go idle
-    if (this.robotState === RobotState.RETURNING && this.hasReachedTarget()) {
-      console.log(`Robot ${this.robotId} reached home, going idle`);
-      this.stopMoving();
-
-      // Clear the target to prevent getting stuck
-      this.target = null;
-
-      this.robotState = RobotState.IDLE;
-      this.updateStateText();
-    }
-
     // If we're idle and have tasks, start the next one
     if (this.robotState === RobotState.IDLE && this.taskQueue.length > 0) {
       this.currentTask = this.taskQueue.shift()!;
       this.currentTask();
+    }
+
+    // Check for jobs periodically when idle
+    if (
+      this.robotState === RobotState.IDLE &&
+      this.taskQueue.length === 0 &&
+      !this.currentJob
+    ) {
+      // First, always check for regular jobs
+      if (this.scene.time.now > this.jobCheckTimer) {
+        // Look for and assign a job
+        const foundJob = this.findAndAssignJob();
+
+        // Set the next job check time
+        this.jobCheckTimer = this.scene.time.now + this.jobCheckInterval;
+
+        // Only proceed with inventory organization if no regular job was found
+        if (!foundJob) {
+          // Check for loose resources periodically
+          if (this.scene.time.now > this.resourceCheckTimer) {
+            this.checkForLooseResources();
+
+            // Set the next resource check time
+            this.resourceCheckTimer =
+              this.scene.time.now + this.resourceCheckInterval;
+          }
+
+          // Check for merge opportunities periodically
+          if (this.scene.time.now > this.mergeCheckTimer) {
+            this.checkForMergeOpportunities();
+
+            // Set the next merge check time
+            this.mergeCheckTimer =
+              this.scene.time.now + this.mergeCheckInterval;
+          }
+
+          // Wander around if it's time to wander
+          if (this.scene.time.now > this.wanderTimer) {
+            this.wanderAroundHome();
+          }
+        }
+      }
     }
   }
 
@@ -1288,6 +1366,196 @@ export class Optimus extends Robot {
         // Hide shield if inactive, depleted, or timer expired
         this.shieldEffect.setVisible(false);
       }
+    }
+  }
+
+  protected onReachTarget(): void {
+    // Call the parent method
+    super.onReachTarget();
+
+    // Handle based on current state
+    switch (this.robotState) {
+      case RobotState.MOVING:
+        // If we're moving and have a current task, complete it
+        if (this.currentTask) {
+          this.taskCompleteTime = this.scene.time.now;
+          this.currentTask = null;
+        }
+
+        // If we have a target resource node and we're not carrying anything, pick it up
+        if (this.targetResourceNode && !this.carriedResource) {
+          this.pickupResource(this.targetResourceNode);
+          this.targetResourceNode = null;
+
+          // For pickup tasks (part of MERGE_STACKS), don't enter working state
+          // Just go straight to carrying and continue to the next task
+          this.robotState = RobotState.CARRYING;
+          this.updateStateText();
+
+          // If we have more tasks, immediately process the next one (which should be delivery)
+          if (this.taskQueue.length > 0) {
+            this.currentTask = this.taskQueue.shift()!;
+            this.currentTask();
+          }
+        }
+        // If we're carrying a resource and have reached the target, deliver it
+        else if (this.carriedResource && this.targetResourceNode) {
+          this.deliverResource(this.targetResourceNode);
+          this.targetResourceNode = null;
+          this.robotState = RobotState.IDLE;
+          this.updateStateText();
+        }
+        // If we're carrying a resource and have reached a blueprint, deliver to the blueprint
+        else if (this.carriedResource && this.targetBlueprint) {
+          console.log(
+            `Robot ${this.robotId} reached blueprint with carried resource`
+          );
+
+          // Get the resource type and amount from the carried resource
+          const resourceType = this.resourceType as ResourceType;
+          const amount = this.resourceAmount;
+
+          console.log(
+            `Robot ${this.robotId} carrying ${amount} ${resourceType}`
+          );
+
+          // Add the resource to the blueprint
+          const amountAdded = this.targetBlueprint.addResource(
+            resourceType,
+            amount
+          );
+
+          console.log(
+            `Robot ${this.robotId} delivered ${amountAdded} ${resourceType} to blueprint`
+          );
+
+          // If we couldn't deliver all resources (blueprint might be full or doesn't need more)
+          if (amountAdded < amount) {
+            const remainingAmount = amount - amountAdded;
+            console.log(
+              `Robot ${this.robotId} has ${remainingAmount} ${resourceType} remaining`
+            );
+
+            // Create a new resource node with the remaining resources
+            const resource = ResourceManager.getResource(resourceType);
+            if (resource && remainingAmount > 0) {
+              console.log(
+                `Dropping ${remainingAmount} ${resource} that didn't fit`
+              );
+
+              // Create a new resource node with the remaining resources
+              new ResourceNode(
+                this.scene,
+                this.container.x,
+                this.container.y,
+                resource,
+                remainingAmount
+              );
+            }
+          }
+
+          // Clear the carried resource
+          if (this.carriedResource) {
+            this.carriedResource.destroy();
+            this.carriedResource = null;
+          }
+
+          // Clear the carried resource sprite
+          this.clearCarriedResource();
+
+          // Reset resource information
+          this.resourceAmount = 0;
+          this.resourceType = "" as ResourceType;
+
+          // Reset the target blueprint
+          this.targetBlueprint = null;
+
+          // Mark the job as completed
+          if (
+            this.currentJob &&
+            this.currentJob.type === JobType.DELIVER_RESOURCE
+          ) {
+            console.log(
+              `Robot ${this.robotId} completing job ${this.currentJob.id}`
+            );
+            JobManager.getInstance().completeJob(this.currentJob.id);
+            this.currentJob = null;
+          }
+
+          this.robotState = RobotState.IDLE;
+          this.updateStateText();
+        }
+        // Otherwise, check if we need to work on this job
+        else if (this.currentJob && this.currentJob.workDuration > 0) {
+          console.log(
+            `Robot ${this.robotId} starting work on job ${this.currentJob.id} of type ${this.currentJob.type}`
+          );
+
+          this.robotState = RobotState.WORKING;
+          this.updateStateText();
+
+          // Set a timer for task completion based on the job's work duration
+          this.taskCompleteTime =
+            this.scene.time.now + this.currentJob.workDuration;
+        }
+        break;
+
+      case RobotState.CARRYING:
+        // If we have more tasks, process the next one
+        if (this.taskQueue.length > 0) {
+          console.log(
+            `Robot ${this.robotId} in CARRYING state, processing next task`
+          );
+          this.currentTask = this.taskQueue.shift()!;
+          this.currentTask();
+        } else if (
+          this.currentJob &&
+          this.currentJob.type === JobType.DELIVER_TO_INVENTORY
+        ) {
+          // If we're carrying a resource and have reached the inventory zone, deliver it
+          console.log(
+            `Robot ${this.robotId} in CARRYING state with no more tasks, delivering to inventory zone`
+          );
+
+          // Find the inventory zone from the job
+          if (this.currentJob.inventoryZone) {
+            this.deliverResourceToInventory(this.currentJob.inventoryZone);
+          } else {
+            console.log(
+              `Robot ${this.robotId} has no inventory zone to deliver to`
+            );
+            // Drop the resource if we can't deliver it
+            this.dropResource();
+
+            // Cancel the job
+            JobManager.getInstance().cancelJob(this.currentJob.id);
+            this.currentJob = null;
+
+            // Go idle
+            this.robotState = RobotState.IDLE;
+            this.updateStateText();
+          }
+        } else {
+          // If no more tasks and no inventory zone job, go idle
+          console.log(
+            `Robot ${this.robotId} in CARRYING state with no more tasks and no inventory zone job`
+          );
+          this.robotState = RobotState.IDLE;
+          this.updateStateText();
+        }
+        break;
+
+      case RobotState.RETURNING:
+        // If we're returning home, go idle
+        this.robotState = RobotState.IDLE;
+        this.updateStateText();
+        break;
+
+      case RobotState.WANDERING:
+        // If we've reached our wandering target, go back to idle
+        this.robotState = RobotState.IDLE;
+        this.updateStateText();
+        break;
     }
   }
 }

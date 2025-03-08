@@ -1,8 +1,6 @@
 export const DEPTH = {
-  FPS: 2_000,
   UI: 2_000,
   STARSHIP: 1_000,
-  MESSAGE: 900,
   BLUEPRINT: 100,
   TOOL: 20,
   BULLET: 15,
@@ -11,6 +9,7 @@ export const DEPTH = {
   SHIELD: 8,
   AGENT: 7,
   PLAYER: 6,
-  DUST: 5,
+  RESOURCE_NODE: 5,
+  DUST: 4,
   TERRAIN: 0,
 };

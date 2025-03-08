@@ -21,6 +21,10 @@ export class LandingPad extends Building {
     const alignedX = tileX * TILE_SIZE + (tileWidth * TILE_SIZE) / 2;
     const alignedY = tileY * TILE_SIZE + (tileHeight * TILE_SIZE) / 2;
 
+    console.log(
+      `Creating landing pad at aligned position (${alignedX}, ${alignedY})`
+    );
+
     // Pass true for hasInventory
     super(
       scene,
@@ -39,8 +43,16 @@ export class LandingPad extends Building {
     // Create a starship for this landing pad
     this.starship = new Starship(scene, alignedX, alignedY);
 
+    // Ensure the starship is visible and at the correct position
+    this.starship.setVisible(true);
+    this.starship.setPosition(alignedX, alignedY);
+
     // Start the starship cycle
     this.starship.startCycle();
+
+    console.log(
+      `Created starship at position (${alignedX}, ${alignedY}), state: ${this.starship.getState()}`
+    );
 
     // Register with building manager
     BuildingManager.addBuilding({
@@ -55,6 +67,7 @@ export class LandingPad extends Building {
       tileHeight: tileHeight,
       tiles: this.calculateTiles(tileX, tileY, tileWidth, tileHeight),
       hasInventory: true,
+      inventory: this.inventory,
     });
   }
 
@@ -78,7 +91,14 @@ export class LandingPad extends Building {
   public update(time: number, delta: number): void {
     // Update the starship with time and delta parameters
     if (this.starship) {
-      this.starship.update();
+      this.starship.update(time, delta);
+
+      // Log starship state occasionally for debugging
+      if (time % 10000 < 16) {
+        console.log(
+          `Starship state from LandingPad: ${this.starship.getState()}`
+        );
+      }
     }
 
     // Sync the starship inventory with our inventory

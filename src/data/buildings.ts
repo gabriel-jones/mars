@@ -56,6 +56,7 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     cost: [
       { type: "silicon", amount: 4 },
       { type: "iron", amount: 4 },
+      { type: "magnesium", amount: 2 },
     ],
     placementType: PlacementType.RangeSelect,
     locationType: LocationType.Outside,
@@ -136,7 +137,10 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
   {
     buildingType: "grow-zone",
     name: "Grow Zone",
-    cost: [{ type: "iron", amount: 8 }],
+    cost: [
+      { type: "iron", amount: 8 },
+      { type: "calcium", amount: 4 },
+    ],
     placementType: PlacementType.RangeSelect,
     locationType: LocationType.Both, // Can be placed anywhere
     buildEffort: 1000, // 1 seconds to build

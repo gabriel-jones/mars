@@ -395,7 +395,8 @@ export function createPlayer(scene: Phaser.Scene): Player {
     const landingPadOffset = 100;
     // Position the player slightly to the right of the landing pad
     spawnX = mainScene.spawnPoint.x + landingPadOffset + 100;
-    spawnY = mainScene.spawnPoint.y + landingPadOffset;
+    // Position the player further south (below) the landing pad
+    spawnY = mainScene.spawnPoint.y + landingPadOffset + 200; // Increased by 200 to move player further south
 
     console.log("Creating player at:", {
       x: spawnX,

@@ -1,10 +1,9 @@
 import * as Phaser from "phaser";
 import { Robot, RobotState } from "./Robot";
-import { ResourceManager, ResourceType } from "../../data/resources";
-import { TILE_SIZE, ROBOT_VELOCITY, DUST_COLOR } from "../../constants";
+import { ResourceType } from "../../data/resources";
+import { TILE_SIZE, ROBOT_VELOCITY } from "../../constants";
 import { MINING_RADIUS, MiningStation } from "../buildings/MiningStation";
 import { getResourceRichnessAt } from "../../terrain";
-import { DustEffects } from "../../effects/DustEffects";
 import { DEPTH } from "../../depth";
 
 // Mining Drone class - specialized for mining regolith
@@ -18,7 +17,6 @@ export class MiningDrone extends Robot {
   private miningDuration: number = 1500; // 1.5 seconds to mine
   private miningCompleteTime: number = 0;
   private resourceType: ResourceType = "regolith"; // Default to regolith
-  private miningEfficiency: number = 8; // Increased from 5 to compensate for richness factor
 
   // Mining pattern
   private snakePattern: Phaser.Math.Vector2[] = [];
@@ -112,6 +110,14 @@ export class MiningDrone extends Robot {
     // Update health bar
     this.updateHealthBar();
 
+    // Check if we've reached our target when returning to a processor
+    if (this.robotState === RobotState.RETURNING && this.hasReachedTarget()) {
+      console.log("Reached target while returning, calling onReachTarget");
+      this.stopMoving();
+      this.onReachTarget();
+      return; // Skip the rest of the update after handling target reached
+    }
+
     // If we're idle and don't have a pattern, generate one and start mining
     if (this.robotState === RobotState.IDLE && !this.patternGenerated) {
       console.log("Idle drone, generating mining pattern");
@@ -198,57 +204,6 @@ export class MiningDrone extends Robot {
         this.moveToNextPatternPoint();
       }
     }
-  }
-
-  // Return to the mining station
-  private returnToStation(): void {
-    // Set state to RETURNING
-    this.robotState = RobotState.RETURNING;
-    this.updateStateText();
-
-    // Start dust effects when moving
-    if (this.dustEffects) {
-      this.dustEffects.start();
-      this.dustEffects.startMovementDust();
-    }
-
-    console.log(
-      `Returning to station at (${this.miningStation.x}, ${this.miningStation.y})`
-    );
-
-    // Calculate distance to mining station
-    const distance = Phaser.Math.Distance.Between(
-      this.container.x,
-      this.container.y,
-      this.miningStation.x,
-      this.miningStation.y
-    );
-
-    // Calculate duration based on distance and player velocity
-    // This ensures drones move at a speed similar to the player
-    const duration = (distance / ROBOT_VELOCITY) * 1000; // Convert to milliseconds
-
-    // Use tweens for consistent movement
-    this.scene.tweens.add({
-      targets: this.container,
-      x: this.miningStation.x,
-      y: this.miningStation.y,
-      duration: duration,
-      ease: "Linear",
-      onComplete: () => {
-        this.stopMoving();
-        if (this.dustEffects) {
-          this.dustEffects.stopMovementDust();
-        }
-        this.robotState = RobotState.IDLE;
-        this.updateStateText();
-        console.log("Returned to station, going to next mining point");
-
-        // Reset the pattern so we generate a new one
-        this.patternGenerated = false;
-        this.snakePattern = [];
-      },
-    });
   }
 
   // Generate a snake pattern within the mining area

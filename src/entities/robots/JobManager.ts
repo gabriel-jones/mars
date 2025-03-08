@@ -3,6 +3,7 @@ import { ResourceType } from "../../data/resources";
 import { Blueprint } from "../buildings/Blueprint";
 import { GrowZone } from "../buildings/GrowZone";
 import { InventoryZone } from "../buildings/InventoryZone";
+import { TILE_SIZE } from "../../constants";
 
 // Define job types
 export enum JobType {
@@ -465,6 +466,22 @@ export class JobManager {
       return dummyJob;
     }
 
+    // Check if the source node has a valid resource
+    if (!sourceNode.getResource()) {
+      console.log(
+        "Source node has no valid resource, cannot create delivery job"
+      );
+      // Create a dummy job that's already completed
+      const dummyJobId = `dummy_deliver_to_inventory_${this.nextJobId++}`;
+      const dummyJob: Job = {
+        id: dummyJobId,
+        type: JobType.DELIVER_TO_INVENTORY,
+        completed: true, // Already completed so it won't be assigned
+        workDuration: 0,
+      };
+      return dummyJob;
+    }
+
     const jobId = `deliver_to_inventory_${this.nextJobId++}`;
     const job: Job = {
       id: jobId,
@@ -496,5 +513,195 @@ export class JobManager {
         !job.completed &&
         !job.assignedRobotId
     );
+  }
+
+  /**
+   * Check if a resource node is inside an inventory zone
+   * @param resourceNode The resource node to check
+   * @param inventoryZones Array of inventory zones to check against
+   * @returns True if the node is inside an inventory zone, false otherwise
+   */
+  public isNodeInInventoryZone(
+    resourceNode: ResourceNode,
+    inventoryZones: InventoryZone[]
+  ): boolean {
+    // Calculate resource position in grid coordinates
+    const resourceGridX = Math.floor(resourceNode.x / TILE_SIZE);
+    const resourceGridY = Math.floor(resourceNode.y / TILE_SIZE);
+
+    // Check if the resource is within any inventory zone
+    return inventoryZones.some((zone) => {
+      // Calculate zone boundaries in grid coordinates
+      const zoneGridX = Math.floor(zone.x / TILE_SIZE);
+      const zoneGridY = Math.floor(zone.y / TILE_SIZE);
+      const halfWidth = Math.floor(zone.tileWidth / 2);
+      const halfHeight = Math.floor(zone.tileHeight / 2);
+
+      // Check if resource is within zone boundaries
+      return (
+        resourceGridX >= zoneGridX - halfWidth &&
+        resourceGridX <= zoneGridX + halfWidth &&
+        resourceGridY >= zoneGridY - halfHeight &&
+        resourceGridY <= zoneGridY + halfHeight
+      );
+    });
+  }
+
+  /**
+   * Scan for resources not in inventory zones and create delivery jobs for them
+   * @param resourceNodes All resource nodes in the game
+   * @param inventoryZones All inventory zones in the game
+   * @param maxJobs Maximum number of jobs to create at once (default: 2)
+   * @returns Number of jobs created
+   */
+  public createInventoryDeliveryJobsForLooseResources(
+    resourceNodes: ResourceNode[],
+    inventoryZones: InventoryZone[],
+    maxJobs: number = 2
+  ): number {
+    // Check if there are any pending blueprint deliveries first
+    // If so, don't create inventory delivery jobs to avoid competition
+    const pendingBlueprintDeliveries = this.findResourceDeliveryJobs();
+    if (pendingBlueprintDeliveries.length > 0) {
+      console.log(
+        "Skipping inventory delivery jobs due to pending blueprint deliveries"
+      );
+      return 0;
+    }
+
+    // Skip if there are no inventory zones with space
+    const availableInventoryZones = inventoryZones.filter((zone) =>
+      zone.hasSpace()
+    );
+    if (availableInventoryZones.length === 0) {
+      return 0;
+    }
+
+    let jobsCreated = 0;
+
+    // Find resources not in inventory zones
+    for (const resourceNode of resourceNodes) {
+      // Stop if we've reached the maximum number of jobs
+      if (jobsCreated >= maxJobs) {
+        break;
+      }
+
+      // Skip if the node is already part of a job
+      if (this.isNodeInJob(resourceNode)) {
+        continue;
+      }
+
+      // Skip if the node has no resource or amount
+      if (!resourceNode.getResource() || resourceNode.getAmount() <= 0) {
+        continue;
+      }
+
+      // Check if the resource is inside an inventory zone
+      const isInInventoryZone = this.isNodeInInventoryZone(
+        resourceNode,
+        inventoryZones
+      );
+
+      // If not in an inventory zone, create a job to deliver it
+      if (!isInInventoryZone) {
+        // Find the best inventory zone for this resource type
+        const resourceType = resourceNode.getResource().type;
+        const bestZone = InventoryZone.findBestZoneForResource(
+          resourceType,
+          availableInventoryZones
+        );
+
+        if (bestZone) {
+          this.createDeliverToInventoryJob(resourceNode, bestZone);
+          jobsCreated++;
+        }
+      }
+    }
+
+    return jobsCreated;
+  }
+
+  /**
+   * Create jobs for merging resource stacks within inventory zones
+   * This helps keep inventory zones organized by merging stacks of the same resource type
+   * @param inventoryZones Array of inventory zones to check
+   * @param maxJobs Maximum number of jobs to create at once (default: 1)
+   * @returns Number of jobs created
+   */
+  public createInventoryMergeJobs(
+    inventoryZones: InventoryZone[],
+    maxJobs: number = 1
+  ): number {
+    // Check if there are any pending blueprint deliveries first
+    // If so, don't create merge jobs to avoid competition
+    const pendingBlueprintDeliveries = this.findResourceDeliveryJobs();
+    if (pendingBlueprintDeliveries.length > 0) {
+      console.log("Skipping merge jobs due to pending blueprint deliveries");
+      return 0;
+    }
+
+    let jobsCreated = 0;
+
+    // Process each inventory zone
+    for (const zone of inventoryZones) {
+      // Stop if we've reached the maximum number of jobs
+      if (jobsCreated >= maxJobs) {
+        break;
+      }
+
+      // Get all resources in this zone
+      const resources = zone.getResourceNodes();
+
+      // Skip if there are less than 2 resources (nothing to merge)
+      if (resources.length < 2) {
+        continue;
+      }
+
+      // Group resources by type
+      const resourcesByType = new Map<ResourceType, ResourceNode[]>();
+
+      for (const resource of resources) {
+        const type = resource.getResource().type;
+        if (!resourcesByType.has(type)) {
+          resourcesByType.set(type, []);
+        }
+        resourcesByType.get(type)!.push(resource);
+      }
+
+      // For each resource type with multiple stacks, create merge jobs
+      for (const [type, nodes] of resourcesByType.entries()) {
+        // Stop if we've reached the maximum number of jobs
+        if (jobsCreated >= maxJobs) {
+          break;
+        }
+
+        // Skip if there's only one stack of this type
+        if (nodes.length < 2) {
+          continue;
+        }
+
+        // Sort nodes by amount (descending) to merge smaller stacks into larger ones
+        nodes.sort((a, b) => b.getAmount() - a.getAmount());
+
+        // Create merge jobs for all but the largest stack
+        for (let i = 1; i < nodes.length; i++) {
+          // Stop if we've reached the maximum number of jobs
+          if (jobsCreated >= maxJobs) {
+            break;
+          }
+
+          // Skip if the node is already part of a job
+          if (this.isNodeInJob(nodes[i])) {
+            continue;
+          }
+
+          // Create a job to merge this stack into the largest stack
+          this.createMergeStacksJob(nodes[i], nodes[0]);
+          jobsCreated++;
+        }
+      }
+    }
+
+    return jobsCreated;
   }
 }

@@ -36,6 +36,7 @@ import { BlueprintManager } from "../mechanics/BlueprintManager";
 import { EnemyManager } from "../mechanics/EnemyManager";
 import { RobotManager } from "../mechanics/RobotManager";
 import { DEPTH } from "../depth";
+import { RaidManager } from "../mechanics/RaidManager";
 
 export class MainScene extends Phaser.Scene {
   private actionMenu: ActionMenu;
@@ -66,6 +67,7 @@ export class MainScene extends Phaser.Scene {
   public jobManager: GameJobManager;
   public blueprintManager: BlueprintManager;
   public enemyManager: EnemyManager;
+  public raidManager: RaidManager;
   public robotManager: RobotManager;
 
   constructor() {
@@ -127,7 +129,7 @@ export class MainScene extends Phaser.Scene {
     // Starship
     this.load.image("starship", "assets/starship.png");
     this.load.image("landingpad", "assets/landing-pad.png");
-    this.load.svg("engine-flame", "assets/engine-flame.svg");
+    this.load.image("flame", "assets/flame.png");
 
     // Robots
     this.load.image("optimus", "assets/optimus.png");
@@ -213,6 +215,9 @@ export class MainScene extends Phaser.Scene {
       new Phaser.Math.Vector2(0, 0),
       this.healthBarRenderer
     );
+
+    // Initialize RaidManager after EnemyManager
+    this.raidManager = new RaidManager(this, this.enemyManager);
 
     // Set default cursor
     this.input.setDefaultCursor("default");
@@ -301,6 +306,19 @@ export class MainScene extends Phaser.Scene {
 
     // Store a reference to the starship
     this.starship = initialLandingPad.getStarship().setDepth(DEPTH.STARSHIP);
+
+    // Ensure the starship is visible and at the correct position
+    this.starship.setVisible(true);
+    this.starship.setPosition(landingPadX, landingPadY);
+
+    // Start the starship cycle
+    this.starship.startCycle();
+
+    console.log("Starship initialized in MainScene at position:", {
+      x: landingPadX,
+      y: landingPadY,
+      state: this.starship.getState(),
+    });
 
     // Center the main camera on the spawn point and set appropriate bounds
     this.cameras.main.setBounds(
@@ -486,6 +504,20 @@ export class MainScene extends Phaser.Scene {
       this.actionMenu.updateStarshipsList();
     }
 
+    // Explicitly update the starship
+    if (this.starship) {
+      this.starship.update(time, delta);
+
+      // Log starship state occasionally for debugging
+      if (time % 5000 < delta) {
+        console.log(
+          `Starship state: ${this.starship.getState()}, visible: ${
+            this.starship.visible
+          }, position: (${this.starship.x}, ${this.starship.y})`
+        );
+      }
+    }
+
     // Update resource display
     this.resourceDisplay.update();
 
@@ -538,6 +570,11 @@ export class MainScene extends Phaser.Scene {
       this.enemyManager.updateEnemies(time, delta);
     }
 
+    // Update raid manager
+    if (this.raidManager) {
+      this.raidManager.update(time, delta);
+    }
+
     // Update registry values
     this.registry.set("currentTilePos", gameState.currentTilePos);
 
@@ -580,6 +617,9 @@ export class MainScene extends Phaser.Scene {
   private handleItemPlaced(itemName: string, x: number, y: number) {
     // Delegate to blueprint manager
     this.blueprintManager.handleItemPlaced(itemName, x, y);
+
+    // Update raid difficulty when a new building is placed
+    this.updateRaidDifficulty();
   }
 
   private addResourceNodesNearSpawn(): void {
@@ -993,6 +1033,9 @@ export class MainScene extends Phaser.Scene {
 
     // Show destruction effect
     this.showDestructionEffect(building.x, building.y);
+
+    // Adjust raid difficulty based on number of buildings
+    this.updateRaidDifficulty();
   }
 
   // Update references in managers when collections change
@@ -1027,5 +1070,19 @@ export class MainScene extends Phaser.Scene {
     explosion.once("animationcomplete", () => {
       explosion.destroy();
     });
+  }
+
+  /**
+   * Update raid difficulty based on the number of buildings
+   */
+  private updateRaidDifficulty(): void {
+    if (this.raidManager && this.buildings) {
+      // Count defensive buildings
+      // Since we don't have specific turret types in BuildingType,
+      // we'll use the total number of buildings as a proxy for defenses
+      const defensiveBuildings = this.buildings.length;
+
+      this.raidManager.adjustRaidDifficulty(defensiveBuildings);
+    }
   }
 }

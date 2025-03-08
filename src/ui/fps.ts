@@ -17,7 +17,7 @@ export function createFPS(scene: Phaser.Scene): Phaser.GameObjects.Text {
   fpsText.setScrollFactor(0);
 
   // Ensure it's on top of other UI elements
-  fpsText.setDepth(DEPTH.FPS);
+  fpsText.setDepth(DEPTH.UI);
 
   return fpsText;
 }

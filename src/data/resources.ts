@@ -1,5 +1,10 @@
 // Define resource IDs as a string literal union type
-export type ResourceCategory = "food" | "metals" | "elements" | "life-support";
+export type ResourceCategory =
+  | "food"
+  | "metals"
+  | "elements"
+  | "life-support"
+  | "robots";
 export type ResourceType =
   // Food
   | "carrots"
@@ -21,7 +26,9 @@ export type ResourceType =
   // Life Support
   | "energy"
   | "oxygen"
-  | "water";
+  | "water"
+  // Robots
+  | "robot";
 
 export interface Resource {
   type: ResourceType;

@@ -1,14 +1,20 @@
 import Phaser from "phaser";
-import { ResourceType, RESOURCE_DEFINITIONS } from "../data/resources";
+import {
+  ResourceType,
+  RESOURCE_DEFINITIONS,
+  ResourceManager,
+} from "../data/resources";
 import { DEFAULT_FONT } from "../constants";
 import { CloseButton } from "./closeButton";
 import { DEPTH } from "../depth";
+import { gameState } from "../state";
 
 // Define the transfer item interface
 export interface TransferItem {
   resourceType: ResourceType;
   amount: number;
   cost: number;
+  isRobot?: boolean;
 }
 
 // Define the Earth menu class
@@ -21,22 +27,27 @@ export class EarthMenu {
   private contentContainer: Phaser.GameObjects.Container;
   private transferQueue: TransferItem[] = [];
   private queueContainer: Phaser.GameObjects.Container;
-  private earthCredits: number = 1000; // Starting credits
-  private creditsText: Phaser.GameObjects.Text;
+  private escKey: Phaser.Input.Keyboard.Key;
 
   // Available items to purchase
   private availableItems: {
+    name: string;
     resourceType: ResourceType;
     cost: number;
-    maxAmount: number;
+    emoji: string;
+    isRobot?: boolean;
   }[] = [
-    { resourceType: "iron", cost: 10, maxAmount: 100 },
-    { resourceType: "silicon", cost: 15, maxAmount: 100 },
-    { resourceType: "titanium", cost: 30, maxAmount: 50 },
-    { resourceType: "aluminium", cost: 20, maxAmount: 75 },
-    { resourceType: "water", cost: 5, maxAmount: 200 },
-    { resourceType: "oxygen", cost: 25, maxAmount: 100 },
-    { resourceType: "energy", cost: 15, maxAmount: 150 },
+    {
+      name: "Optimus Robot",
+      resourceType: "iron",
+      cost: 100_000,
+      emoji: "🤖",
+      isRobot: true,
+    },
+    { name: "Iron", resourceType: "iron", cost: 2_000, emoji: "🔘" },
+    { name: "Aluminium", resourceType: "aluminium", cost: 1_000, emoji: "🔩" },
+    { name: "Silicon", resourceType: "silicon", cost: 1_000, emoji: "🧱" },
+    { name: "Potato", resourceType: "potatoes", cost: 1_000, emoji: "🥔" },
   ];
 
   constructor(scene: Phaser.Scene) {
@@ -45,10 +56,20 @@ export class EarthMenu {
     // Create the container and add it to the scene
     this.container = this.scene.add.container(0, 0);
     this.container.setVisible(false);
-    this.container.setDepth(DEPTH.UI);
-    this.container.setScrollFactor(0);
+    this.container.setDepth(DEPTH.UI); // Match the Build menu's depth
+    this.container.setScrollFactor(0); // Fix to camera
 
-    console.log("Earth menu container created");
+    // Set up escape key
+    if (this.scene.input && this.scene.input.keyboard) {
+      this.escKey = this.scene.input.keyboard.addKey(
+        Phaser.Input.Keyboard.KeyCodes.ESC
+      );
+    }
+
+    console.log(
+      "Earth menu container created with depth:",
+      this.container.depth
+    );
 
     // Create the panel
     this.createPanel();
@@ -58,9 +79,12 @@ export class EarthMenu {
     try {
       console.log("Creating Earth menu panel");
       const width = 600;
-      const height = 500;
+      const height = 400; // Match the Build menu's height exactly
+
+      // Position the container exactly like the Build menu
       const x = this.scene.cameras.main.width / 2;
       const y = this.scene.cameras.main.height - 300;
+      this.container.setPosition(x, y);
 
       // Create background
       this.background = this.scene.add.rectangle(
@@ -68,8 +92,8 @@ export class EarthMenu {
         0,
         width,
         height,
-        0xff0000,
-        0.9
+        0x333333, // Darker background color
+        0.9 // Match Build menu opacity
       );
       this.background.setStrokeStyle(2, 0x888888);
       this.container.add(this.background);
@@ -103,29 +127,19 @@ export class EarthMenu {
       this.contentContainer = this.scene.add.container(0, 0);
       this.container.add(this.contentContainer);
 
-      // Create credits display
-      this.creditsText = this.scene.add.text(
-        -width / 2 + 20,
-        -height / 2 + 60,
-        `Credits: ${this.earthCredits}`,
-        {
-          fontSize: "18px",
-          color: "#ffffff",
-          fontFamily: DEFAULT_FONT,
-        }
-      );
-      this.container.add(this.creditsText);
-
       // Create available items
       this.createAvailableItems();
 
-      // Create queue container
-      this.queueContainer = this.scene.add.container(0, 0);
+      // Create queue container - position it higher up
+      this.queueContainer = this.scene.add.container(0, -30); // Moved up from -20 to fit in the smaller container
       this.container.add(this.queueContainer);
       this.updateQueueDisplay();
 
-      // Position the container
-      this.container.setPosition(x, y);
+      // Set the container's depth to ensure it's above other UI elements
+      this.container.setDepth(DEPTH.UI + 10);
+
+      // Make sure the container is initially invisible
+      this.container.setVisible(false);
 
       console.log("Earth menu panel created successfully");
     } catch (error) {
@@ -136,97 +150,134 @@ export class EarthMenu {
   private createAvailableItems(): void {
     try {
       console.log("Creating available items for Earth menu");
-      const startY = -180;
-      const itemHeight = 50;
       const width = 560;
+      const startY = -150; // Moved up to fit in the smaller container
 
-      // Create header
-      const headerBg = this.scene.add.rectangle(
-        0,
-        startY - 30,
-        width,
-        30,
-        0x555555
-      );
-      this.contentContainer.add(headerBg);
+      // Grid layout settings
+      const itemsPerRow = 5;
+      const itemWidth = 100;
+      const itemHeight = 120; // Keep the same item height
+      const itemPadding = 8; // Reduced padding to fit more items vertically
+      const gridWidth =
+        itemWidth * itemsPerRow + itemPadding * (itemsPerRow - 1);
 
-      const headerText = this.scene.add.text(
-        -width / 2 + 20,
-        startY - 30 - 8,
-        "Available Resources",
-        {
-          fontSize: "16px",
-          color: "#ffffff",
-          fontFamily: DEFAULT_FONT,
-        }
-      );
-      this.contentContainer.add(headerText);
-
-      // Create items
+      // Create items in a grid
       this.availableItems.forEach((item, index) => {
-        const y = startY + index * itemHeight;
+        const row = Math.floor(index / itemsPerRow);
+        const col = index % itemsPerRow;
+
+        const x =
+          -width / 2 + col * (itemWidth + itemPadding) + itemWidth / 2 + 20;
+        const y = startY + row * (itemHeight + itemPadding) + itemHeight / 2;
+
+        // Item container
+        const itemContainer = this.scene.add.container(x, y);
 
         // Item background
         const itemBg = this.scene.add.rectangle(
           0,
-          y,
-          width,
-          itemHeight - 5,
+          0,
+          itemWidth,
+          itemHeight,
           0x444444
         );
         itemBg.setStrokeStyle(1, 0x666666);
-        this.contentContainer.add(itemBg);
+        itemContainer.add(itemBg);
 
-        // Get resource definition
-        const resourceDef = RESOURCE_DEFINITIONS.find(
-          (def) => def.type === item.resourceType
-        );
-
-        // Resource name with emoji
-        const resourceName = resourceDef
-          ? `${resourceDef.emoji} ${resourceDef.name}`
-          : item.resourceType;
-
-        const nameText = this.scene.add.text(
-          -width / 2 + 20,
-          y - 10,
-          resourceName,
-          {
-            fontSize: "16px",
-            color: "#ffffff",
-            fontFamily: DEFAULT_FONT,
-          }
-        );
-        this.contentContainer.add(nameText);
-
-        // Cost
-        const costText = this.scene.add.text(
-          -width / 2 + 200,
-          y - 10,
-          `Cost: ${item.cost} credits/unit`,
-          {
-            fontSize: "14px",
-            color: "#ffffff",
-            fontFamily: DEFAULT_FONT,
-          }
-        );
-        this.contentContainer.add(costText);
-
-        // Create buttons for different quantities
-        const quantities = [1, 5, 10, 25];
-        quantities.forEach((qty, qtyIndex) => {
-          const buttonX = width / 2 - 200 + qtyIndex * 60;
-          const button = this.createButton(buttonX, y, `Buy ${qty}`, () =>
-            this.addToQueue(item.resourceType, qty, item.cost)
-          );
-          this.contentContainer.add(button);
+        // Resource icon (emoji)
+        const iconText = this.scene.add.text(0, -45, item.emoji, {
+          fontSize: "28px", // Slightly smaller
+          fontFamily: DEFAULT_FONT,
         });
+        iconText.setOrigin(0.5);
+        itemContainer.add(iconText);
+
+        // Resource name
+        const nameText = this.scene.add.text(0, -18, item.name, {
+          fontSize: "12px", // Slightly smaller
+          color: "#ffffff",
+          fontFamily: DEFAULT_FONT,
+          fontStyle: "bold",
+        });
+        nameText.setOrigin(0.5);
+        itemContainer.add(nameText);
+
+        // Cost with green dollar sign
+        const costContainer = this.scene.add.container(0, 0);
+
+        // Dollar sign in green
+        const dollarSign = this.scene.add.text(-2, 0, "$", {
+          fontSize: "12px", // Slightly smaller
+          fontFamily: DEFAULT_FONT,
+          color: "#00AA00", // Green color
+          fontStyle: "bold",
+        });
+        dollarSign.setOrigin(1, 0.5);
+
+        // Cost amount
+        const costText = this.scene.add.text(
+          0,
+          0,
+          this.formatMoney(item.cost),
+          {
+            fontSize: "12px", // Slightly smaller
+            color: "#ffffff",
+            fontFamily: DEFAULT_FONT,
+          }
+        );
+        costText.setOrigin(0, 0.5);
+
+        costContainer.add([dollarSign, costText]);
+
+        // Center the cost container
+        costContainer.setPosition(0, 0);
+        itemContainer.add(costContainer);
+
+        // Create buy button(s)
+        if (item.isRobot) {
+          // Only Buy (1) button for robots
+          const button = this.createButton(0, 25, "Buy (1)", () => {
+            console.log("Buying robot:", item.name, "isRobot =", item.isRobot);
+            this.addToQueue(item.resourceType, 1, item.cost, item.isRobot);
+          });
+          itemContainer.add(button);
+        } else {
+          // Stack Buy (1) and Buy (64) buttons vertically
+          const button1 = this.createButton(0, 20, "Buy (1)", () => {
+            console.log(
+              "Buying resource (1):",
+              item.name,
+              "isRobot =",
+              item.isRobot
+            );
+            this.addToQueue(item.resourceType, 1, item.cost, false);
+          });
+
+          const button64 = this.createButton(0, 45, "Buy (64)", () => {
+            console.log(
+              "Buying resource (64):",
+              item.name,
+              "isRobot =",
+              item.isRobot
+            );
+            this.addToQueue(item.resourceType, 64, item.cost, false);
+          });
+
+          itemContainer.add([button1, button64]);
+        }
+
+        this.contentContainer.add(itemContainer);
       });
 
-      // Create queue header
+      // Calculate the total height of the grid
+      const totalRows = Math.ceil(this.availableItems.length / itemsPerRow);
+      const gridHeight = totalRows * (itemHeight + itemPadding);
+
+      // Create queue header (positioned right after the grid)
+      const queueHeaderY = startY + gridHeight + 32; // Adjusted to fit better
       const queueHeaderBg = this.scene.add.rectangle(
         0,
-        startY + this.availableItems.length * itemHeight + 20,
+        queueHeaderY,
         width,
         30,
         0x555555
@@ -234,8 +285,8 @@ export class EarthMenu {
       this.contentContainer.add(queueHeaderBg);
 
       const queueHeaderText = this.scene.add.text(
-        -width / 2 + 20,
-        startY + this.availableItems.length * itemHeight + 20 - 8,
+        0,
+        queueHeaderY,
         "Transfer Queue",
         {
           fontSize: "16px",
@@ -243,6 +294,7 @@ export class EarthMenu {
           fontFamily: DEFAULT_FONT,
         }
       );
+      queueHeaderText.setOrigin(0.5);
       this.contentContainer.add(queueHeaderText);
 
       console.log("Available items created successfully");
@@ -262,13 +314,13 @@ export class EarthMenu {
       const button = this.scene.add.container(x, y);
 
       // Button background
-      const buttonBg = this.scene.add.rectangle(0, 0, 100, 30, 0x444444);
+      const buttonBg = this.scene.add.rectangle(0, 0, 80, 24, 0x444444);
       buttonBg.setStrokeStyle(1, 0x666666);
       button.add(buttonBg);
 
       // Button text
       const buttonText = this.scene.add.text(0, 0, text, {
-        fontSize: "12px",
+        fontSize: "14px",
         color: "#ffffff",
         fontFamily: DEFAULT_FONT,
       });
@@ -276,14 +328,24 @@ export class EarthMenu {
       button.add(buttonText);
 
       // Adjust button width based on text width
-      const padding = 20;
+      const padding = 12;
       const buttonWidth = buttonText.width + padding;
       buttonBg.width = buttonWidth;
 
-      // Make interactive
+      // Make the button background interactive with proper cursor
       buttonBg.setInteractive({ useHandCursor: true });
-      buttonBg.on("pointerover", () => buttonBg.setFillStyle(0x666666));
-      buttonBg.on("pointerout", () => buttonBg.setFillStyle(0x444444));
+
+      // Set up hover and click events
+      buttonBg.on("pointerover", () => {
+        buttonBg.setFillStyle(0x666666);
+        this.scene.input.setDefaultCursor("pointer");
+      });
+
+      buttonBg.on("pointerout", () => {
+        buttonBg.setFillStyle(0x444444);
+        this.scene.input.setDefaultCursor("default");
+      });
+
       buttonBg.on("pointerdown", onClick);
 
       return button;
@@ -297,138 +359,290 @@ export class EarthMenu {
   private addToQueue(
     resourceType: ResourceType,
     amount: number,
-    costPerUnit: number
+    costPerUnit: number,
+    isRobot: boolean = false
   ): void {
+    console.log(
+      `Adding to queue: ${amount} ${resourceType}${
+        isRobot ? " (robot)" : ""
+      } at ${costPerUnit} each`
+    );
+
     const totalCost = amount * costPerUnit;
 
-    // Check if we have enough credits
-    if (this.earthCredits < totalCost) {
+    // Check if we have enough money
+    if (!ResourceManager.hasMoney(totalCost)) {
       console.log("Not enough credits!");
+      this.showNotEnoughMoneyMessage();
       return;
     }
 
-    // Deduct credits
-    this.earthCredits -= totalCost;
-    this.creditsText.setText(`Credits: ${this.earthCredits}`);
+    // Deduct money
+    ResourceManager.spendMoney(totalCost);
 
     // Add to queue
     this.transferQueue.push({
       resourceType,
       amount,
-      cost: totalCost,
+      cost: costPerUnit,
+      isRobot: isRobot || false,
     });
+
+    console.log(
+      `Queue updated, now contains ${this.transferQueue.length} items`
+    );
 
     // Update queue display
     this.updateQueueDisplay();
+
+    // Notify any landed starships that there's a new item in the queue
+    // This is important to ensure the starship takes off when items are added
+    this.notifyStarshipsOfQueueUpdate();
+
+    // Double-check after a short delay to ensure the notification went through
+    setTimeout(() => {
+      if (this.transferQueue.length > 0) {
+        console.log("Double-checking starship notification after delay");
+        this.notifyStarshipsOfQueueUpdate();
+      }
+    }, 1000);
+  }
+
+  // Notify any landed starships that there's a new item in the queue
+  private notifyStarshipsOfQueueUpdate(): void {
+    // Get the main scene
+    const mainScene = this.scene as any;
+
+    // Check if the scene has a starship
+    if (mainScene.starship) {
+      console.log("Found starship in main scene, checking state");
+
+      // Check if the starship is landed on Mars
+      const starshipState = mainScene.starship.getState();
+      console.log(`Current starship state: ${starshipState}`);
+
+      if (starshipState === "mars_landed") {
+        console.log("Starship is landed on Mars, notifying of queue update");
+
+        // Directly trigger takeoff if there are items in the queue
+        if (this.transferQueue.length > 0) {
+          console.log(
+            `Queue has ${this.transferQueue.length} items, triggering immediate takeoff`
+          );
+
+          // Try to force immediate takeoff
+          if (typeof mainScene.starship.forceImmediateTakeoff === "function") {
+            mainScene.starship.forceImmediateTakeoff();
+          } else {
+            console.log(
+              "forceImmediateTakeoff not available, falling back to checkForEarthTransferQueue"
+            );
+            // Fall back to the check method
+            if (
+              typeof mainScene.starship.checkForEarthTransferQueue ===
+              "function"
+            ) {
+              mainScene.starship.checkForEarthTransferQueue();
+            } else {
+              console.error("No takeoff methods found on starship");
+            }
+          }
+        } else {
+          console.log("Queue is empty, no need to notify starship");
+        }
+      } else {
+        console.log(
+          `Starship is not landed (current state: ${starshipState}), not notifying`
+        );
+      }
+    } else {
+      console.log("No starship found in main scene");
+    }
+  }
+
+  private showNotEnoughMoneyMessage(): void {
+    // Create the message text
+    const messageText = this.scene.add.text(
+      this.container.x,
+      this.container.y - 100,
+      "Not enough credits!",
+      {
+        fontSize: "24px",
+        fontFamily: DEFAULT_FONT,
+        color: "#FF0000",
+        fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 4,
+      }
+    );
+    messageText.setOrigin(0.5);
+    messageText.setScrollFactor(0);
+    messageText.setDepth(DEPTH.UI + 1);
+
+    // Animate it
+    this.scene.tweens.add({
+      targets: messageText,
+      y: messageText.y - 30,
+      alpha: 0,
+      duration: 2000,
+      ease: "Power2",
+      onComplete: () => {
+        messageText.destroy();
+      },
+    });
   }
 
   private updateQueueDisplay(): void {
     try {
       console.log("Updating queue display");
+      console.log(
+        "Transfer queue contents:",
+        JSON.stringify(this.transferQueue)
+      );
       // Clear existing queue display
       this.queueContainer.removeAll(true);
 
       const width = 560;
       const itemHeight = 40;
-      const startY = 50;
+      const startY = 10; // Moved up from 30 to fit in the smaller container
 
-      // If queue is empty, show a message
-      if (this.transferQueue.length === 0) {
-        const emptyText = this.scene.add.text(
-          0,
-          startY,
-          "Queue is empty. Add resources to transfer.",
-          {
-            fontSize: "16px",
-            color: "#cccccc",
-            fontFamily: DEFAULT_FONT,
-            align: "center",
+      // Group items by type
+      const groupedItems = new Map<
+        string,
+        {
+          emoji: string;
+          amount: number;
+          cost: number;
+          resourceType: ResourceType;
+          isRobot?: boolean;
+          name: string;
+        }
+      >();
+
+      this.transferQueue.forEach((item) => {
+        // Get item definition from our available items
+        const itemDef = this.availableItems.find((def) => {
+          // For non-robot items, both def.isRobot and item.isRobot should be falsy
+          if (!item.isRobot) {
+            return def.resourceType === item.resourceType && !def.isRobot;
           }
-        );
-        emptyText.setOrigin(0.5);
-        this.queueContainer.add(emptyText);
-        return;
-      }
+          // For robot items, both should be truthy
+          return (
+            def.resourceType === item.resourceType &&
+            def.isRobot === item.isRobot
+          );
+        });
 
-      // Create items for each queued resource
-      this.transferQueue.forEach((item, index) => {
-        const y = startY + index * itemHeight;
+        console.log("Item:", JSON.stringify(item));
+        console.log(
+          "Found itemDef:",
+          itemDef ? JSON.stringify(itemDef) : "null"
+        );
+
+        if (!itemDef) return;
+
+        // Ensure isRobot is a boolean for consistent key generation
+        const isRobotBool = item.isRobot === true;
+
+        const key = `${item.resourceType}-${
+          isRobotBool ? "robot" : "resource"
+        }`;
+
+        if (groupedItems.has(key)) {
+          const existing = groupedItems.get(key)!;
+          existing.amount += item.amount;
+        } else {
+          groupedItems.set(key, {
+            emoji: itemDef.emoji,
+            amount: item.amount,
+            cost: item.cost,
+            resourceType: item.resourceType,
+            isRobot: item.isRobot,
+            name: itemDef.name,
+          });
+        }
+      });
+
+      console.log("Grouped items:", Array.from(groupedItems.entries()));
+
+      // Create a container for the items
+      const itemsContainer = this.scene.add.container(0, startY);
+      this.queueContainer.add(itemsContainer);
+
+      // Display grouped items in a grid
+      const startItemY = 44;
+      const itemsPerRow = 4;
+      const itemSize = 120;
+      const itemPadding = 10;
+      const gridWidth =
+        itemsPerRow * itemSize + (itemsPerRow - 1) * itemPadding;
+
+      let index = 0;
+
+      groupedItems.forEach((item) => {
+        const row = Math.floor(index / itemsPerRow);
+        const col = index % itemsPerRow;
+
+        // Center the grid horizontally
+        const x =
+          -gridWidth / 2 + col * (itemSize + itemPadding) + itemSize / 2;
+        const y = startItemY + (row * (itemSize + itemPadding) + itemSize / 2);
+
+        // Create item container
+        const itemContainer = this.scene.add.container(x, y);
 
         // Item background
         const itemBg = this.scene.add.rectangle(
           0,
-          y,
-          width,
-          itemHeight - 5,
+          0,
+          itemSize,
+          itemSize,
           0x444444
         );
         itemBg.setStrokeStyle(1, 0x666666);
-        this.queueContainer.add(itemBg);
+        itemContainer.add(itemBg);
 
-        // Get resource definition
-        const resourceDef = RESOURCE_DEFINITIONS.find(
-          (def) => def.type === item.resourceType
-        );
+        // Item emoji
+        const emojiText = this.scene.add.text(0, -30, item.emoji, {
+          fontSize: "32px",
+          fontFamily: "Arial",
+        });
+        emojiText.setOrigin(0.5);
+        itemContainer.add(emojiText);
 
-        // Resource name with emoji
-        const resourceName = resourceDef
-          ? `${resourceDef.emoji} ${resourceDef.name}`
-          : item.resourceType;
+        // Item name
+        const nameText = this.scene.add.text(0, 0, item.name, {
+          fontSize: "14px",
+          color: "#ffffff",
+          fontFamily: "Arial",
+          fontStyle: "bold",
+        });
+        nameText.setOrigin(0.5);
+        itemContainer.add(nameText);
 
-        const nameText = this.scene.add.text(
-          -width / 2 + 20,
-          y - 10,
-          `${resourceName} x${item.amount}`,
+        // Item amount
+        const amountText = this.scene.add.text(
+          0,
+          20,
+          `Quantity: ${item.amount}`,
           {
-            fontSize: "16px",
+            fontSize: "12px",
             color: "#ffffff",
-            fontFamily: DEFAULT_FONT,
+            fontFamily: "Arial",
           }
         );
-        this.queueContainer.add(nameText);
-
-        // Cost
-        const costText = this.scene.add.text(
-          -width / 2 + 300,
-          y - 10,
-          `Cost: ${item.cost * item.amount} credits`,
-          {
-            fontSize: "14px",
-            color: "#ffffff",
-            fontFamily: DEFAULT_FONT,
-          }
-        );
-        this.queueContainer.add(costText);
+        amountText.setOrigin(0.5);
+        itemContainer.add(amountText);
 
         // Remove button
-        const removeButton = this.scene.add.text(width / 2 - 30, y - 10, "X", {
-          fontSize: "16px",
-          color: "#ff0000",
-          fontFamily: DEFAULT_FONT,
+        const removeButton = this.createButton(0, 45, "Remove", () => {
+          this.removeItemsOfType(item.resourceType, item.isRobot);
         });
-        removeButton.setInteractive({ useHandCursor: true });
-        removeButton.on("pointerdown", () => this.removeFromQueue(index));
-        this.queueContainer.add(removeButton);
+        itemContainer.add(removeButton);
+
+        itemsContainer.add(itemContainer);
+        index++;
       });
-
-      // Add a "Process Queue" button if there are items in the queue
-      if (this.transferQueue.length > 0) {
-        const totalCost = this.transferQueue.reduce(
-          (sum, item) => sum + item.cost * item.amount,
-          0
-        );
-
-        const processButton = this.createButton(
-          0,
-          startY + this.transferQueue.length * itemHeight + 30,
-          `Process Queue (${totalCost} credits)`,
-          () => {
-            // This will be handled by the starship when it reaches Earth orbit
-            console.log("Queue ready for processing");
-          }
-        );
-        this.queueContainer.add(processButton);
-      }
 
       console.log("Queue display updated successfully");
     } catch (error) {
@@ -436,45 +650,105 @@ export class EarthMenu {
     }
   }
 
+  private removeItemsOfType(
+    resourceType: ResourceType,
+    isRobot?: boolean
+  ): void {
+    // Find all items of this type
+    const indices = [];
+    for (let i = this.transferQueue.length - 1; i >= 0; i--) {
+      const queueItem = this.transferQueue[i];
+      if (
+        queueItem.resourceType === resourceType &&
+        queueItem.isRobot === isRobot
+      ) {
+        indices.push(i);
+      }
+    }
+
+    // Remove items and refund credits
+    indices.forEach((idx) => this.removeFromQueue(idx));
+
+    // No need to update display or notify here as removeFromQueue already does that
+  }
+
   private removeFromQueue(index: number): void {
+    if (index < 0 || index >= this.transferQueue.length) return;
+
     // Refund credits
     const item = this.transferQueue[index];
-    this.earthCredits += item.cost;
-    this.creditsText.setText(`Credits: ${this.earthCredits}`);
+    ResourceManager.addMoney(item.cost * item.amount);
 
     // Remove from queue
     this.transferQueue.splice(index, 1);
 
-    // Update queue display
+    // Update the display and notify starships
     this.updateQueueDisplay();
+    this.notifyStarshipsOfQueueUpdate();
+  }
+
+  private formatMoney(amount: number): string {
+    return amount.toLocaleString();
   }
 
   public getTransferQueue(): TransferItem[] {
+    console.log(
+      "Earth menu transfer queue requested:",
+      JSON.stringify(this.transferQueue)
+    );
     return this.transferQueue;
   }
 
   public clearTransferQueue(): void {
+    console.log("Clearing Earth menu transfer queue");
     this.transferQueue = [];
     this.updateQueueDisplay();
+
+    // Notify any landed starships that the queue has been cleared
+    this.notifyStarshipsOfQueueUpdate();
   }
 
   public show(): void {
     console.log("EarthMenu show method called");
 
-    // Ensure the container is visible
+    // Simply make the container visible, like the Build menu does
     this.container.setVisible(true);
-    console.log("Earth menu shown");
+
+    // Log the container's state for debugging
+    console.log("Earth menu shown", {
+      visible: this.container.visible,
+      x: this.container.x,
+      y: this.container.y,
+      depth: this.container.depth,
+      alpha: this.container.alpha,
+      active: this.container.active,
+    });
   }
 
   public hide(): void {
+    console.log("Hiding Earth menu");
     this.container.setVisible(false);
+    console.log("Earth menu hidden, visibility:", this.container.visible);
   }
 
   public isVisible(): boolean {
     return this.container.visible;
   }
 
+  public update(): void {
+    // Check for ESC key to close the panel
+    if (this.escKey && Phaser.Input.Keyboard.JustDown(this.escKey)) {
+      if (this.isVisible()) {
+        this.hide();
+      }
+    }
+  }
+
   public destroy(): void {
+    // Clean up the escape key
+    if (this.escKey) {
+      this.escKey.destroy();
+    }
     this.container.destroy();
   }
 }

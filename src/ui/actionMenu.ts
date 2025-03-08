@@ -58,10 +58,12 @@ export class ActionMenu {
     // Create the building placer
     this.buildingPlacer = new BuildingPlacer(scene, map, onItemPlaced);
 
-    // Add keyboard listener for Escape key
+    // Add keyboard listener for Escape key to close all menus
     if (this.scene.input && this.scene.input.keyboard) {
       this.scene.input.keyboard.on("keydown-ESC", () => {
+        console.log("ESC key detected in ActionMenu");
         if (this.activeMenu !== "none") {
+          console.log(`Closing ${this.activeMenu} menu due to ESC key`);
           this.closeAllMenus();
         }
       });
@@ -204,58 +206,85 @@ export class ActionMenu {
 
   // Toggle menu visibility
   private toggleMenu(menuType: MenuType): void {
-    // If the same menu is clicked again, close it
+    // If the same menu is clicked, close it
     if (this.activeMenu === menuType) {
       this.closeAllMenus();
       return;
     }
 
     // Close all menus first
-    this.closeAllMenus();
+    this.hideAllMenus();
 
-    // Then open the selected menu
+    // Set the active menu
     this.activeMenu = menuType;
-    console.log(`Toggling menu: ${menuType}`);
 
+    // Show the appropriate menu
     switch (menuType) {
       case "construction":
+        // Show the build menu
         this.buildMenu.show();
+
+        // Highlight the build button
         this.highlightButton(this.buildButton);
         break;
+
       case "robots":
+        // Show the robots menu
         this.robotsMenu.show();
+
+        // Highlight the robots button
         this.highlightButton(this.robotsButton);
-        this.updateRobotsList();
         break;
+
       case "starships":
+        // Show the starships menu
         this.shipsMenu.show();
+
+        // Highlight the starships button
         this.highlightButton(this.starshipsButton);
-        this.updateStarshipsList();
         break;
+
       case "earth":
-        console.log("Showing Earth menu");
+        // Show the Earth menu
         if (this.earthMenu) {
-          console.log("Earth menu exists, calling show method");
-          this.earthMenu.show();
-          console.log("Earth menu show method called");
-          this.highlightButton(this.earthButton);
-          console.log("Earth button highlighted");
-        } else {
-          console.error("Earth menu is not initialized");
+          console.log("Showing Earth menu");
+          // Use type assertion to access the show method
+          (this.earthMenu as any).show();
         }
+
+        // Highlight the Earth button
+        this.highlightButton(this.earthButton);
+        break;
+
+      case "none":
+      default:
+        // No menu is active
+        this.resetButtonHighlights();
         break;
     }
   }
 
   // Close all menus
   private closeAllMenus(): void {
-    this.buildMenu.hide(false);
+    this.hideAllMenus();
+    this.activeMenu = "none";
+    this.resetButtonHighlights();
+  }
+
+  // Close all menus
+  private hideAllMenus(): void {
+    this.buildMenu.hide();
     this.robotsMenu.hide();
-    this.shipsMenu.hide();
-    this.earthMenu.hide();
+    if (this.shipsMenu) this.shipsMenu.hide();
+
+    // Hide the Earth menu using type assertion
+    if (this.earthMenu) {
+      console.log("Hiding Earth menu from hideAllMenus");
+      (this.earthMenu as any).hide();
+    }
 
     this.resetButtonHighlights();
-    this.activeMenu = "none";
+    console.log("All menus hidden");
   }
 
   // Highlight the active button
@@ -288,23 +317,13 @@ export class ActionMenu {
         // Remove the old text
         button.remove(buttonText, true);
 
-        // Create new text with white color and glow effect
+        // Create new text with white color but without the green glow/shadow
         const newText = this.scene.add
           .text(oldX, oldY, oldText, {
             fontSize: "20px",
             color: "#ffffff",
             fontStyle: "bold",
             fontFamily: DEFAULT_FONT,
-            stroke: "#00ff00",
-            strokeThickness: 1,
-            shadow: {
-              offsetX: 0,
-              offsetY: 0,
-              color: "#00ff00",
-              blur: 6,
-              stroke: true,
-              fill: true,
-            },
           })
           .setOrigin(0.5)
           .setName("buttonText");
@@ -408,9 +427,6 @@ export class ActionMenu {
             state: starship.getState(),
             inventory: starship.getInventory(),
             location: this.getStarshipLocation(starship),
-            robotsToDeliver: starship.getRobotsToDeliver
-              ? starship.getRobotsToDeliver()
-              : 2, // Use getter method
           });
         }
       }
@@ -444,13 +460,44 @@ export class ActionMenu {
     }
   }
 
-  // Update method
+  // Maintain button highlights based on active menu
+  private maintainButtonHighlights(): void {
+    // Only highlight the active button if a menu is open
+    switch (this.activeMenu) {
+      case "construction":
+        this.highlightButton(this.buildButton);
+        break;
+      case "robots":
+        this.highlightButton(this.robotsButton);
+        break;
+      case "starships":
+        this.highlightButton(this.starshipsButton);
+        break;
+      case "earth":
+        this.highlightButton(this.earthButton);
+        break;
+      default:
+        // No menu active, all buttons should be in default state
+        break;
+    }
+  }
+
   update(): void {
-    // Update the building placer
-    this.buildingPlacer.update();
+    // Update the building placer if it exists
+    if (this.buildingPlacer) {
+      this.buildingPlacer.update();
+    }
+
+    // Update the Earth menu if it exists
+    if (this.earthMenu) {
+      // Use type assertion to access the update method
+      (this.earthMenu as any).update();
+    }
+
+    // Maintain button highlights based on active menu
+    this.maintainButtonHighlights();
 
     // If the Earth menu is open, check if any starships are in Earth orbit
-    // to process the transfer queue
     if (this.isEarthMenuOpen) {
       const starships = this.getStarships();
       const earthOrbitStarships = starships.filter(
@@ -474,12 +521,14 @@ export class ActionMenu {
           );
 
           if (landingPad) {
-            // Set the transfer queue for the starship
-            const transferQueue = this.earthMenu.getTransferQueue();
-            landingPad.getStarship().setTransferQueue(transferQueue);
-
-            // Clear the Earth menu's transfer queue
-            this.earthMenu.clearTransferQueue();
+            // Get the transfer queue
+            const transferQueue = (this.earthMenu as any).getTransferQueue();
+            if (transferQueue && transferQueue.length > 0) {
+              // Process the transfer queue
+              landingPad.getStarship().processTransferQueue();
+              // Clear the queue
+              (this.earthMenu as any).clearTransferQueue();
+            }
           }
         }
       }
@@ -491,7 +540,7 @@ export class ActionMenu {
     this.buildMenu.destroy();
     this.robotsMenu.destroy();
     this.shipsMenu.destroy();
-    this.earthMenu.destroy();
+    (this.earthMenu as any).destroy();
 
     this.buildButton.destroy();
     this.robotsButton.destroy();

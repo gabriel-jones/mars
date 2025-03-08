@@ -16,7 +16,6 @@ export interface StarshipInfo {
   state: StarshipState;
   inventory: { [key in ResourceType]?: number };
   location: string;
-  robotsToDeliver: number;
 }
 
 export class ShipsMenu {
@@ -232,11 +231,7 @@ export class ShipsMenu {
           flameRotation = Math.PI / 4;
         }
 
-        const engineFlame = this.scene.add.image(
-          flameX,
-          flameY,
-          "engine-flame"
-        );
+        const engineFlame = this.scene.add.image(flameX, flameY, "flame");
         engineFlame.setDisplaySize(16, 16);
         engineFlame.setOrigin(0.5, 0);
         engineFlame.setRotation(flameRotation);
@@ -284,11 +279,15 @@ export class ShipsMenu {
       this.listContainer.add(stateText);
 
       // Create robots to deliver info
-      if (starship.robotsToDeliver > 0) {
+      if (
+        starship.inventory &&
+        starship.inventory["robot"] &&
+        starship.inventory["robot"] > 0
+      ) {
         const robotsText = this.scene.add.text(
           -panelWidth / 2 + 140,
           entryY + 60,
-          `Robots to deliver: ${starship.robotsToDeliver}`,
+          `Robots to deliver: ${starship.inventory["robot"]}`,
           {
             fontSize: "14px",
             color: "#aaaaaa",

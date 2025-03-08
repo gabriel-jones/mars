@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { ResourceManager, ResourceType } from "../data/resources";
 import { gameState } from "../state";
 import { DEFAULT_FONT } from "../constants";
+import { DEPTH } from "../depth";
 
 // Remove TOP_LEVEL_RESOURCES since we're showing everything in a flat list
 // const TOP_LEVEL_RESOURCES: ResourceType[] = [
@@ -20,7 +21,10 @@ export class ResourceDisplay {
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
-    this.container = this.scene.add.container(10, 10).setScrollFactor(0);
+    this.container = this.scene.add
+      .container(10, 10)
+      .setScrollFactor(0)
+      .setDepth(DEPTH.UI);
     this.createResourceDisplay();
 
     // Listen for inventory changes

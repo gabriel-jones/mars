@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { gameState } from "../state";
 import { DEFAULT_FONT } from "../constants";
 import { ResourceManager } from "../data/resources";
+import { DEPTH } from "../depth";
 
 export class MoneyDisplay {
   private scene: Phaser.Scene;
@@ -12,7 +13,11 @@ export class MoneyDisplay {
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
-    this.container = this.scene.add.container(10, 10).setScrollFactor(0);
+    this.container = this.scene.add
+      .container(10, 10)
+      .setScrollFactor(0)
+      .setDepth(DEPTH.UI);
+    this.container.setName("moneyDisplay");
     this.createMoneyDisplay();
 
     // Listen for money changes
@@ -59,11 +64,56 @@ export class MoneyDisplay {
     return amount.toLocaleString();
   }
 
+  private showMoneySpentAnimation(amount: number): void {
+    // Find the position of the money display
+    const moneyDisplay = this.scene.children
+      .getAll()
+      .find((child) => child.name === "moneyDisplay");
+
+    let startX = this.scene.cameras.main.width / 2;
+    let startY = 30;
+
+    // If we found the money display, use its position
+    if (moneyDisplay) {
+      startX = (moneyDisplay as any).x + 100;
+      startY = (moneyDisplay as any).y + 20;
+    }
+
+    // Create the animation text
+    const animText = this.scene.add.text(
+      startX,
+      startY,
+      `- $${this.formatMoney(amount)}`,
+      {
+        fontSize: "24px",
+        fontFamily: DEFAULT_FONT,
+        color: "#FF0000",
+        fontStyle: "bold",
+      }
+    );
+    animText.setOrigin(0, 0.5);
+    animText.setScrollFactor(0);
+    animText.setDepth(DEPTH.UI + 1);
+
+    // Animate it
+    this.scene.tweens.add({
+      targets: animText,
+      y: startY - 50,
+      alpha: 0,
+      duration: 2000,
+      ease: "Power2",
+      onComplete: () => {
+        animText.destroy();
+      },
+    });
+  }
+
   /**
    * Handle money changed event
    */
   private handleMoneyChanged(newAmount: number) {
     if (this.moneyText && this.moneyText.scene) {
+      this.showMoneySpentAnimation(newAmount - gameState.money);
       this.moneyText.setText(this.formatMoney(newAmount));
 
       // Adjust background width based on text width

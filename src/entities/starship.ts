@@ -3,6 +3,7 @@ import { TILE_SIZE } from "../constants";
 import { ResourceType } from "../data/resources";
 import { TransferItem } from "../ui/earthMenu";
 import { DEPTH } from "../depth";
+import { ResourceNode } from "../entities/resourceNode";
 
 export enum StarshipState {
   MARS_LANDED = "mars_landed",
@@ -31,25 +32,17 @@ export class Starship extends Phaser.GameObjects.Container {
     earthToMars: 7000, // 7 seconds for Earth to Mars transfer (reduced from 15s)
   };
 
-  private robotsToDeliver: number = 2; // Number of robots to deliver each landing
-
-  // Transfer queue for Earth resources
   private transferQueue: TransferItem[] = [];
 
   // Inventory for the starship with index signature
-  public inventory: { [key in ResourceType]?: number } = {
-    iron: 200,
-    silicon: 150,
-    titanium: 50,
-    aluminium: 75,
-    water: 100,
-    regolith: 0,
-  };
+  public inventory: { [key in ResourceType]?: number } = {};
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y);
     this.scene = scene;
     this.landingCoordinates = { x, y };
+
+    console.log(`Starship created at position (${x}, ${y})`);
 
     // Create the starship sprite
     this.starshipSprite = scene.add
@@ -61,7 +54,7 @@ export class Starship extends Phaser.GameObjects.Container {
 
     // Create engine flame sprite
     this.engineFlame = scene.add
-      .sprite(0, 0, "engine-flame")
+      .sprite(0, 0, "flame")
       .setOrigin(0.5, 0) // Set origin to top center
       .setScale(0.8)
       .setVisible(false)
@@ -77,8 +70,7 @@ export class Starship extends Phaser.GameObjects.Container {
     // Add to scene
     scene.add.existing(this);
 
-    // Start the cycle automatically
-    this.startCycle();
+    console.log(`Starship initialized with state: ${this.currentState}`);
   }
 
   preload() {
@@ -86,16 +78,38 @@ export class Starship extends Phaser.GameObjects.Container {
   }
 
   startCycle() {
-    // Schedule first takeoff after a short delay
-    this.stateTimer = this.scene.time.delayedCall(5000, () => {
-      this.takeOffFromMars();
-    });
+    console.log("Starting starship cycle");
+
+    // Clear any existing timer
+    if (this.stateTimer) {
+      this.stateTimer.remove();
+    }
+
+    // Make sure the starship is visible and in the correct position
+    this.setVisible(true);
+    this.setPosition(this.landingCoordinates.x, this.landingCoordinates.y);
+    this.currentState = StarshipState.MARS_LANDED;
+
+    // Only schedule takeoff if there's an active transfer queue
+    this.checkForEarthTransferQueue();
   }
 
   takeOffFromMars() {
-    if (this.currentState !== StarshipState.MARS_LANDED) return;
+    if (this.currentState !== StarshipState.MARS_LANDED) {
+      console.log(`Cannot take off: current state is ${this.currentState}`);
+      return;
+    }
 
+    console.log("Starship taking off from Mars");
     this.currentState = StarshipState.MARS_TAKEOFF;
+
+    // Clear any existing timer
+    if (this.stateTimer) {
+      this.stateTimer.remove();
+    }
+
+    // Reset rotation to ensure we start from a vertical position
+    this.setRotation(0);
 
     // Show engine flame
     this.engineFlame.setVisible(true);
@@ -111,14 +125,47 @@ export class Starship extends Phaser.GameObjects.Container {
       yoyo: true,
     });
 
-    // Create takeoff animation - animate the container instead of individual sprites
+    // Add ship shaking effect
+    this.scene.tweens.add({
+      targets: this.starshipSprite,
+      x: { from: -2, to: 2 },
+      duration: 50,
+      yoyo: true,
+      repeat: 20,
+      ease: "Sine.easeInOut",
+    });
+
+    // Calculate the angle for rotation based on the arc
+    // For takeoff, we want to rotate clockwise (positive angle)
+    // The angle should be around 15-20 degrees (0.26-0.35 radians) for a natural look
+    const rotationAngle = 0.3; // ~17 degrees in radians
+
+    // Animate both position and rotation
     this.scene.tweens.add({
       targets: this,
-      y: this.y - this.flightHeight,
+      x: this.x + 200, // Move slightly to the right
+      y: this.y - this.flightHeight, // Move up
+      rotation: rotationAngle, // Rotate to match the arc trajectory
       duration: this.animationDuration,
-      ease: "Cubic.easeIn",
+      ease: "Sine.easeIn",
+      // Use onUpdate to create a more natural rotation that follows the arc
+      onUpdate: (tween) => {
+        // Calculate progress (0 to 1)
+        const progress = tween.progress;
+
+        // Start rotating after initial vertical ascent (after 20% of the animation)
+        if (progress > 0.2) {
+          // Gradually increase rotation to match the arc
+          // Map progress from 0.2-1.0 to 0-rotationAngle
+          const currentRotation = rotationAngle * ((progress - 0.2) / 0.8);
+          this.setRotation(currentRotation);
+        } else {
+          // Keep vertical during initial ascent
+          this.setRotation(0);
+        }
+      },
       onComplete: () => {
-        // Ship has reached Mars orbit
+        console.log("Starship reached Mars orbit");
         this.currentState = StarshipState.MARS_ORBIT;
         this.setVisible(false);
 
@@ -192,17 +239,26 @@ export class Starship extends Phaser.GameObjects.Container {
   }
 
   landOnMars() {
-    if (this.currentState !== StarshipState.MARS_ORBIT) return;
-
+    console.log("Landing on Mars");
     this.currentState = StarshipState.MARS_LANDING;
 
-    // Reset position above landing pad
-    this.setPosition(
-      this.landingCoordinates.x,
-      this.landingCoordinates.y - this.flightHeight
-    );
+    // Starting position (above and slightly to the left)
+    const startX = this.landingCoordinates.x - 200;
+    const startY = this.landingCoordinates.y - this.flightHeight;
+
+    // Reset position and make visible
+    this.setPosition(startX, startY);
     this.setVisible(true);
     this.engineFlame.setVisible(true);
+
+    // Set initial rotation for landing approach
+    // For landing from the left, we want a slight counter-clockwise rotation (negative angle)
+    const initialRotationAngle = -0.3; // ~-17 degrees in radians
+    this.setRotation(initialRotationAngle);
+
+    console.log(
+      `Starship set to position (${startX}, ${startY}) for landing with rotation ${initialRotationAngle}`
+    );
 
     // Create flame animation
     this.scene.tweens.add({
@@ -215,50 +271,280 @@ export class Starship extends Phaser.GameObjects.Container {
       yoyo: true,
     });
 
-    // Create landing animation - animate the container instead of individual sprites
+    // Add ship shaking effect
+    this.scene.tweens.add({
+      targets: this.starshipSprite,
+      x: { from: -2, to: 2 },
+      duration: 50,
+      yoyo: true,
+      repeat: 20,
+      ease: "Sine.easeInOut",
+    });
+
+    // Animate both position and rotation for landing
     this.scene.tweens.add({
       targets: this,
-      y: this.landingCoordinates.y,
+      x: this.landingCoordinates.x, // Move to landing coordinates
+      y: this.landingCoordinates.y, // Move to landing coordinates
+      rotation: 0, // End with vertical orientation
       duration: this.animationDuration,
-      ease: "Cubic.easeOut",
+      ease: "Sine.easeOut",
+      // Use onUpdate to create a more natural rotation that follows the arc
+      onUpdate: (tween) => {
+        // Calculate progress (0 to 1)
+        const progress = tween.progress;
+
+        // Gradually decrease rotation as we approach landing
+        // For the last 20% of the animation, we want to be completely vertical
+        if (progress < 0.8) {
+          // Map progress from 0-0.8 to initialRotationAngle-0
+          const currentRotation = initialRotationAngle * (1 - progress / 0.8);
+          this.setRotation(currentRotation);
+        } else {
+          // Vertical orientation for final approach
+          this.setRotation(0);
+        }
+      },
       onComplete: () => {
-        // Ship has landed
+        console.log("Landed on Mars at coordinates:", this.landingCoordinates);
         this.currentState = StarshipState.MARS_LANDED;
         this.engineFlame.setVisible(false);
 
-        // Deliver robots when the ship lands
-        this.deliverRobots();
+        // Ensure we're perfectly vertical at landing
+        this.setRotation(0);
 
-        // Schedule next takeoff
-        this.stateTimer = this.scene.time.delayedCall(
-          this.stateDurations.marsOrbit, // Use same duration as orbit for landed state
-          () => {
-            this.takeOffFromMars();
-          }
-        );
+        // Process the transfer queue to deliver items
+        this.processTransferQueueOnMars();
+
+        // Check if there's an active transfer queue in the Earth menu
+        this.checkForEarthTransferQueue();
       },
     });
   }
 
-  // Deliver Optimus robots when the starship lands
-  private deliverRobots(): void {
+  // Check if there's an active transfer queue in the Earth menu and schedule takeoff if needed
+  private checkForEarthTransferQueue(): void {
+    console.log(
+      `Checking for Earth transfer queue, current state: ${this.currentState}`
+    );
+
+    const mainScene = this.scene as any;
+
+    // Try to access the Earth menu through the ActionMenu
+    if (!mainScene.actionMenu || !mainScene.actionMenu.earthMenu) {
+      console.error(
+        "Earth menu not found in scene. Looking for actionMenu.earthMenu"
+      );
+      return;
+    }
+
+    // Get the transfer queue from the Earth menu
+    const queue = mainScene.actionMenu.earthMenu.getTransferQueue();
+    console.log(`Transfer queue length: ${queue ? queue.length : "undefined"}`);
+
+    // Only schedule takeoff if there's an active transfer queue
+    if (queue && queue.length > 0) {
+      console.log(
+        `Active transfer queue found with ${queue.length} items, scheduling takeoff`
+      );
+
+      // Clear any existing timer
+      if (this.stateTimer) {
+        this.stateTimer.remove();
+      }
+
+      // Set a timer to take off again - use a shorter delay for better responsiveness
+      this.stateTimer = this.scene.time.delayedCall(
+        1000, // Use a shorter delay (1 second) for better responsiveness
+        () => {
+          console.log("Takeoff timer triggered, calling takeOffFromMars()");
+          this.takeOffFromMars();
+        }
+      );
+    } else {
+      console.log("No active transfer queue, staying on Mars");
+      // Ship will stay on Mars until there's an active transfer queue
+      // We'll check periodically for a transfer queue
+      this.scheduleTransferQueueCheck();
+    }
+  }
+
+  // Force immediate takeoff (can be called directly from the Earth menu)
+  public forceImmediateTakeoff(): void {
+    console.log("Force immediate takeoff called");
+
+    // Only take off if we're landed on Mars
+    if (this.currentState === StarshipState.MARS_LANDED) {
+      console.log("Forcing immediate takeoff from Mars");
+
+      // Clear any existing timer
+      if (this.stateTimer) {
+        this.stateTimer.remove();
+      }
+
+      // Take off immediately
+      this.takeOffFromMars();
+    } else {
+      console.log(
+        `Cannot force takeoff: current state is ${this.currentState}`
+      );
+    }
+  }
+
+  // Schedule a periodic check for a transfer queue
+  private scheduleTransferQueueCheck(): void {
+    // Check every 5 seconds for a transfer queue
+    this.stateTimer = this.scene.time.delayedCall(5000, () => {
+      if (this.currentState === StarshipState.MARS_LANDED) {
+        this.checkForEarthTransferQueue();
+      }
+    });
+  }
+
+  // Process the transfer queue when landed on Mars
+  private processTransferQueueOnMars(): void {
+    // Get the landing coordinates
+    const x = this.landingCoordinates.x;
+    const y = this.landingCoordinates.y;
+
     // Get the main scene
     const mainScene = this.scene as any;
 
-    // Check if the scene has a robotManager
-    if (mainScene.robotManager) {
-      // Use the RobotManager to create the robots
-      mainScene.robotManager.createOptimusRobots(this.robotsToDeliver);
+    // Log the current inventory
+    console.log(
+      "Starship inventory on Mars landing:",
+      JSON.stringify(this.inventory)
+    );
+
+    // Process resources from inventory
+    let hasResources = false;
+    for (const resourceType in this.inventory) {
+      const typedResourceType = resourceType as ResourceType;
+      const amount = this.inventory[typedResourceType];
+      if (amount && amount > 0) {
+        hasResources = true;
+        break;
+      }
+    }
+
+    if (!hasResources) {
+      console.log("No resources to deliver");
+    } else {
+      console.log("Delivering resources from starship inventory");
+
+      // First, handle robots if any
+      const robotCount = this.inventory["robot"] || 0;
+      if (robotCount > 0) {
+        if (mainScene.robotManager) {
+          mainScene.robotManager.createOptimusRobots(robotCount);
+          console.log(`Delivered ${robotCount} Optimus robots`);
+          // Clear the robot inventory
+          this.inventory["robot"] = 0;
+        } else {
+          console.error("Robot manager not found in scene");
+        }
+      }
+
+      // Then handle other resources
+      for (const resourceType in this.inventory) {
+        const typedResourceType = resourceType as ResourceType;
+        // Skip robots as they were handled above
+        if (typedResourceType === "robot") continue;
+
+        const amount = this.inventory[typedResourceType] || 0;
+        if (amount <= 0) continue;
+
+        // Get the resource definition
+        const resourceDef = mainScene.getResourceDefinition
+          ? mainScene.getResourceDefinition(typedResourceType)
+          : { emoji: "📦", name: typedResourceType };
+
+        console.log(`Delivering ${amount} ${typedResourceType}`);
+
+        // Create resource nodes in batches to avoid too many objects
+        const batchSize = 64; // Maximum resources per node
+        const numFullBatches = Math.floor(amount / batchSize);
+        const remainder = amount % batchSize;
+
+        // Create full batch nodes
+        for (let i = 0; i < numFullBatches; i++) {
+          this.spawnResourceNode(
+            typedResourceType,
+            batchSize,
+            x,
+            y,
+            resourceDef
+          );
+        }
+
+        // Create remainder node if needed
+        if (remainder > 0) {
+          this.spawnResourceNode(
+            typedResourceType,
+            remainder,
+            x,
+            y,
+            resourceDef
+          );
+        }
+
+        // Clear the inventory
+        this.inventory[typedResourceType] = 0;
+      }
+    }
+  }
+
+  // Helper method to spawn a resource node
+  private spawnResourceNode(
+    resourceType: ResourceType,
+    amount: number,
+    centerX: number,
+    centerY: number,
+    resourceDef: any
+  ): void {
+    // Calculate a random position around the landing pad
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 150 + Math.random() * 100; // 150-250 pixels from center
+    const x = centerX + Math.cos(angle) * distance;
+    const y = centerY + Math.sin(angle) * distance;
+
+    // Create a resource node
+    const mainScene = this.scene as any;
+    if (mainScene.createResourceNode) {
+      mainScene.createResourceNode(x, y, resourceType, amount);
+      console.log(
+        `Created resource node with ${amount} ${resourceType} at (${x}, ${y})`
+      );
+    } else {
+      // Fallback if createResourceNode is not available
+      // Create a proper Resource object
+      const resource = {
+        type: resourceType,
+        name: resourceDef.name || resourceType,
+        emoji: resourceDef.emoji || "📦",
+      };
+
+      const resourceNode = new ResourceNode(this.scene, x, y, resource, amount);
+      this.scene.add.existing(resourceNode);
+      console.log(
+        `Created fallback resource node with ${amount} ${resourceType} at (${x}, ${y})`
+      );
     }
   }
 
   update(time?: number, delta?: number) {
-    // Log the current state for debugging
-    if (Math.random() < 0.01) {
-      // Only log occasionally to avoid spam
-      console.log(
-        `Starship update called, current state: ${this.currentState}`
-      );
+    // Only ensure visibility and position when in MARS_LANDED state
+    // and not when taking off or in other states
+    if (this.currentState === StarshipState.MARS_LANDED) {
+      // Make sure the ship is visible and in the correct position
+      this.setVisible(true);
+
+      // Log the state occasionally for debugging
+      if (time && time % 5000 < 16) {
+        console.log(
+          `Starship state: ${this.currentState}, position: (${this.x}, ${this.y})`
+        );
+      }
     }
   }
 
@@ -291,14 +577,6 @@ export class Starship extends Phaser.GameObjects.Container {
     return true;
   }
 
-  public setRobotsToDeliver(count: number): void {
-    this.robotsToDeliver = count;
-  }
-
-  public getRobotsToDeliver(): number {
-    return this.robotsToDeliver;
-  }
-
   // Add method to set the transfer queue
   public setTransferQueue(queue: TransferItem[]): void {
     this.transferQueue = [...queue];
@@ -315,31 +593,69 @@ export class Starship extends Phaser.GameObjects.Container {
     this.transferQueue = [];
   }
 
-  // Add method to process the transfer queue when in Earth orbit
+  // Process the transfer queue when in Earth orbit
   public processTransferQueue(): void {
-    if (this.currentState !== StarshipState.EARTH_ORBIT) {
-      console.log("Cannot process transfer queue - not in Earth orbit");
+    // Get the Earth menu from the scene
+    const mainScene = this.scene as any;
+
+    // Try to access the Earth menu through the ActionMenu
+    if (!mainScene.actionMenu || !mainScene.actionMenu.earthMenu) {
+      console.error(
+        "Earth menu not found in scene. Looking for actionMenu.earthMenu"
+      );
+      return;
+    }
+
+    // Log the current inventory before processing
+    console.log(
+      "Starship inventory before processing:",
+      JSON.stringify(this.inventory)
+    );
+
+    // Get the transfer queue
+    const queue = mainScene.actionMenu.earthMenu.getTransferQueue();
+    if (!queue || queue.length === 0) {
+      console.log("No items in transfer queue");
       return;
     }
 
     console.log(
-      `Processing transfer queue with ${this.transferQueue.length} items`
+      `Processing transfer queue with ${queue.length} items:`,
+      JSON.stringify(queue)
     );
 
     // Process each item in the queue
-    this.transferQueue.forEach((item) => {
-      // Add the resources to the inventory
-      if (!this.inventory[item.resourceType]) {
-        this.inventory[item.resourceType] = 0;
+    queue.forEach((item: TransferItem) => {
+      if (item.isRobot) {
+        // Add robots to the inventory as a special resource type
+        const resourceType = "robot" as ResourceType;
+        if (!this.inventory[resourceType]) {
+          this.inventory[resourceType] = 0;
+        }
+        this.inventory[resourceType] =
+          (this.inventory[resourceType] || 0) + item.amount;
+        console.log(`Added ${item.amount} robots to starship inventory`);
+      } else {
+        // Add resources to the starship inventory
+        const resourceType = item.resourceType;
+        if (!this.inventory[resourceType]) {
+          this.inventory[resourceType] = 0;
+        }
+        this.inventory[resourceType] =
+          (this.inventory[resourceType] || 0) + item.amount;
+        console.log(
+          `Added ${item.amount} ${resourceType} to starship inventory`
+        );
       }
-
-      this.inventory[item.resourceType]! += item.amount;
-      console.log(
-        `Added ${item.amount} ${item.resourceType} to starship inventory`
-      );
     });
 
-    // Clear the queue after processing
-    this.clearTransferQueue();
+    // Log the updated inventory
+    console.log(
+      "Starship inventory after processing:",
+      JSON.stringify(this.inventory)
+    );
+
+    // Clear the queue
+    mainScene.actionMenu.earthMenu.clearTransferQueue();
   }
 }

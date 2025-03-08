@@ -21,6 +21,7 @@ export enum RobotState {
   RETURNING = "returning",
   CARRYING = "carrying",
   DEFENDING = "defending",
+  WANDERING = "wandering",
 }
 
 // Robot types

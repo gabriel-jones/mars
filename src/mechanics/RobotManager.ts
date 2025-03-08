@@ -154,7 +154,7 @@ export class RobotManager {
     );
     notification.setOrigin(0.5);
     notification.setScrollFactor(0);
-    notification.setDepth(DEPTH.MESSAGE);
+    notification.setDepth(DEPTH.UI);
 
     // Fade out and remove after a few seconds
     this.scene.tweens.add({
@@ -642,15 +642,26 @@ export class RobotManager {
         continue;
       }
 
+      // Skip if the resource node doesn't have a valid resource
+      if (!resourceNode.getResource()) {
+        console.log(
+          "Resource node has no valid resource, skipping job creation"
+        );
+        continue;
+      }
+
       // Create a job to deliver the resource to the inventory zone
       const job = jobManager.createDeliverToInventoryJob(
         resourceNode,
         closestZone
       );
 
+      // Log with a null check to prevent errors
       console.log(
         `Created job to deliver ${
-          resourceNode.getResource().type
+          resourceNode.getResource()
+            ? resourceNode.getResource().type
+            : "unknown"
         } to inventory zone at (${closestZone.x}, ${closestZone.y})`
       );
 

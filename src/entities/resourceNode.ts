@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { Resource, ResourceType, ResourceManager } from "../data/resources";
 import { TILE_SIZE } from "../constants";
+import { DEPTH } from "../depth";
 
 export enum ResourceNodeType {
   IceDeposit = "ice_deposit",
@@ -60,7 +61,8 @@ export class ResourceNode extends Phaser.GameObjects.Container {
       .text(0, 0, resource.emoji, {
         fontSize: "32px",
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setDepth(DEPTH.RESOURCE_NODE);
     this.add(this.emojiText);
 
     // Add a label showing the resource type and amount
@@ -71,7 +73,8 @@ export class ResourceNode extends Phaser.GameObjects.Container {
         color: "#FFFFFF",
         align: "center",
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setDepth(DEPTH.RESOURCE_NODE);
     this.add(this.label);
 
     // Add a pulsing effect to the emoji

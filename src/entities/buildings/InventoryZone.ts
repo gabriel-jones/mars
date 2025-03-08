@@ -207,4 +207,107 @@ export class InventoryZone extends RangeSelectionBuilding {
     // Call parent destroy
     super.destroy();
   }
+
+  /**
+   * Find the best inventory zone for a resource
+   * First tries to find a zone with the same resource type to merge stacks
+   * Then falls back to any zone with space
+   * @param resourceType The type of resource to find a zone for
+   * @param inventoryZones Array of inventory zones to check
+   * @returns The best inventory zone, or null if none found
+   */
+  public static findBestZoneForResource(
+    resourceType: ResourceType,
+    inventoryZones: InventoryZone[]
+  ): InventoryZone | null {
+    if (inventoryZones.length === 0) {
+      return null;
+    }
+
+    // First, try to find a zone that already has this resource type
+    for (const zone of inventoryZones) {
+      // Skip zones that are full
+      if (!zone.hasSpace()) {
+        continue;
+      }
+
+      // Check if this zone has the same resource type
+      const zoneResources = zone.getResourceNodes();
+      for (const resource of zoneResources) {
+        if (resource.getResource().type === resourceType) {
+          // Found a zone with the same resource type
+          return zone;
+        }
+      }
+    }
+
+    // If no zone with the same resource type, find any zone with space
+    for (const zone of inventoryZones) {
+      if (zone.hasSpace()) {
+        return zone;
+      }
+    }
+
+    // No suitable zone found
+    return null;
+  }
+
+  /**
+   * Find an available tile in the inventory zone
+   * First tries to find a tile with the same resource type for merging
+   * Then falls back to any empty tile
+   * @param resourceType The type of resource to find a tile for
+   * @returns The world position of the available tile, or null if no space
+   */
+  public findAvailableTilePosition(
+    resourceType: ResourceType
+  ): Phaser.Math.Vector2 | null {
+    // Calculate the tile grid position of the inventory zone
+    const tileGridX = Math.floor(this.x / TILE_SIZE);
+    const tileGridY = Math.floor(this.y / TILE_SIZE);
+
+    // First, try to find a tile with the same resource type for merging
+    for (let row = 0; row < this.tileHeight; row++) {
+      for (let col = 0; col < this.tileWidth; col++) {
+        const tileX = tileGridX - Math.floor(this.tileWidth / 2) + col;
+        const tileY = tileGridY - Math.floor(this.tileHeight / 2) + row;
+        const tileKey = `${tileX},${tileY}`;
+
+        // Check if this tile has a resource of the same type
+        const existingResource = this.resourceTiles.get(tileKey);
+        if (
+          existingResource &&
+          existingResource.getResource().type === resourceType
+        ) {
+          // Found a tile with the same resource type
+          const worldX = tileX * TILE_SIZE + TILE_SIZE / 2;
+          const worldY = tileY * TILE_SIZE + TILE_SIZE / 2;
+          return new Phaser.Math.Vector2(worldX, worldY);
+        }
+      }
+    }
+
+    // If we couldn't find a tile with the same resource type, find any empty tile
+    for (let row = 0; row < this.tileHeight; row++) {
+      for (let col = 0; col < this.tileWidth; col++) {
+        const tileX = tileGridX - Math.floor(this.tileWidth / 2) + col;
+        const tileY = tileGridY - Math.floor(this.tileHeight / 2) + row;
+        const tileKey = `${tileX},${tileY}`;
+
+        // Check if this tile is empty
+        if (
+          !this.resourceTiles.has(tileKey) &&
+          !ResourceNode.hasTileResource(tileX, tileY)
+        ) {
+          // Found an empty tile
+          const worldX = tileX * TILE_SIZE + TILE_SIZE / 2;
+          const worldY = tileY * TILE_SIZE + TILE_SIZE / 2;
+          return new Phaser.Math.Vector2(worldX, worldY);
+        }
+      }
+    }
+
+    // No available tile found
+    return null;
+  }
 }
