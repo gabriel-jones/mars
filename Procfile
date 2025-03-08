@@ -1,1 +1,1 @@
-web: bun run dist/main.js
+web: bun index.ts
