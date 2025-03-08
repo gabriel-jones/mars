@@ -233,8 +233,13 @@ export class RobotsMenu {
           toolTextureKey
         );
 
-        // Scale the icon to fit
-        toolIcon.setDisplaySize(24, 24);
+        // Set display size with proper aspect ratio for assault rifle
+        if (toolTextureKey === "assault-rifle") {
+          toolIcon.setDisplaySize(24, 24); // Square shape
+        } else {
+          toolIcon.setDisplaySize(24, 24); // Square for other tools
+        }
+
         toolIcon.setOrigin(0.5);
         this.listContainer.add(toolIcon);
 

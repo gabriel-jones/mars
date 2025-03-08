@@ -93,12 +93,8 @@ export class MainScene extends Phaser.Scene {
     this.load.image("player", "assets/player.png");
 
     // Tools
-    // this.load.image("assault-rifle", "assets/assault-rifle.png");
-    this.load.svg("assault-rifle", "assets/assault-rifle.svg");
-    this.load.svg("assault-rifle-icon", "assets/assault-rifle-icon.svg");
-
-    // Raygun for aliens
-    this.load.svg("raygun", "assets/raygun.svg");
+    this.load.image("assault-rifle", "assets/assault-rifle.png");
+    this.load.image("raygun", "assets/raygun.png");
 
     // Bullet
     // this.load.image("bullet", "assets/bullet.png");

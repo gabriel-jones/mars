@@ -99,7 +99,14 @@ export class ToolInventoryDisplay {
           if (this.scene.textures.exists(key)) {
             console.log(`Using texture ${key} for tool ${tool.type}`);
             icon = this.scene.add.sprite(x, y, key);
-            icon.setDisplaySize(this.slotSize * 0.7, this.slotSize * 0.7);
+
+            // Set display size with proper aspect ratio for assault rifle
+            if (tool.type === "assault-rifle") {
+              icon.setDisplaySize(this.slotSize * 0.7, this.slotSize * 0.7); // Square shape
+            } else {
+              icon.setDisplaySize(this.slotSize * 0.7, this.slotSize * 0.7); // Square for other tools
+            }
+
             icon.setScrollFactor(0);
             icon.setDepth(97);
             this.slotIcons.push(icon);

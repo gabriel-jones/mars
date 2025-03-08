@@ -113,6 +113,9 @@ export class Alien extends Enemy {
     // Try to fire at the target if in attacking state
     if (this.enemyState === EnemyState.ATTACKING && this.target) {
       this.tryToFireAtTarget(time);
+    } else if (this.equippedTool) {
+      // Hide the raygun when not attacking
+      this.equippedTool.hide();
     }
 
     // Slowly recharge shield over time (0.25 points per second) if shield is equipped
@@ -132,12 +135,88 @@ export class Alien extends Enemy {
     // The actual firing is handled in tryToFireAtTarget
   }
 
+  // Calculate the position of the alien's hand based on the angle to target
+  private calculateHandPosition(angle: number): { x: number; y: number } {
+    // Determine which side to place the weapon based on the angle
+    const normalizedAngle = Phaser.Math.Angle.Normalize(angle);
+    const isRightSide =
+      normalizedAngle > Math.PI * 0.5 && normalizedAngle < Math.PI * 1.5;
+
+    // Offset from center (distance from alien center to hand)
+    const handOffset = 30;
+
+    // Calculate the hand position based on which side the weapon should be on
+    let handX, handY;
+    if (isRightSide) {
+      // Place on right side (90 degrees offset from facing direction)
+      handX = this.sprite.x + Math.cos(angle + Math.PI / 2) * handOffset;
+      handY = this.sprite.y + Math.sin(angle + Math.PI / 2) * handOffset;
+    } else {
+      // Place on left side (270 degrees offset from facing direction)
+      handX = this.sprite.x + Math.cos(angle - Math.PI / 2) * handOffset;
+      handY = this.sprite.y + Math.sin(angle - Math.PI / 2) * handOffset;
+    }
+
+    return { x: handX, y: handY };
+  }
+
+  protected updateToolPosition(): void {
+    if (!this.equippedTool || !this.target) return;
+
+    // Calculate angle to target
+    const angle = Phaser.Math.Angle.Between(
+      this.sprite.x,
+      this.sprite.y,
+      this.target.x,
+      this.target.y
+    );
+
+    // Get the hand position
+    const handPosition = this.calculateHandPosition(angle);
+
+    // Position the tool at the calculated hand position
+    this.equippedTool.updatePosition(handPosition.x, handPosition.y);
+
+    // Set the tool's rotation
+    this.equippedTool.setRotation(angle);
+
+    // Show the raygun when in attacking state
+    if (this.enemyState === EnemyState.ATTACKING) {
+      this.equippedTool.show(handPosition.x, handPosition.y, false);
+    } else {
+      this.equippedTool.hide();
+    }
+
+    // Update the laser pointer
+    this.equippedTool.updateLaserPointer(
+      handPosition.x,
+      handPosition.y,
+      this.target.x,
+      this.target.y,
+      false // Pass false for isPlayer
+    );
+  }
+
   private tryToFireAtTarget(time: number): void {
     // Only fire if we have a raygun and a target
     if (!this.raygun || !this.target) return;
 
     // Check if cooldown has passed
     if (time - this.lastAttackTime >= this.attackCooldown) {
+      // Calculate angle to target
+      const angle = Phaser.Math.Angle.Between(
+        this.sprite.x,
+        this.sprite.y,
+        this.target.x,
+        this.target.y
+      );
+
+      // Get the hand position
+      const handPosition = this.calculateHandPosition(angle);
+
+      // Make sure the raygun is visible before firing
+      this.raygun.show(handPosition.x, handPosition.y, false);
+
       // Fire the raygun
       this.raygun.fire(false); // Pass false for isPlayer
 
@@ -155,39 +234,17 @@ export class Alien extends Enemy {
     }
   }
 
-  protected updateToolPosition(): void {
-    if (!this.equippedTool || !this.target) return;
-
-    // Position the tool at the alien's position
-    this.equippedTool.updatePosition(this.sprite.x, this.sprite.y);
-
-    // Calculate angle to target
-    const angle = Phaser.Math.Angle.Between(
-      this.sprite.x,
-      this.sprite.y,
-      this.target.x,
-      this.target.y
-    );
-
-    // Set the tool's rotation
-    this.equippedTool.setRotation(angle);
-
-    // Update the laser pointer
-    this.equippedTool.updateLaserPointer(
-      this.sprite.x,
-      this.sprite.y,
-      this.target.x,
-      this.target.y,
-      false // Pass false for isPlayer
-    );
-  }
-
   public getEnemyName(): string {
     return "Alien";
   }
 
   // Override the destroy method to clean up the raygun
   public destroy(): void {
+    // Hide the raygun before destroying
+    if (this.equippedTool) {
+      this.equippedTool.hide();
+    }
+
     // Call the parent destroy method
     super.destroy();
   }

@@ -14,6 +14,7 @@ interface WeaponCharacteristics {
   burstCooldown: number;
   damage: number;
   imprecision: number;
+  size: number;
 }
 
 // Define characteristics for each weapon type
@@ -24,6 +25,7 @@ const WEAPON_CHARACTERISTICS: Record<ToolType, WeaponCharacteristics> = {
     burstCooldown: 800,
     damage: 10,
     imprecision: 20,
+    size: 64,
   },
   [ToolType.RAYGUN]: {
     burstCount: 3,
@@ -31,6 +33,7 @@ const WEAPON_CHARACTERISTICS: Record<ToolType, WeaponCharacteristics> = {
     burstCooldown: 3000,
     damage: 15,
     imprecision: 50,
+    size: 32,
   },
 };
 
@@ -79,6 +82,10 @@ export class Tool {
         // Try to create the sprite with the provided texture key
         this.sprite = scene.add.sprite(0, 0, textureKey);
         this.sprite.setVisible(false);
+        this.sprite.setDisplaySize(
+          this.characteristics.size,
+          this.characteristics.size
+        ); // Square shape
         this.sprite.setDepth(20); // Higher than player
 
         // Initialize with default orientation (facing right)
@@ -152,9 +159,6 @@ export class Tool {
     if (this.sprite) {
       this.sprite.setPosition(x, y);
       this.sprite.setVisible(true);
-
-      // Set a consistent scale for all entities
-      this.sprite.setScale(0.5);
 
       // Only show the laser pointer for the player
       if (this.laserLine && isPlayer) {
@@ -277,6 +281,17 @@ export class Tool {
       this.sprite.setScale(scale);
     } else {
       console.warn(`Cannot set scale for tool: ${this.name} - sprite is null`);
+    }
+  }
+
+  // Set the exact display size of the tool sprite in pixels
+  public setDisplaySize(width: number, height: number): void {
+    if (this.sprite) {
+      this.sprite.setDisplaySize(width, height);
+    } else {
+      console.warn(
+        `Cannot set display size for tool: ${this.name} - sprite is null`
+      );
     }
   }
 
@@ -601,10 +616,10 @@ export class Tool {
             robotY = robotSprite.y;
             // Create a bounds object for the container
             robotBounds = new Phaser.Geom.Rectangle(
-              robotX - 32, // Half the typical size
-              robotY - 32,
-              64, // Typical size
-              64
+              robotX - this.characteristics.size / 2, // Half the typical size
+              robotY - this.characteristics.size / 2,
+              this.characteristics.size, // Typical size
+              this.characteristics.size
             );
           } else {
             robotX = robotSprite.x;
@@ -845,11 +860,6 @@ export class ToolInventory {
       scene,
       ToolType.ASSAULT_RIFLE
     );
-
-    // Set initial scale for the assault rifle
-    if (this.tools[0] && this.tools[0].sprite) {
-      this.tools[0].setScale(0.5);
-    }
   }
 
   // Get the currently selected tool
