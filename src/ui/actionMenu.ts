@@ -235,8 +235,11 @@ export class ActionMenu {
       case "earth":
         console.log("Showing Earth menu");
         if (this.earthMenu) {
+          console.log("Earth menu exists, calling show method");
           this.earthMenu.show();
+          console.log("Earth menu show method called");
           this.highlightButton(this.earthButton);
+          console.log("Earth button highlighted");
         } else {
           console.error("Earth menu is not initialized");
         }

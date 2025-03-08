@@ -53,7 +53,7 @@ export abstract class Enemy extends Agent implements HasHealth {
     attackRange: number = 100,
     attackDamage: number = 10,
     attackCooldown: number = 1000,
-    preferredShootingDistance: number = 150 // Default preferred shooting distance
+    preferredShootingDistance: number = 75 // Default preferred shooting distance - reduced from 150 to make enemies get closer
   ) {
     // Call the parent constructor with the sprite and maxHealth
     super(

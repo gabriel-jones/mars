@@ -52,7 +52,7 @@ export class TerrainFeature extends Phaser.GameObjects.Container {
       this.sprite = scene.add
         .sprite(0, 0, "ice-deposit")
         .setOrigin(0.5)
-        .setDepth(DEPTH.TERRAIN)
+        .setDepth(DEPTH.TERRAIN + 1)
         .setDisplaySize(TILE_SIZE, TILE_SIZE);
       this.add(this.sprite);
 

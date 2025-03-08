@@ -3,6 +3,7 @@ import { Building } from "./data/buildings";
 import { ResourceCount } from "./data/resources";
 import { Robot } from "./entities/robots";
 import { Enemy } from "./entities/enemies";
+import { INITIAL_MONEY } from "./constants";
 
 // Game state interface
 interface GameState {
@@ -42,7 +43,7 @@ export const gameState = {
     inventory: [],
     events: new Phaser.Events.EventEmitter(),
   },
-  money: 5_000_000_000, // Initialize with 5 billion
+  money: INITIAL_MONEY,
 } as unknown as GameState;
 
 // Make gameState accessible globally for debugging and for robots to access

@@ -2,13 +2,15 @@ export const PLAYER_VELOCITY = 200;
 export const ROBOT_VELOCITY = 100;
 export const TILE_SIZE = 64;
 
+export const INITIAL_MONEY = 1_000_000;
+
 export const WORLD_WIDTH = 100; // Example
 export const WORLD_HEIGHT = 100; // Example
 
 export const DUST_COLOR = 0xc2b280;
 
-export const NUM_INITIAL_ENEMIES = 8;
-export const NUM_INITIAL_OPTIMUS = 2;
+export const NUM_INITIAL_ENEMIES = 10;
+export const NUM_INITIAL_OPTIMUS = 4;
 
 export const NUM_ICE_DEPOSITS = 8;
 

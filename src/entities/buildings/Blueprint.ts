@@ -5,6 +5,7 @@ import {
   BUILDING_DEFINITIONS,
   BuildingManager,
   Building as BuildingData,
+  PlacementType,
 } from "../../data/buildings";
 import {
   ResourceType,
@@ -69,7 +70,7 @@ export class Blueprint extends Building implements HasHealth {
       }
     );
     this.resourceText.setOrigin(0.5, 0);
-    this.resourceText.setDepth(DEPTH.BLUEPRINT); // Ensure it's on top of other elements
+    this.resourceText.setDepth(DEPTH.BLUEPRINT + 1); // Ensure it's on top of other elements
     this.add(this.resourceText);
 
     // Create progress bar (initially hidden)
@@ -109,10 +110,16 @@ export class Blueprint extends Building implements HasHealth {
     );
 
     if (buildingDef) {
+      // For range buildings, multiply the resource cost by the area
+      const isRangeBuilding =
+        buildingDef.placementType === PlacementType.RangeSelect;
+      const area = tileWidth * tileHeight;
+
       // Initialize required resources with current amount set to 0
       this.requiredResources = buildingDef.cost.map((cost) => ({
         type: cost.type,
-        amount: cost.amount,
+        // For range buildings, multiply by area; otherwise use original amount
+        amount: isRangeBuilding ? cost.amount * area : cost.amount,
         current: 0,
       }));
 

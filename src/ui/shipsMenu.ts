@@ -274,7 +274,7 @@ export class ShipsMenu {
       const stateText = this.scene.add.text(
         -panelWidth / 2 + 140,
         entryY + 40,
-        `Status: ${this.formatState(state)}`,
+        this.formatState(state),
         {
           fontSize: "14px",
           color: "#aaaaaa",

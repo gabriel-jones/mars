@@ -182,7 +182,7 @@ export class RobotsMenu {
       this.listContainer.add(stateText);
 
       // Create carrying info with emoji
-      let carryingEmoji = "🔄"; // Default emoji (recycling symbol for nothing)
+      let carryingEmoji = ""; // Default emoji (recycling symbol for nothing)
       if (robot.carryingType) {
         // Find the resource definition to get the emoji
         const resourceDef = RESOURCE_DEFINITIONS.find(
@@ -197,7 +197,7 @@ export class RobotsMenu {
       const carryingText = this.scene.add.text(
         -panelWidth / 2 + 60,
         entryY + 55,
-        `${carryingEmoji} Carrying: ${robot.carrying || "Nothing"}`,
+        `${carryingEmoji} ${robot.carrying || "Nothing"}`,
         {
           fontSize: "14px",
           color: "#aaaaaa",
@@ -209,8 +209,8 @@ export class RobotsMenu {
       // Create health/shield bar
       const healthBarContainer = this.createHealthBar(
         robot,
-        -panelWidth / 2 + 250,
-        entryY + 25
+        -panelWidth / 2 + 255,
+        entryY + 30
       );
       this.listContainer.add(healthBarContainer);
 
@@ -229,8 +229,8 @@ export class RobotsMenu {
 
         // Create tool icon using the same sprite as in the tool inventory
         const toolIcon = this.scene.add.sprite(
-          -panelWidth / 2 + 250,
-          entryY + 55,
+          -panelWidth / 2 + 260,
+          entryY + 60,
           toolTextureKey
         );
 
@@ -246,9 +246,9 @@ export class RobotsMenu {
 
         // Create tool text
         const toolText = this.scene.add.text(
-          -panelWidth / 2 + 270,
+          -panelWidth / 2 + 285,
           entryY + 55,
-          `Tool: ${robot.equippedTool}`,
+          robot.equippedTool,
           {
             fontSize: "14px",
             color: "#aaaaaa",
@@ -274,18 +274,6 @@ export class RobotsMenu {
 
       // Create inventory section if available
       if (robot.inventory && Object.keys(robot.inventory).length > 0) {
-        const inventoryText = this.scene.add.text(
-          panelWidth / 2 - 150,
-          entryY + 15,
-          "Inventory:",
-          {
-            fontSize: "14px",
-            color: "#ffffff",
-            fontFamily: DEFAULT_FONT,
-          }
-        );
-        this.listContainer.add(inventoryText);
-
         // Display up to 3 inventory items with emojis
         let inventoryY = 35;
         Object.entries(robot.inventory)

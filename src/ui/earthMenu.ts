@@ -46,14 +46,12 @@ export class EarthMenu {
     this.container = this.scene.add.container(0, 0);
     this.container.setVisible(false);
     this.container.setDepth(DEPTH.UI);
+    this.container.setScrollFactor(0);
 
     console.log("Earth menu container created");
 
     // Create the panel
     this.createPanel();
-
-    // Ensure the container is added to the scene
-    scene.add.existing(this.container);
   }
 
   private createPanel(): void {
@@ -62,7 +60,7 @@ export class EarthMenu {
       const width = 600;
       const height = 500;
       const x = this.scene.cameras.main.width / 2;
-      const y = this.scene.cameras.main.height / 2;
+      const y = this.scene.cameras.main.height - 300;
 
       // Create background
       this.background = this.scene.add.rectangle(
@@ -70,7 +68,7 @@ export class EarthMenu {
         0,
         width,
         height,
-        0x333333,
+        0xff0000,
         0.9
       );
       this.background.setStrokeStyle(2, 0x888888);
@@ -461,18 +459,10 @@ export class EarthMenu {
   }
 
   public show(): void {
+    console.log("EarthMenu show method called");
+
     // Ensure the container is visible
     this.container.setVisible(true);
-
-    // Make sure it's positioned correctly
-    const x = this.scene.cameras.main.width / 2;
-    const y = this.scene.cameras.main.height / 2;
-    this.container.setPosition(x, y);
-
-    // Ensure it's at the front
-    this.container.setDepth(DEPTH.UI);
-
-    // Log to confirm the menu is being shown
     console.log("Earth menu shown");
   }
 
