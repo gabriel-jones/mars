@@ -1,0 +1,12 @@
+[build]
+entrypoints = ["./src/main.ts"]
+outdir = "./dist"
+minify = true
+sourcemap = "external"
+target = "browser"
+splitting = true
+
+[build.plugins]
+# Equivalent to the ignoreAseprite plugin in Vite
+[build.plugins.ignore]
+patterns = ["**/*.aseprite"] 

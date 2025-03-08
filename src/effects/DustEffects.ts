@@ -166,28 +166,35 @@ export class DustEffects {
 
     // Only create dust if the entity is moving and enough time has passed
     if (distance > 1 && time > this.lastDustTime + this.dustInterval) {
-      // Create more dust puffs when moving faster
-      const dustPuffsToCreate = Math.min(3, Math.ceil(distance / 3));
-
-      for (let i = 0; i < dustPuffsToCreate; i++) {
-        // Create dust at positions between last and current position
-        const ratio = i / dustPuffsToCreate;
-        const interpolatedX =
-          this.lastPosition.x + (entityX - this.lastPosition.x) * ratio;
-        const interpolatedY =
-          this.lastPosition.y + (entityY - this.lastPosition.y) * ratio;
-
-        this.createDustPuff(interpolatedX, interpolatedY);
-      }
-
       this.lastDustTime = time;
 
-      // Show movement dust if entity is moving
-      if (distance > 2 && this.isMovementDustVisible) {
-        // Create multiple movement dust particles for faster movement
-        const movementDustCount = Math.min(3, Math.ceil(distance / 4));
-        for (let i = 0; i < movementDustCount; i++) {
+      // Calculate movement speed to adjust dust frequency
+      const speed = distance / (time - (this.lastDustTime - this.dustInterval));
+
+      // Show movement dust (footsteps) if entity is moving
+      if (this.isMovementDustVisible) {
+        // Create footsteps based on speed - faster movement = more frequent footsteps
+        const footstepCount = Math.min(2, Math.ceil(distance / 5));
+
+        for (let i = 0; i < footstepCount; i++) {
           this.showMovementDust();
+        }
+      }
+
+      // Only create regular dust puffs for faster movement
+      if (speed > 0.05) {
+        // Create more dust puffs when moving faster
+        const dustPuffsToCreate = Math.min(2, Math.ceil(distance / 4));
+
+        for (let i = 0; i < dustPuffsToCreate; i++) {
+          // Create dust at positions between last and current position
+          const ratio = i / dustPuffsToCreate;
+          const interpolatedX =
+            this.lastPosition.x + (entityX - this.lastPosition.x) * ratio;
+          const interpolatedY =
+            this.lastPosition.y + (entityY - this.lastPosition.y) * ratio;
+
+          this.createDustPuff(interpolatedX, interpolatedY);
         }
       }
     }
@@ -205,26 +212,46 @@ export class DustEffects {
     const particle =
       availableParticles[Math.floor(Math.random() * availableParticles.length)];
 
-    // Position slightly behind the entity with some randomness
-    const angle = Math.random() * Math.PI * 2;
-    const distance = 5 + Math.random() * 5; // Adjusted for dust texture
-    const dustX = x - Math.cos(angle) * distance;
-    const dustY = y - Math.sin(angle) * distance;
+    // Calculate position for the dust puff
+    // For general movement dust, we want it to appear directly behind the player
+    const entityX = (this.entity as any).x;
+    const entityY = (this.entity as any).y;
+
+    if (!entityX || !entityY) return;
+
+    // Calculate direction of movement
+    const dx = entityX - this.lastPosition.x;
+    const dy = entityY - this.lastPosition.y;
+
+    // Only create dust if there's actual movement
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+
+    const movementAngle = Math.atan2(dy, dx);
+
+    // Add some randomness to the position
+    const dustDistance = 4 + Math.random() * 4;
+    const randomAngleOffset = (Math.random() - 0.5) * 0.5; // Small angle variation
+
+    // Position dust behind the player
+    const dustX =
+      x - Math.cos(movementAngle + randomAngleOffset) * dustDistance;
+    const dustY =
+      y - Math.sin(movementAngle + randomAngleOffset) * dustDistance;
 
     // Set the particle properties
-    const actualSize = this.dustSize + Math.random() * 0.3;
+    const actualSize = this.dustSize * (0.7 + Math.random() * 0.3);
     particle.setPosition(dustX, dustY);
     particle.setVisible(true);
     particle.setAlpha(this.dustAlpha);
     particle.setScale(actualSize);
     particle.setTint(this.dustColor);
 
-    // Animate the dust with a longer duration and more dramatic scaling
+    // Animate the dust to fade out and expand slightly
     this.scene.tweens.add({
       targets: particle,
       alpha: 0,
-      scale: actualSize * 0.4,
-      duration: this.dustLifetime,
+      scale: actualSize * 1.3,
+      duration: 350 + Math.random() * 150,
       ease: "Sine.easeOut",
       onComplete: () => {
         particle.setVisible(false);
@@ -325,39 +352,43 @@ export class DustEffects {
     // Calculate direction of movement
     const dx = entityX - this.lastPosition.x;
     const dy = entityY - this.lastPosition.y;
-    const angle = Math.atan2(dy, dx) + Math.PI; // Opposite direction of movement
 
-    // Add some randomness to the angle
-    const randomAngle = angle + (Math.random() - 0.5) * 0.8; // Reduced from 1.0
+    // Only create footsteps if there's actual movement
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
 
-    // Position behind the entity based on movement direction
-    const distance = 10 + Math.random() * 15; // Adjusted for dust texture
-    const dustX = entityX + Math.cos(randomAngle) * distance;
-    const dustY = entityY + Math.sin(randomAngle) * distance;
+    const movementAngle = Math.atan2(dy, dx);
+
+    // Position dust directly behind the player based on movement direction
+    // This creates a more realistic footstep effect
+    const footstepDistance = 5 + Math.random() * 3; // Distance behind player
+
+    // Calculate position behind the player in the opposite direction of movement
+    const dustX = entityX - Math.cos(movementAngle) * footstepDistance;
+    const dustY = entityY - Math.sin(movementAngle) * footstepDistance;
+
+    // Add slight randomness to position to simulate left/right foot alternation
+    const lateralOffset =
+      (Math.random() > 0.5 ? 1 : -1) * (2 + Math.random() * 3);
+    // Calculate perpendicular direction for lateral offset
+    const perpAngle = movementAngle + Math.PI / 2;
+    const finalX = dustX + Math.cos(perpAngle) * lateralOffset;
+    const finalY = dustY + Math.sin(perpAngle) * lateralOffset;
 
     // Set the particle properties
-    const actualSize = this.movementDustSize * (0.8 + Math.random() * 0.4);
-    particle.setPosition(dustX, dustY);
+    const actualSize = this.movementDustSize * (0.6 + Math.random() * 0.3); // Smaller for footsteps
+    particle.setPosition(finalX, finalY);
     particle.setVisible(true);
-    particle.setAlpha(this.movementDustAlpha * (0.7 + Math.random() * 0.3));
+    particle.setAlpha(this.movementDustAlpha * (0.6 + Math.random() * 0.3));
     particle.setScale(actualSize);
     particle.setTint(this.movementDustColor);
 
-    // Calculate movement perpendicular to the direction of travel
-    const perpAngle =
-      randomAngle + (Math.PI / 2) * (Math.random() > 0.5 ? 1 : -1);
-    const perpDistance = 5 + Math.random() * 10;
-    const targetX = dustX + Math.cos(perpAngle) * perpDistance;
-    const targetY = dustY + Math.sin(perpAngle) * perpDistance;
-
-    // Animate the dust
+    // Animate the dust to expand slightly and fade out
+    // For footsteps, we want a subtle puff that stays mostly in place
     this.scene.tweens.add({
       targets: particle,
-      x: targetX,
-      y: targetY,
       alpha: 0,
-      scale: actualSize * 0.5,
-      duration: 500 + Math.random() * 300,
+      scale: actualSize * 1.5, // Expand slightly
+      duration: 300 + Math.random() * 150, // Faster animation for footsteps
       ease: "Sine.easeOut",
       onComplete: () => {
         particle.setVisible(false);

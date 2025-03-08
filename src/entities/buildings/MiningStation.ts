@@ -233,7 +233,7 @@ export class MiningStation extends Building {
 
     // Add the drone to the scene's robot arrays
     const mainScene = this.scene as MainScene;
-    mainScene.addRobot(this.linkedDrone);
+    mainScene.robotManager.addRobot(this.linkedDrone);
   }
 
   // Calculate the mining yield based on the area and resource richness

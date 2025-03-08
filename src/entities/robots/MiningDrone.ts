@@ -119,6 +119,27 @@ export class MiningDrone extends Robot {
       return; // Skip the rest of the update to avoid state conflicts
     }
 
+    // If we're idle and full of resources, periodically check for processors
+    if (
+      this.robotState === RobotState.IDLE &&
+      this.resourceAmount >= this.maxResourceCapacity
+    ) {
+      // Check for processors every 3 seconds
+      if (time % 3000 < delta) {
+        console.log("Idle with full capacity, checking for processors again");
+        const processor = this.findNearestRegolithProcessor();
+        if (processor) {
+          console.log(
+            `Found processor at (${processor.x}, ${processor.y}), moving to it`
+          );
+          // Move to the processor
+          this.moveToTarget(new Phaser.Math.Vector2(processor.x, processor.y));
+          this.robotState = RobotState.RETURNING;
+          this.clearWarning();
+        }
+      }
+    }
+
     // Check if mining is complete
     if (
       this.robotState === RobotState.WORKING &&
@@ -382,17 +403,18 @@ export class MiningDrone extends Robot {
 
     // First, find all regolith processor buildings
     const processorBuildings = buildings.filter(
-      (building: any) => building.type === "regolith-processor"
+      (building: any) =>
+        building.type === "regolith-processor" && !building.isBlueprint
     );
 
     if (processorBuildings.length === 0) {
       console.log("No regolith processor buildings found in BuildingManager");
-      return null;
+      // Don't return null yet, continue checking the scene
+    } else {
+      console.log(
+        `Found ${processorBuildings.length} regolith processor buildings in BuildingManager`
+      );
     }
-
-    console.log(
-      `Found ${processorBuildings.length} regolith processor buildings in BuildingManager`
-    );
 
     // Get all container objects in the scene
     const allContainers = this.scene.children
@@ -422,6 +444,11 @@ export class MiningDrone extends Robot {
     let shortestDistance = Infinity;
 
     for (const container of processorContainers) {
+      // Skip containers that can't accept regolith
+      if (!(container as any).canAcceptRegolith()) {
+        continue;
+      }
+
       const distance = Phaser.Math.Distance.Between(
         this.container.x,
         this.container.y,

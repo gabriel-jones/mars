@@ -59,11 +59,11 @@ export class MainScene extends Phaser.Scene {
   private shadowTexture: Phaser.Textures.CanvasTexture;
 
   // Manager instances
-  private habitatManager: HabitatManager;
-  private jobManager: GameJobManager;
-  private blueprintManager: BlueprintManager;
-  private enemyManager: EnemyManager;
-  private robotManager: RobotManager;
+  public habitatManager: HabitatManager;
+  public jobManager: GameJobManager;
+  public blueprintManager: BlueprintManager;
+  public enemyManager: EnemyManager;
+  public robotManager: RobotManager;
 
   constructor() {
     super({ key: "MainScene" });
