@@ -5,6 +5,7 @@ import {
   TILE_SIZE,
   ROBOT_VELOCITY,
   MINING_DRONE_MINING_DURATION,
+  MINING_DRONE_MAX_RESOURCE_CAPACITY,
 } from "../../constants";
 import { MINING_RADIUS, MiningStation } from "../buildings/MiningStation";
 import { getResourceRichnessAt } from "../../terrain";

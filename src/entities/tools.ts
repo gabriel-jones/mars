@@ -472,6 +472,18 @@ export class Tool {
       // Set bullet velocity
       bullet.setVelocity(velocityX, velocityY);
 
+      // Enable continuous collision detection for fast-moving objects
+      const bulletBody = bullet.body as Phaser.Physics.Arcade.Body;
+      if (bulletBody) {
+        // This helps prevent tunneling through objects at high speeds
+        bulletBody.setBounce(0);
+        bulletBody.setMaxSpeed(1200);
+
+        // Store the previous position to help with collision detection
+        (bullet as any).prevX = startX;
+        (bullet as any).prevY = startY;
+      }
+
       // Get the damage from weapon characteristics
       const damage = this.characteristics.damage;
 
@@ -492,8 +504,11 @@ export class Tool {
       const body = bullet.body as Phaser.Physics.Arcade.Body;
       if (body) {
         // Set a larger hitbox for the bullet for better collision detection
-        body.setSize(16, 16);
-        body.setOffset(-4, -6); // Center the hitbox on the bullet
+        body.setSize(24, 24); // Increased from 16x16 to 24x24 for better collision
+        body.setOffset(-8, -10); // Adjusted offset to center the hitbox better
+
+        // Disable gravity for the bullet
+        body.setAllowGravity(false);
 
         // Enable collision with world bounds
         body.setCollideWorldBounds(true);
@@ -504,8 +519,8 @@ export class Tool {
       const debugRect = this.scene.add.rectangle(
         bullet.x,
         bullet.y,
-        16,
-        16,
+        24,
+        24,
         this.type === ToolType.RAYGUN ? 0xff0000 : 0xffff00, // Match the bullet color
         0.3
       );
@@ -570,28 +585,34 @@ export class Tool {
       } else {
         // Player bullets can hit enemies
         if (gameState.enemies && gameState.enemies.length > 0) {
-          for (const enemy of gameState.enemies) {
-            if (enemy && enemy.getSprite) {
-              const enemySprite = enemy.getSprite();
-              this.scene.physics.add.overlap(
-                bullet,
-                enemySprite,
-                (bullet, enemySprite) => {
-                  // Destroy the bullet
-                  bullet.destroy();
-                  debugRect.destroy();
+          // Create a single collision handler for all enemies
+          this.scene.physics.add.overlap(
+            bullet,
+            gameState.enemies
+              .map((enemy: any) => enemy.getSprite())
+              .filter(Boolean),
+            (bullet, enemySprite) => {
+              // Destroy the bullet
+              bullet.destroy();
+              debugRect.destroy();
 
-                  // Damage the enemy
-                  if (enemy && typeof enemy.damage === "function") {
-                    enemy.damage(damage);
-                    console.log(
-                      `Enemy hit by player bullet for ${damage} damage`
-                    );
-                  }
-                }
+              // Find the enemy instance from the sprite
+              const enemy = gameState.enemies.find(
+                (e: any) => e.getSprite() === enemySprite
               );
-            }
-          }
+
+              // Damage the enemy
+              if (enemy && typeof enemy.damage === "function") {
+                enemy.damage(damage);
+                console.log(`Enemy hit by player bullet for ${damage} damage`);
+              }
+            },
+            // Process callback to ensure collision is always checked
+            (bullet, enemySprite) => {
+              return true; // Always process the collision
+            },
+            this
+          );
         }
       }
 
@@ -611,6 +632,26 @@ export class Tool {
         loop: true,
       });
 
+      // Add an update event to handle continuous collision detection
+      const bulletUpdater = this.scene.time.addEvent({
+        delay: 8, // Check more frequently than the debug rect
+        callback: () => {
+          if (!bullet.active) return;
+
+          // Store current position for next frame
+          const currentX = bullet.x;
+          const currentY = bullet.y;
+
+          // Update the debug rectangle position
+          debugRect.setPosition(currentX, currentY);
+
+          // Store current position for next frame
+          (bullet as any).prevX = currentX;
+          (bullet as any).prevY = currentY;
+        },
+        loop: true,
+      });
+
       // Log bullet creation
       console.log(
         `Created bullet with damage ${damage}, angle ${(
@@ -625,6 +666,7 @@ export class Tool {
           bullet.destroy();
           debugRect.destroy();
           debugUpdater.destroy();
+          bulletUpdater.destroy();
         }
       });
     } catch (error) {

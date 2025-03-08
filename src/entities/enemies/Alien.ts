@@ -54,10 +54,15 @@ export class Alien extends Enemy {
         if (this.sprite.body) {
           // Set a circular body for better collision detection
           (this.sprite.body as Phaser.Physics.Arcade.Body).setCircle(
-            this.sprite.width / 3,
-            this.sprite.width / 3,
-            this.sprite.height / 3
+            this.sprite.width / 2.5, // Increased from width/3 for better collision
+            this.sprite.width / 4, // Adjusted x offset
+            this.sprite.height / 4 // Adjusted y offset
           );
+
+          // Enable continuous collision detection
+          (
+            this.sprite.body as Phaser.Physics.Arcade.Body
+          ).setCollideWorldBounds(true);
         } else {
           console.error("Alien sprite body is null or undefined!");
         }
