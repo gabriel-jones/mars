@@ -506,85 +506,90 @@ export class MainScene extends Phaser.Scene {
       existingFixedDebugButton.destroy();
     }
 
-    // Create a simple debug button that's always visible
-    const debugButtonBg = this.add.rectangle(
-      this.scale.width - 120,
-      50,
-      100,
-      40,
-      0xff0000,
-      0.8
-    );
-    debugButtonBg.setOrigin(0.5);
-    debugButtonBg.setScrollFactor(0);
-    debugButtonBg.setDepth(DEPTH.UI + 150);
-    debugButtonBg.setInteractive({ useHandCursor: true });
-
-    const debugButtonText = this.add.text(this.scale.width - 120, 50, "DEBUG", {
-      fontFamily: DEFAULT_FONT,
-      fontSize: "20px",
-      color: "#FFFFFF",
-      align: "center",
-      fontStyle: "bold",
-    });
-    debugButtonText.setOrigin(0.5);
-    debugButtonText.setScrollFactor(0);
-    debugButtonText.setDepth(DEPTH.UI + 151);
-
-    // Group the button elements
-    const debugButtonGroup = this.add.container(0, 0, [
-      debugButtonBg,
-      debugButtonText,
-    ]);
-    debugButtonGroup.setName("debugButtonGroup");
-
-    // Create a direct debug menu implementation
-    // Create debug menu container
-    const debugMenuContainer = this.add.container(this.scale.width - 310, 10);
-    debugMenuContainer.setDepth(DEPTH.UI + 200);
-    debugMenuContainer.setVisible(false); // Hidden by default
-    debugMenuContainer.setName("debugMenuContainer");
-
-    // Make sure the debug menu is not ignored by the main camera
-    this.cameras.main.ignore(debugMenuContainer);
-
-    // Create debug menu background
-    const debugMenuBg = this.add.rectangle(0, 0, 300, 500, 0x000000, 0.9);
-    debugMenuBg.setOrigin(0, 0);
-    debugMenuContainer.add(debugMenuBg);
-
-    // Create debug menu title with border
-    const titleBg = this.add.rectangle(0, 0, 300, 40, 0xff0000, 0.8);
-    titleBg.setOrigin(0, 0);
-    debugMenuContainer.add(titleBg);
-
-    const debugMenuTitle = this.add.text(10, 10, "DEBUG MENU", {
-      fontFamily: DEFAULT_FONT,
-      fontSize: "24px",
-      color: "#FFFFFF",
-      fontStyle: "bold",
-    });
-    debugMenuContainer.add(debugMenuTitle);
-
-    // Create close button
-    const closeButton = this.add.text(270, 10, "X", {
-      fontFamily: DEFAULT_FONT,
-      fontSize: "24px",
-      color: "#FFFFFF",
-      fontStyle: "bold",
-    });
-    closeButton.setInteractive({ useHandCursor: true });
-    closeButton.on("pointerdown", () => {
-      console.log("Close button clicked");
-      debugMenuContainer.setVisible(false);
-      // Reset debug button appearance
-      debugButtonBg.setFillStyle(0xff0000, 0.8);
-      debugButtonText.setText("DEBUG");
-    });
-    debugMenuContainer.add(closeButton);
-
-    // Add debug buttons
+    // Only create debug button and menu in debug mode
     if (this.isDebugMode) {
+      // Create a simple debug button that's always visible
+      const debugButtonBg = this.add.rectangle(
+        this.scale.width - 120,
+        50,
+        100,
+        40,
+        0xff0000,
+        0.8
+      );
+      debugButtonBg.setOrigin(0.5);
+      debugButtonBg.setScrollFactor(0);
+      debugButtonBg.setDepth(DEPTH.UI + 150);
+      debugButtonBg.setInteractive({ useHandCursor: true });
+
+      const debugButtonText = this.add.text(
+        this.scale.width - 120,
+        50,
+        "DEBUG",
+        {
+          fontFamily: DEFAULT_FONT,
+          fontSize: "20px",
+          color: "#FFFFFF",
+          align: "center",
+          fontStyle: "bold",
+        }
+      );
+      debugButtonText.setOrigin(0.5);
+      debugButtonText.setScrollFactor(0);
+      debugButtonText.setDepth(DEPTH.UI + 151);
+
+      // Group the button elements
+      const debugButtonGroup = this.add.container(0, 0, [
+        debugButtonBg,
+        debugButtonText,
+      ]);
+      debugButtonGroup.setName("debugButtonGroup");
+
+      // Create a direct debug menu implementation
+      // Create debug menu container
+      const debugMenuContainer = this.add.container(this.scale.width - 310, 10);
+      debugMenuContainer.setDepth(DEPTH.UI + 200);
+      debugMenuContainer.setVisible(false); // Hidden by default
+      debugMenuContainer.setName("debugMenuContainer");
+
+      // Make sure the debug menu is not ignored by the main camera
+      this.cameras.main.ignore(debugMenuContainer);
+
+      // Create debug menu background
+      const debugMenuBg = this.add.rectangle(0, 0, 300, 500, 0x000000, 0.9);
+      debugMenuBg.setOrigin(0, 0);
+      debugMenuContainer.add(debugMenuBg);
+
+      // Create debug menu title with border
+      const titleBg = this.add.rectangle(0, 0, 300, 40, 0xff0000, 0.8);
+      titleBg.setOrigin(0, 0);
+      debugMenuContainer.add(titleBg);
+
+      const debugMenuTitle = this.add.text(10, 10, "DEBUG MENU", {
+        fontFamily: DEFAULT_FONT,
+        fontSize: "24px",
+        color: "#FFFFFF",
+        fontStyle: "bold",
+      });
+      debugMenuContainer.add(debugMenuTitle);
+
+      // Create close button
+      const closeButton = this.add.text(270, 10, "X", {
+        fontFamily: DEFAULT_FONT,
+        fontSize: "24px",
+        color: "#FFFFFF",
+        fontStyle: "bold",
+      });
+      closeButton.setInteractive({ useHandCursor: true });
+      closeButton.on("pointerdown", () => {
+        console.log("Close button clicked");
+        debugMenuContainer.setVisible(false);
+        // Reset debug button appearance
+        debugButtonBg.setFillStyle(0xff0000, 0.8);
+        debugButtonText.setText("DEBUG");
+      });
+      debugMenuContainer.add(closeButton);
+
       // Start a raid button
       this.addDebugButton(debugMenuContainer, "Start a Raid", 60, () => {
         if (this.raidManager) {
@@ -637,58 +642,24 @@ export class MainScene extends Phaser.Scene {
         "oxygen",
       ];
 
-      resourceTypes.forEach((resourceType) => {
+      // Add buttons for each resource type
+      resourceTypes.forEach((type) => {
         this.addDebugButton(
           debugMenuContainer,
-          `Add 100 ${this.capitalizeFirstLetter(resourceType)}`,
+          `Add 1000 ${this.capitalizeFirstLetter(type)}`,
           yPos,
           () => {
-            console.log(`Adding 100 ${resourceType}`);
-            // Find the resource in the inventory or add it
-            const resourceIndex = gameState.resources.inventory.findIndex(
-              (r: any) => r.type === resourceType
-            );
-
-            if (resourceIndex >= 0) {
-              gameState.resources.inventory[resourceIndex].amount += 100;
-            } else {
-              // Create a new ResourceCount object
-              gameState.resources.inventory.push({
-                type: resourceType,
-                amount: 100,
-              });
-            }
-
-            // Emit resource change event
-            gameState.resources.events.emit("resourcesChanged");
+            console.log(`Adding 1000 ${type}`);
+            ResourceManager.addResource(type, 1000);
           }
         );
-
         yPos += 50;
-      });
-
-      // Add debug buttons
-      this.addDebugButton(debugMenuContainer, "Add 100 Iron", 50, () => {
-        ResourceManager.addResource("iron", 100);
-      });
-
-      this.addDebugButton(debugMenuContainer, "Add 100 Silicon", 90, () => {
-        ResourceManager.addResource("silicon", 100);
-      });
-
-      this.addDebugButton(debugMenuContainer, "Add 100 Energy", 130, () => {
-        ResourceManager.addResource("energy", 100);
-        console.log(
-          "Added 100 energy. Current energy:",
-          ResourceManager.getResourceAmount("energy")
-        );
-        console.log("Current inventory:", ResourceManager.getInventory());
       });
 
       this.addDebugButton(
         debugMenuContainer,
         "Check Resource Display",
-        170,
+        yPos,
         () => {
           console.log(
             "Resource display containers:",
@@ -703,11 +674,12 @@ export class MainScene extends Phaser.Scene {
           this.resourceDisplay.update();
         }
       );
+      yPos += 50;
 
       this.addDebugButton(
         debugMenuContainer,
         "Update Energy Display",
-        210,
+        yPos,
         () => {
           // Force add energy if it doesn't exist
           if (ResourceManager.getResourceAmount("energy") === 0) {
@@ -729,6 +701,7 @@ export class MainScene extends Phaser.Scene {
           console.log("Energy balance:", EnergyManager.getEnergyBalance());
         }
       );
+      yPos += 50;
 
       // Adjust background height based on number of buttons
       debugMenuBg.height = yPos + 10;
@@ -768,43 +741,6 @@ export class MainScene extends Phaser.Scene {
       });
 
       console.log("Debug menu created and button handler set up");
-    } else {
-      // In non-debug mode, show a message when clicked
-      debugButtonBg.on("pointerdown", () => {
-        console.log("Debug button clicked in non-debug mode");
-        const message = this.add.text(
-          this.scale.width / 2,
-          100,
-          "Debug mode is disabled.\nRun with 'npm run dev:debug' to enable.",
-          {
-            fontFamily: DEFAULT_FONT,
-            fontSize: "20px",
-            color: "#FF0000",
-            backgroundColor: "#000000",
-            padding: { x: 12, y: 8 },
-            align: "center",
-          }
-        );
-        message.setOrigin(0.5, 0);
-        message.setScrollFactor(0);
-        message.setDepth(DEPTH.UI + 100);
-
-        // Make the message disappear after 3 seconds
-        this.time.delayedCall(3000, () => {
-          message.destroy();
-        });
-      });
-
-      // Add hover effects
-      debugButtonBg.on("pointerover", () => {
-        debugButtonBg.setFillStyle(0x333333, 0.9);
-      });
-
-      debugButtonBg.on("pointerout", () => {
-        debugButtonBg.setFillStyle(0x000000, 0.8);
-      });
-
-      console.log("Debug button created in non-debug mode");
     }
 
     // Add resize handler
@@ -1402,30 +1338,33 @@ export class MainScene extends Phaser.Scene {
       this.toolInventoryDisplay.resize();
     }
 
-    // Update debug button position
-    const debugButtonGroup = this.children.getByName(
-      "debugButtonGroup"
-    ) as Phaser.GameObjects.Container;
-    if (debugButtonGroup) {
-      const debugButtonBg = debugButtonGroup.getAt(
-        0
-      ) as Phaser.GameObjects.Rectangle;
-      const debugButtonText = debugButtonGroup.getAt(
-        1
-      ) as Phaser.GameObjects.Text;
+    // Only update debug button and menu positions if in debug mode
+    if (this.isDebugMode) {
+      // Update debug button position
+      const debugButtonGroup = this.children.getByName(
+        "debugButtonGroup"
+      ) as Phaser.GameObjects.Container;
+      if (debugButtonGroup) {
+        const debugButtonBg = debugButtonGroup.getAt(
+          0
+        ) as Phaser.GameObjects.Rectangle;
+        const debugButtonText = debugButtonGroup.getAt(
+          1
+        ) as Phaser.GameObjects.Text;
 
-      if (debugButtonBg && debugButtonText) {
-        debugButtonBg.setPosition(gameSize.width - 120, 50);
-        debugButtonText.setPosition(gameSize.width - 120, 50);
+        if (debugButtonBg && debugButtonText) {
+          debugButtonBg.setPosition(gameSize.width - 120, 50);
+          debugButtonText.setPosition(gameSize.width - 120, 50);
+        }
       }
-    }
 
-    // Update debug menu position
-    const debugMenuContainer = this.children.getByName(
-      "debugMenuContainer"
-    ) as Phaser.GameObjects.Container;
-    if (debugMenuContainer) {
-      debugMenuContainer.setPosition(gameSize.width - 310, 10);
+      // Update debug menu position
+      const debugMenuContainer = this.children.getByName(
+        "debugMenuContainer"
+      ) as Phaser.GameObjects.Container;
+      if (debugMenuContainer) {
+        debugMenuContainer.setPosition(gameSize.width - 310, 10);
+      }
     }
 
     // Log resize event for debugging

@@ -3,7 +3,7 @@ import { BuildingType, BUILDING_DEFINITIONS } from "../data/buildings";
 import { DEFAULT_FONT } from "../constants";
 import { CloseButton } from "./closeButton";
 import { BuildingPlacer } from "../mechanics/buildingPlacer";
-import { ResourceManager } from "../data/resources";
+import { ResourceManager, ResourceType } from "../data/resources";
 import { DEPTH } from "../depth";
 
 export class BuildMenu {
@@ -17,6 +17,16 @@ export class BuildMenu {
   private bulldozeButton: Phaser.GameObjects.Container;
   private isBulldozeModeActive: boolean = false;
   private onMenuClosed: () => void;
+  private buildingButtons: Map<
+    BuildingType,
+    {
+      background: Phaser.GameObjects.Rectangle;
+      nameText: Phaser.GameObjects.Text;
+      image: Phaser.GameObjects.Sprite;
+      costTexts: Phaser.GameObjects.Text[];
+    }
+  > = new Map();
+  private tooltipContainer: Phaser.GameObjects.Container | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -33,6 +43,19 @@ export class BuildMenu {
 
     // Create the panel
     this.createPanel();
+
+    // Listen for resource changes to update button states
+    const gameState = (window as any).gameState;
+    if (gameState && gameState.resources && gameState.resources.events) {
+      gameState.resources.events.on(
+        ResourceManager.EVENTS.INVENTORY_CHANGED,
+        () => {
+          if (this.isVisible()) {
+            this.updateAllButtonStates();
+          }
+        }
+      );
+    }
   }
 
   private createPanel(): void {
@@ -277,6 +300,7 @@ export class BuildMenu {
 
       // Add resource costs in two columns
       const costs = building.cost;
+      const costTexts: Phaser.GameObjects.Text[] = [];
 
       // Split costs into two columns
       const leftColumnCosts = costs.slice(0, Math.ceil(costs.length / 2));
@@ -297,6 +321,7 @@ export class BuildMenu {
         );
         costText.setOrigin(0, 0.5);
         this.contentContainer.add(costText);
+        costTexts.push(costText);
       });
 
       // Right column
@@ -314,25 +339,56 @@ export class BuildMenu {
         );
         costText.setOrigin(0, 0.5);
         this.contentContainer.add(costText);
+        costTexts.push(costText);
+      });
+
+      // Store button elements for later updates
+      this.buildingButtons.set(building.buildingType, {
+        background: buttonBg,
+        nameText: nameText,
+        image: buildingImage,
+        costTexts: costTexts,
       });
 
       // Add hover and click effects
       buttonBg.on("pointerover", () => {
-        buttonBg.setFillStyle(0x555555);
+        // Only change color if button is enabled
+        if (buttonBg.getData("enabled")) {
+          buttonBg.setFillStyle(0x555555);
+        } else {
+          // Show tooltip for disabled buttons
+          this.showResourceTooltip(building, x, y - buttonHeight / 2 - 20);
+        }
       });
 
       buttonBg.on("pointerout", () => {
-        buttonBg.setFillStyle(0x333333);
+        // Restore original color based on enabled state
+        if (buttonBg.getData("enabled")) {
+          buttonBg.setFillStyle(0x333333);
+        } else {
+          buttonBg.setFillStyle(0x222222);
+        }
+        // Hide tooltip
+        this.hideTooltip();
       });
 
       buttonBg.on("pointerdown", () => {
-        buttonBg.setFillStyle(0x222222);
+        // Only respond if button is enabled
+        if (buttonBg.getData("enabled")) {
+          buttonBg.setFillStyle(0x222222);
+        }
       });
 
       buttonBg.on("pointerup", () => {
-        buttonBg.setFillStyle(0x555555);
-        this.selectBuildingItem(building.buildingType);
+        // Only respond if button is enabled
+        if (buttonBg.getData("enabled")) {
+          buttonBg.setFillStyle(0x555555);
+          this.selectBuildingItem(building.buildingType);
+        }
       });
+
+      // Set initial button state
+      this.updateButtonState(building.buildingType);
     });
 
     // Add bulldoze button at the end
@@ -345,6 +401,142 @@ export class BuildMenu {
 
     this.bulldozeButton = this.createBulldozeButton(bulldozeX, bulldozeY);
     this.contentContainer.add(this.bulldozeButton);
+  }
+
+  /**
+   * Shows a tooltip explaining which resources are missing
+   */
+  private showResourceTooltip(building: any, x: number, y: number): void {
+    // Hide any existing tooltip
+    this.hideTooltip();
+
+    // Create tooltip container
+    this.tooltipContainer = this.scene.add.container(x, y);
+    this.tooltipContainer!.setDepth(DEPTH.UI + 10);
+    this.contentContainer.add(this.tooltipContainer!);
+
+    // Find missing resources
+    const missingResources: {
+      type: ResourceType;
+      amount: number;
+      current: number;
+    }[] = [];
+
+    for (const cost of building.cost) {
+      const currentAmount = ResourceManager.getResourceAmount(cost.type);
+      if (currentAmount < cost.amount) {
+        missingResources.push({
+          type: cost.type,
+          amount: cost.amount,
+          current: currentAmount,
+        });
+      }
+    }
+
+    // Create tooltip background
+    const padding = 10;
+    const lineHeight = 20;
+    const tooltipWidth = 200;
+    const tooltipHeight = 30 + missingResources.length * lineHeight;
+
+    const tooltipBg = this.scene.add.rectangle(
+      0,
+      0,
+      tooltipWidth,
+      tooltipHeight,
+      0x000000,
+      0.8
+    );
+    tooltipBg.setStrokeStyle(1, 0xffffff);
+    this.tooltipContainer!.add(tooltipBg);
+
+    // Add title
+    const titleText = this.scene.add.text(
+      0,
+      -tooltipHeight / 2 + padding + 5,
+      "Missing Resources:",
+      {
+        fontSize: "14px",
+        fontStyle: "bold",
+        color: "#ff5555",
+        align: "center",
+      }
+    );
+    titleText.setOrigin(0.5, 0);
+    this.tooltipContainer!.add(titleText);
+
+    // Add missing resource details
+    missingResources.forEach((resource, index) => {
+      const resourceDef = ResourceManager.getResource(resource.type);
+      const resourceEmoji = resourceDef ? resourceDef.emoji : "❓";
+      const resourceName = resourceDef ? resourceDef.name : resource.type;
+
+      const resourceText = this.scene.add.text(
+        -tooltipWidth / 2 + padding,
+        -tooltipHeight / 2 + padding + 30 + index * lineHeight,
+        `${resourceEmoji} ${resourceName}: ${resource.current}/${resource.amount}`,
+        {
+          fontSize: "12px",
+          color: "#ffffff",
+        }
+      );
+      resourceText.setOrigin(0, 0);
+      this.tooltipContainer!.add(resourceText);
+    });
+  }
+
+  /**
+   * Hides the tooltip
+   */
+  private hideTooltip(): void {
+    if (this.tooltipContainer) {
+      this.tooltipContainer.destroy();
+      this.tooltipContainer = null;
+    }
+  }
+
+  /**
+   * Updates the state of a building button based on resource availability
+   * @param buildingType The type of building to update
+   */
+  private updateButtonState(buildingType: BuildingType): void {
+    const buttonData = this.buildingButtons.get(buildingType);
+    if (!buttonData) return;
+
+    // Get the building definition
+    const building = BUILDING_DEFINITIONS.find(
+      (b) => b.buildingType === buildingType
+    );
+    if (!building) return;
+
+    // Check if we have enough resources
+    const hasEnoughResources = ResourceManager.hasResources(building.cost);
+
+    // Update button state
+    buttonData.background.setData("enabled", hasEnoughResources);
+
+    if (hasEnoughResources) {
+      // Enable button
+      buttonData.background.setFillStyle(0x333333);
+      buttonData.nameText.setAlpha(1);
+      buttonData.image.setAlpha(1);
+      buttonData.costTexts.forEach((text) => text.setAlpha(1));
+    } else {
+      // Disable button
+      buttonData.background.setFillStyle(0x222222);
+      buttonData.nameText.setAlpha(0.5);
+      buttonData.image.setAlpha(0.5);
+      buttonData.costTexts.forEach((text) => text.setAlpha(0.5));
+    }
+  }
+
+  /**
+   * Updates all building buttons based on current resource availability
+   */
+  public updateAllButtonStates(): void {
+    for (const buildingType of this.buildingButtons.keys()) {
+      this.updateButtonState(buildingType);
+    }
   }
 
   private selectBuildingItem(buildingType: BuildingType): void {
@@ -360,8 +552,12 @@ export class BuildMenu {
     this.hide(true);
   }
 
+  /**
+   * Shows the build menu and updates button states
+   */
   public show(): void {
     this.container.setVisible(true);
+    this.updateAllButtonStates();
   }
 
   public hide(notifyActionMenu: boolean = false): void {
@@ -383,6 +579,17 @@ export class BuildMenu {
   }
 
   public destroy(): void {
+    // Remove event listeners
+    const gameState = (window as any).gameState;
+    if (gameState && gameState.resources && gameState.resources.events) {
+      gameState.resources.events.off(
+        ResourceManager.EVENTS.INVENTORY_CHANGED,
+        this.updateAllButtonStates,
+        this
+      );
+    }
+
+    // Destroy all components
     this.container.destroy();
   }
 }
