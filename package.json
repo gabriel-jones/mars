@@ -9,7 +9,7 @@
   "author": "Gabriel Jones <gdev.bm@icloud.com> (https://gdev.bm/)",
   "scripts": {
     "dev": "bun --watch run dev-server.ts",
-    "build": "bun build ./src/main.ts ./public/**/*.png ./public/index.html --outdir ./dist --asset-naming [name].[ext]"
+    "build": "bun build ./src/main.ts ./public/**/*.png ./index.html --outdir ./dist --asset-naming [name].[ext]"
   },
   "devDependencies": {
     "terser": "^5.31.0",
