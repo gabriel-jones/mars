@@ -6,6 +6,7 @@ import { BuildMenu } from "./buildMenu";
 import { RobotsMenu, RobotInfo } from "./robotsMenu";
 import { ShipsMenu, StarshipInfo } from "./shipsMenu";
 import { EarthMenu } from "./earthMenu";
+import { MarsMenu } from "./marsMenu";
 
 interface ButtonConfig {
   text: string;
@@ -16,7 +17,13 @@ interface ButtonConfig {
 }
 
 // Define menu types
-type MenuType = "construction" | "robots" | "starships" | "earth" | "none";
+type MenuType =
+  | "construction"
+  | "robots"
+  | "starships"
+  | "earth"
+  | "mars"
+  | "none";
 
 export class ActionMenu {
   private scene: Phaser.Scene;
@@ -24,12 +31,14 @@ export class ActionMenu {
   private robotsButton: Phaser.GameObjects.Container;
   private starshipsButton: Phaser.GameObjects.Container;
   private earthButton: Phaser.GameObjects.Container;
+  private marsButton: Phaser.GameObjects.Container;
 
   // Menu instances
   private buildMenu: BuildMenu;
   private robotsMenu: RobotsMenu;
   private shipsMenu: ShipsMenu;
   private earthMenu: EarthMenu;
+  private marsMenu: MarsMenu;
 
   // State tracking
   private activeMenu: MenuType = "none";
@@ -46,6 +55,10 @@ export class ActionMenu {
 
   public get isEarthMenuOpen(): boolean {
     return this.activeMenu === "earth";
+  }
+
+  public get isMarsPanelOpen(): boolean {
+    return this.activeMenu === "mars";
   }
 
   constructor(
@@ -76,7 +89,7 @@ export class ActionMenu {
     // Build button
     this.buildButton = this.createButton({
       text: "BUILD",
-      x: this.scene.cameras.main.width / 2 - buttonSpacing * 1.5,
+      x: this.scene.cameras.main.width / 2 - buttonSpacing * 2,
       y: buttonY,
       onClick: () => this.toggleMenu("construction"),
       icon: "build-mini",
@@ -86,7 +99,7 @@ export class ActionMenu {
     // Robots button
     this.robotsButton = this.createButton({
       text: "ROBOTS",
-      x: this.scene.cameras.main.width / 2 - buttonSpacing * 0.5,
+      x: this.scene.cameras.main.width / 2 - buttonSpacing,
       y: buttonY,
       onClick: () => this.toggleMenu("robots"),
       icon: "optimus-mini",
@@ -96,7 +109,7 @@ export class ActionMenu {
     // Starships button
     this.starshipsButton = this.createButton({
       text: "SHIPS",
-      x: this.scene.cameras.main.width / 2 + buttonSpacing * 0.5,
+      x: this.scene.cameras.main.width / 2,
       y: buttonY,
       onClick: () => this.toggleMenu("starships"),
       icon: "starship-mini",
@@ -106,12 +119,22 @@ export class ActionMenu {
     // Earth button
     this.earthButton = this.createButton({
       text: "EARTH",
-      x: this.scene.cameras.main.width / 2 + buttonSpacing * 1.5,
+      x: this.scene.cameras.main.width / 2 + buttonSpacing,
       y: buttonY,
       onClick: () => this.toggleMenu("earth"),
       icon: "earth-mini",
     });
     this.earthButton.setScrollFactor(0);
+
+    // Mars button
+    this.marsButton = this.createButton({
+      text: "MARS",
+      x: this.scene.cameras.main.width / 2 + buttonSpacing * 2,
+      y: buttonY,
+      onClick: () => this.toggleMenu("mars"),
+      icon: "mars-mini",
+    });
+    this.marsButton.setScrollFactor(0);
 
     // Create menu instances
     this.buildMenu = new BuildMenu(scene, this.buildingPlacer, () => {
@@ -130,11 +153,21 @@ export class ActionMenu {
       console.error("Error initializing Earth menu:", error);
     }
 
+    // Create Mars menu
+    try {
+      console.log("Initializing Mars menu");
+      this.marsMenu = new MarsMenu(scene);
+      console.log("Mars menu initialized successfully");
+    } catch (error) {
+      console.error("Error initializing Mars menu:", error);
+    }
+
     // Add all buttons to the scene
     scene.add.existing(this.buildButton);
     scene.add.existing(this.robotsButton);
     scene.add.existing(this.starshipsButton);
     scene.add.existing(this.earthButton);
+    scene.add.existing(this.marsButton);
   }
 
   // Create a button with text and optional icon
@@ -256,6 +289,17 @@ export class ActionMenu {
         this.highlightButton(this.earthButton);
         break;
 
+      case "mars":
+        // Show the Mars menu
+        if (this.marsMenu) {
+          console.log("Showing Mars menu");
+          this.marsMenu.show();
+        }
+
+        // Highlight the Mars button
+        this.highlightButton(this.marsButton);
+        break;
+
       case "none":
       default:
         // No menu is active
@@ -281,6 +325,12 @@ export class ActionMenu {
     if (this.earthMenu) {
       console.log("Hiding Earth menu from hideAllMenus");
       (this.earthMenu as any).hide();
+    }
+
+    // Hide the Mars menu
+    if (this.marsMenu) {
+      console.log("Hiding Mars menu from hideAllMenus");
+      this.marsMenu.hide();
     }
 
     this.resetButtonHighlights();
@@ -342,6 +392,7 @@ export class ActionMenu {
       this.robotsButton,
       this.starshipsButton,
       this.earthButton,
+      this.marsButton,
     ].forEach((button) => {
       try {
         // Find elements by name
@@ -462,7 +513,7 @@ export class ActionMenu {
 
   // Maintain button highlights based on active menu
   private maintainButtonHighlights(): void {
-    // Only highlight the active button if a menu is open
+    // Maintain the highlight on the active menu button
     switch (this.activeMenu) {
       case "construction":
         this.highlightButton(this.buildButton);
@@ -476,25 +527,29 @@ export class ActionMenu {
       case "earth":
         this.highlightButton(this.earthButton);
         break;
+      case "mars":
+        this.highlightButton(this.marsButton);
+        break;
       default:
-        // No menu active, all buttons should be in default state
         break;
     }
   }
 
-  update(): void {
-    // Update the building placer if it exists
-    if (this.buildingPlacer) {
-      this.buildingPlacer.update();
-    }
+  update(time: number, delta: number): void {
+    // Update the building placer
+    this.buildingPlacer.update();
 
-    // Update the Earth menu if it exists
-    if (this.earthMenu) {
-      // Use type assertion to access the update method
+    // Update the Earth menu
+    if (this.activeMenu === "earth" && this.earthMenu) {
       (this.earthMenu as any).update();
     }
 
-    // Maintain button highlights based on active menu
+    // Update the Mars menu
+    if (this.activeMenu === "mars" && this.marsMenu) {
+      this.marsMenu.update(time, delta);
+    }
+
+    // Maintain button highlights
     this.maintainButtonHighlights();
 
     // If the Earth menu is open, check if any starships are in Earth orbit
@@ -537,14 +592,35 @@ export class ActionMenu {
 
   // Clean up resources
   public destroy(): void {
+    // Destroy all menus
     this.buildMenu.destroy();
     this.robotsMenu.destroy();
-    this.shipsMenu.destroy();
-    (this.earthMenu as any).destroy();
+    if (this.shipsMenu) this.shipsMenu.destroy();
+    if (this.earthMenu) (this.earthMenu as any).destroy();
+    if (this.marsMenu) this.marsMenu.destroy();
 
+    // Remove all buttons
     this.buildButton.destroy();
     this.robotsButton.destroy();
     this.starshipsButton.destroy();
     this.earthButton.destroy();
+    this.marsButton.destroy();
+
+    // Remove keyboard listeners
+    if (this.scene.input && this.scene.input.keyboard) {
+      this.scene.input.keyboard.off("keydown-ESC");
+    }
+  }
+
+  // Add a public method to access the Earth menu
+  public getEarthMenu(): EarthMenu {
+    return this.earthMenu;
+  }
+
+  // Update the Mars menu with the current Starlink satellite count
+  public updateMarsMenuStarlinkStatus(count: number): void {
+    if (this.marsMenu) {
+      this.marsMenu.updateStarlinkStatus(count);
+    }
   }
 }

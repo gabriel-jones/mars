@@ -624,9 +624,16 @@ export class Starship extends Phaser.GameObjects.Container {
       JSON.stringify(queue)
     );
 
+    // Track Starlink satellites for Mars menu update
+    let starlinkCount = 0;
+
     // Process each item in the queue
     queue.forEach((item: TransferItem) => {
-      if (item.isRobot) {
+      if (item.isStarlink) {
+        // Handle Starlink satellites - they stay in Mars orbit
+        starlinkCount += item.amount;
+        console.log(`Added ${item.amount} Starlink satellites to Mars orbit`);
+      } else if (item.isRobot) {
         // Add robots to the inventory as a special resource type
         const resourceType = "robot" as ResourceType;
         if (!this.inventory[resourceType]) {
@@ -648,6 +655,23 @@ export class Starship extends Phaser.GameObjects.Container {
         );
       }
     });
+
+    // Update Mars menu with Starlink satellite count if any were added
+    if (starlinkCount > 0 && mainScene.actionMenu) {
+      // Get current count from Mars menu if available
+      let currentCount = 0;
+      if (mainScene.actionMenu.marsMenu) {
+        // We'll implement a method to get the current count
+        currentCount = mainScene.marsMenu
+          ? mainScene.marsMenu.getStarlinkCount() || 0
+          : 0;
+      }
+
+      // Update the Mars menu with the new total
+      mainScene.actionMenu.updateMarsMenuStarlinkStatus(
+        currentCount + starlinkCount
+      );
+    }
 
     // Log the updated inventory
     console.log(

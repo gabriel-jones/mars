@@ -59,14 +59,30 @@ export class EnemyManager {
       const spawnX = this.spawnPoint?.x || this.defaultSpawnPoint.x;
       const spawnY = this.spawnPoint?.y || this.defaultSpawnPoint.y;
 
-      // Create a few aliens for testing
-      for (let i = 0; i < count; i++) {
-        // Random position away from spawn point
-        const x = spawnX + Phaser.Math.Between(-500, 500);
-        const y = spawnY + Phaser.Math.Between(-500, 500);
+      console.log(
+        `Creating ${count} aliens at spawn point (${spawnX}, ${spawnY})`
+      );
 
-        // Create alien
-        const alien = new Alien(this.scene, x, y);
+      // Create aliens for the raid
+      for (let i = 0; i < count; i++) {
+        // Add randomness to alien positions instead of a perfect circle
+        const angle = (i / count) * Math.PI * 2 + (Math.random() * 0.5 - 0.25); // Add random angle variation
+        const minDistance = 100; // Minimum distance from spawn point
+        const maxDistance = Math.min(300, count * 30); // Scale max distance with raid size
+        const distance =
+          minDistance + Math.random() * (maxDistance - minDistance); // Random distance
+
+        const x = spawnX + Math.cos(angle) * distance;
+        const y = spawnY + Math.sin(angle) * distance;
+
+        // Create alien with increased speed for raids
+        const alien = new Alien(
+          this.scene,
+          x,
+          y,
+          80, // health
+          120 + Math.random() * 30 // randomized speed between 120-150
+        );
 
         // Add health bar to the alien
         const healthBar = this.healthBarRenderer.createHealthBar(
@@ -75,8 +91,15 @@ export class EnemyManager {
         );
         alien.setHealthBar(healthBar);
 
+        // Force the alien to immediately look for targets
+        if (typeof alien.update === "function") {
+          alien.update(this.scene.time.now, 16); // Call update once to initialize
+        }
+
         this.enemies.push(alien);
       }
+
+      console.log(`Successfully created ${count} aliens`);
 
       // Update gameState.enemies
       (window as any).gameState.enemies = this.enemies;
@@ -91,10 +114,34 @@ export class EnemyManager {
   public updateEnemies(time: number, delta: number): void {
     if (!this.initialized) return;
 
-    this.enemies.forEach((enemy) => {
-      enemy.update(time, delta);
-      // Health bar updates are already handled in the enemy's update method
+    // Filter out any destroyed enemies
+    this.enemies = this.enemies.filter((enemy) => {
+      // Check if the enemy is valid (has a sprite and is alive)
+      const isValid =
+        enemy &&
+        typeof enemy.getSprite === "function" &&
+        typeof enemy.isAlive === "function" &&
+        enemy.isAlive();
+
+      if (!isValid) {
+        console.log("Removing invalid enemy from update loop");
+      }
+
+      return isValid;
     });
+
+    // Update remaining valid enemies
+    this.enemies.forEach((enemy) => {
+      try {
+        enemy.update(time, delta);
+        // Health bar updates are already handled in the enemy's update method
+      } catch (error) {
+        console.error("Error updating enemy:", error);
+      }
+    });
+
+    // Update gameState.enemies reference
+    (window as any).gameState.enemies = this.enemies;
   }
 
   /**

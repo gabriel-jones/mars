@@ -19,7 +19,7 @@ export class SolarPanel extends RangeSelectionBuilding {
     this.energyOutput = width * height * 10; // 10 energy per tile
 
     console.log(
-      `SolarPanel constructor called with dimensions: ${width}x${height}`
+      `SolarPanel constructor called with dimensions: ${width}x${height}, energy output: ${this.energyOutput}`
     );
   }
 
@@ -44,6 +44,14 @@ export class SolarPanel extends RangeSelectionBuilding {
 
   public getEnergyOutput(): number {
     return this.energyOutput;
+  }
+
+  /**
+   * Override the calculateEnergyConsumption method to return negative value (production)
+   */
+  protected calculateEnergyConsumption(): void {
+    // Solar panels produce energy, so consumption is negative
+    this.energyConsumption = -this.energyOutput;
   }
 
   public update(time: number, delta: number): void {

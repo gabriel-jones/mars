@@ -49,8 +49,9 @@ export class RobotManager {
    * This should be called after the RobotManager is fully initialized
    */
   public createInitialRobots(): void {
-    // Create Optimus robots
+    // Create initial Optimus robots at the start of the game
     this.createOptimusRobots(NUM_INITIAL_OPTIMUS);
+    console.log(`Created ${NUM_INITIAL_OPTIMUS} initial Optimus robots`);
   }
 
   /**
@@ -67,7 +68,7 @@ export class RobotManager {
     // Get the spawn point from the scene if available
     const mainScene = this.scene as any;
     const spawnPoint = mainScene.spawnPoint;
-    const landingPadOffset = 100;
+    const landingPadOffset = 150; // Increased from 100 to move center point further from landing pad
 
     console.log("Robot spawn info:", {
       hasSpawnPoint: !!spawnPoint,
@@ -80,7 +81,7 @@ export class RobotManager {
 
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const distance = 80 + Math.random() * 40; // Slightly smaller distance to keep robots closer
+      const distance = 150 + Math.random() * 100; // Increased from 80+40 to 150+100 to spread robots further
 
       // Use spawn point + landing pad offset if available, otherwise use starship position
       let x, y;
@@ -264,10 +265,8 @@ export class RobotManager {
     // Update all robots
     this.robots.forEach((robot) => robot.update(time, delta));
 
-    // Check if we need to create more Optimus robots
-    if (this.optimuses.length < 2) {
-      this.createOptimusRobots(2 - this.optimuses.length);
-    }
+    // Removed automatic creation of Optimus robots
+    // Optimus robots should only be created through delivery from Earth
 
     // Make sure gameState.robots is always up to date
     gameState.robots = this.robots;

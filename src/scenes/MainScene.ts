@@ -14,6 +14,7 @@ import {
   MAP_WIDTH,
   MAP_HEIGHT,
   NUM_ICE_DEPOSITS,
+  DEFAULT_FONT,
 } from "../constants";
 import { createFPS } from "../ui/fps";
 import { Starship } from "../entities/starship";
@@ -37,6 +38,9 @@ import { EnemyManager } from "../mechanics/EnemyManager";
 import { RobotManager } from "../mechanics/RobotManager";
 import { DEPTH } from "../depth";
 import { RaidManager } from "../mechanics/RaidManager";
+import { TransferItem } from "../ui/earthMenu";
+import { DebugMenu } from "../ui/debugMenu";
+import { EnergyManager } from "../mechanics/EnergyManager";
 
 export class MainScene extends Phaser.Scene {
   private actionMenu: ActionMenu;
@@ -44,6 +48,7 @@ export class MainScene extends Phaser.Scene {
   private moneyDisplay: MoneyDisplay;
   private toolInventoryDisplay: ToolInventoryDisplay;
   private detailView: DetailView;
+  private debugMenu: DebugMenu;
   private fpsText: Phaser.GameObjects.Text;
   private uiCamera: Phaser.Cameras.Scene2D.Camera;
   private resourceNodes: ResourceNode[] = [];
@@ -61,6 +66,7 @@ export class MainScene extends Phaser.Scene {
   private player: Player;
   private healthBarRenderer: HealthBarRenderer;
   private shadowTexture: Phaser.Textures.CanvasTexture;
+  private isDebugMode: boolean = false;
 
   // Manager instances
   public habitatManager: HabitatManager;
@@ -103,6 +109,34 @@ export class MainScene extends Phaser.Scene {
 
     // Bullet
     // this.load.image("bullet", "assets/bullet.png");
+    // Create bullet textures programmatically
+    // Create a standard white bullet texture
+    const bulletTexture = this.textures.createCanvas("bullet", 8, 4);
+    if (bulletTexture) {
+      const bulletContext = bulletTexture.getContext();
+      bulletContext.fillStyle = "#ffffff"; // White color
+      bulletContext.fillRect(0, 0, 8, 4);
+      bulletTexture.refresh();
+      console.log("Standard bullet texture created successfully");
+    } else {
+      console.error("Failed to create standard bullet texture");
+    }
+
+    // Create a red bullet texture for raygun
+    const raygunBulletTexture = this.textures.createCanvas(
+      "raygun-bullet",
+      8,
+      4
+    );
+    if (raygunBulletTexture) {
+      const raygunBulletContext = raygunBulletTexture.getContext();
+      raygunBulletContext.fillStyle = "#ff0000"; // Red color
+      raygunBulletContext.fillRect(0, 0, 8, 4);
+      raygunBulletTexture.refresh();
+      console.log("Raygun bullet texture created successfully");
+    } else {
+      console.error("Failed to create raygun bullet texture");
+    }
 
     // Buildings
     this.load.image("habitat-wall", "assets/habitat-wall.png");
@@ -189,11 +223,18 @@ export class MainScene extends Phaser.Scene {
     this.load.image("earth-mini", "assets/earth-mini.png");
     this.load.image("mars-mini", "assets/mars-mini.png");
     this.load.image("sun-mini", "assets/sun-mini.png");
+
+    // Moon textures for Mars menu
+    this.load.image("phobos-mini", "assets/phobos-mini.png");
+    this.load.image("deimos-mini", "assets/deimos-mini.png");
   }
 
   create() {
     // Store a reference to gameState for easier access
     const gameState = (window as any).gameState;
+
+    // Check if we're in debug mode
+    this.isDebugMode = (window as any).DEBUG_MODE === true;
 
     // Create health bar renderer
     this.healthBarRenderer = new HealthBarRenderer(this);
@@ -384,6 +425,29 @@ export class MainScene extends Phaser.Scene {
       this.handleItemPlaced(itemName, x, y)
     );
 
+    // Initialize Mars menu with zero Starlink satellites
+    this.actionMenu.updateMarsMenuStarlinkStatus(0);
+
+    // Add an Optimus robot to the Earth menu's transfer queue so the starship takes off at the start
+    const optimusTransferItem: TransferItem = {
+      resourceType: "iron" as ResourceType,
+      amount: 1,
+      cost: 100_000,
+      isRobot: true,
+    };
+
+    // Use the addToQueue method to add the Optimus robot to the transfer queue
+    this.actionMenu
+      .getEarthMenu()
+      .addToQueue(
+        optimusTransferItem.resourceType,
+        optimusTransferItem.amount,
+        optimusTransferItem.cost,
+        optimusTransferItem.isRobot
+      );
+
+    console.log("Added Optimus robot to Earth menu transfer queue");
+
     // Initialize RobotManager after starship is created
     this.robotManager = new RobotManager(
       this,
@@ -430,13 +494,318 @@ export class MainScene extends Phaser.Scene {
     // Create detail view for entity selection
     this.detailView = new DetailView(this);
 
-    // Add debug message to check UI camera setup
-    console.log("UI Camera setup:", {
-      bounds: this.uiCamera.getBounds(),
-      mainCamera: this.cameras.main.id,
-      uiCamera: this.uiCamera.id,
-      detailViewContainer: this.detailView.getContainer().name || "unnamed",
+    // Remove any existing debug buttons
+    const existingDebugButton = this.children.getByName("debugButton");
+    if (existingDebugButton) {
+      existingDebugButton.destroy();
+    }
+
+    const existingFixedDebugButton =
+      this.children.getByName("fixedDebugButton");
+    if (existingFixedDebugButton) {
+      existingFixedDebugButton.destroy();
+    }
+
+    // Create a simple debug button that's always visible
+    const debugButtonBg = this.add.rectangle(
+      this.scale.width - 120,
+      50,
+      100,
+      40,
+      0xff0000,
+      0.8
+    );
+    debugButtonBg.setOrigin(0.5);
+    debugButtonBg.setScrollFactor(0);
+    debugButtonBg.setDepth(DEPTH.UI + 150);
+    debugButtonBg.setInteractive({ useHandCursor: true });
+
+    const debugButtonText = this.add.text(this.scale.width - 120, 50, "DEBUG", {
+      fontFamily: DEFAULT_FONT,
+      fontSize: "20px",
+      color: "#FFFFFF",
+      align: "center",
+      fontStyle: "bold",
     });
+    debugButtonText.setOrigin(0.5);
+    debugButtonText.setScrollFactor(0);
+    debugButtonText.setDepth(DEPTH.UI + 151);
+
+    // Group the button elements
+    const debugButtonGroup = this.add.container(0, 0, [
+      debugButtonBg,
+      debugButtonText,
+    ]);
+    debugButtonGroup.setName("debugButtonGroup");
+
+    // Create a direct debug menu implementation
+    // Create debug menu container
+    const debugMenuContainer = this.add.container(this.scale.width - 310, 10);
+    debugMenuContainer.setDepth(DEPTH.UI + 200);
+    debugMenuContainer.setVisible(false); // Hidden by default
+    debugMenuContainer.setName("debugMenuContainer");
+
+    // Make sure the debug menu is not ignored by the main camera
+    this.cameras.main.ignore(debugMenuContainer);
+
+    // Create debug menu background
+    const debugMenuBg = this.add.rectangle(0, 0, 300, 500, 0x000000, 0.9);
+    debugMenuBg.setOrigin(0, 0);
+    debugMenuContainer.add(debugMenuBg);
+
+    // Create debug menu title with border
+    const titleBg = this.add.rectangle(0, 0, 300, 40, 0xff0000, 0.8);
+    titleBg.setOrigin(0, 0);
+    debugMenuContainer.add(titleBg);
+
+    const debugMenuTitle = this.add.text(10, 10, "DEBUG MENU", {
+      fontFamily: DEFAULT_FONT,
+      fontSize: "24px",
+      color: "#FFFFFF",
+      fontStyle: "bold",
+    });
+    debugMenuContainer.add(debugMenuTitle);
+
+    // Create close button
+    const closeButton = this.add.text(270, 10, "X", {
+      fontFamily: DEFAULT_FONT,
+      fontSize: "24px",
+      color: "#FFFFFF",
+      fontStyle: "bold",
+    });
+    closeButton.setInteractive({ useHandCursor: true });
+    closeButton.on("pointerdown", () => {
+      console.log("Close button clicked");
+      debugMenuContainer.setVisible(false);
+      // Reset debug button appearance
+      debugButtonBg.setFillStyle(0xff0000, 0.8);
+      debugButtonText.setText("DEBUG");
+    });
+    debugMenuContainer.add(closeButton);
+
+    // Add debug buttons
+    if (this.isDebugMode) {
+      // Start a raid button
+      this.addDebugButton(debugMenuContainer, "Start a Raid", 60, () => {
+        if (this.raidManager) {
+          console.log("Starting a raid");
+          // Call spawnRaid method directly
+          (this.raidManager as any).spawnRaid();
+        }
+      });
+
+      // Spawn enemy button
+      this.addDebugButton(debugMenuContainer, "Spawn Enemy", 110, () => {
+        if (this.enemyManager) {
+          console.log("Spawning an enemy");
+          this.enemyManager.createEnemies(1);
+        }
+      });
+
+      // Add money button
+      this.addDebugButton(
+        debugMenuContainer,
+        "Add 1,000,000 Money",
+        160,
+        () => {
+          console.log("Adding money");
+          gameState.money += 1_000_000;
+        }
+      );
+
+      // Add Optimus robot button
+      this.addDebugButton(
+        debugMenuContainer,
+        "Spawn Optimus Robot",
+        210,
+        () => {
+          if (this.robotManager) {
+            console.log("Spawning Optimus robot");
+            this.robotManager.createOptimusRobots(1);
+          }
+        }
+      );
+
+      // Add resource buttons
+      let yPos = 260;
+      const resourceTypes: ResourceType[] = [
+        "iron",
+        "silicon",
+        "titanium",
+        "aluminium",
+        "water",
+        "oxygen",
+      ];
+
+      resourceTypes.forEach((resourceType) => {
+        this.addDebugButton(
+          debugMenuContainer,
+          `Add 100 ${this.capitalizeFirstLetter(resourceType)}`,
+          yPos,
+          () => {
+            console.log(`Adding 100 ${resourceType}`);
+            // Find the resource in the inventory or add it
+            const resourceIndex = gameState.resources.inventory.findIndex(
+              (r: any) => r.type === resourceType
+            );
+
+            if (resourceIndex >= 0) {
+              gameState.resources.inventory[resourceIndex].amount += 100;
+            } else {
+              // Create a new ResourceCount object
+              gameState.resources.inventory.push({
+                type: resourceType,
+                amount: 100,
+              });
+            }
+
+            // Emit resource change event
+            gameState.resources.events.emit("resourcesChanged");
+          }
+        );
+
+        yPos += 50;
+      });
+
+      // Add debug buttons
+      this.addDebugButton(debugMenuContainer, "Add 100 Iron", 50, () => {
+        ResourceManager.addResource("iron", 100);
+      });
+
+      this.addDebugButton(debugMenuContainer, "Add 100 Silicon", 90, () => {
+        ResourceManager.addResource("silicon", 100);
+      });
+
+      this.addDebugButton(debugMenuContainer, "Add 100 Energy", 130, () => {
+        ResourceManager.addResource("energy", 100);
+        console.log(
+          "Added 100 energy. Current energy:",
+          ResourceManager.getResourceAmount("energy")
+        );
+        console.log("Current inventory:", ResourceManager.getInventory());
+      });
+
+      this.addDebugButton(
+        debugMenuContainer,
+        "Check Resource Display",
+        170,
+        () => {
+          console.log(
+            "Resource display containers:",
+            this.resourceDisplay.getContainer().length
+          );
+          console.log(
+            "Resource display map:",
+            this.resourceDisplay["resourceDisplays"]
+          );
+
+          // Force update the resource display
+          this.resourceDisplay.update();
+        }
+      );
+
+      this.addDebugButton(
+        debugMenuContainer,
+        "Update Energy Display",
+        210,
+        () => {
+          // Force add energy if it doesn't exist
+          if (ResourceManager.getResourceAmount("energy") === 0) {
+            ResourceManager.addResource("energy", 1000);
+          }
+
+          // Force update the resource display
+          this.resourceDisplay.update();
+
+          // Log the current energy state
+          console.log(
+            "Energy production:",
+            EnergyManager.getEnergyProduction()
+          );
+          console.log(
+            "Energy consumption:",
+            EnergyManager.getEnergyConsumption()
+          );
+          console.log("Energy balance:", EnergyManager.getEnergyBalance());
+        }
+      );
+
+      // Adjust background height based on number of buttons
+      debugMenuBg.height = yPos + 10;
+
+      // Add click handler to the button background
+      debugButtonBg.on("pointerdown", () => {
+        console.log("Debug button clicked!");
+        // Toggle menu visibility
+        debugMenuContainer.setVisible(!debugMenuContainer.visible);
+        console.log("Debug menu visibility:", debugMenuContainer.visible);
+
+        // Change button color based on menu visibility
+        if (debugMenuContainer.visible) {
+          debugButtonBg.setFillStyle(0x00ff00, 0.8); // Green when menu is visible
+          debugButtonText.setText("CLOSE");
+        } else {
+          debugButtonBg.setFillStyle(0xff0000, 0.8); // Red when menu is hidden
+          debugButtonText.setText("DEBUG");
+        }
+      });
+
+      // Add hover effects
+      debugButtonBg.on("pointerover", () => {
+        if (!debugMenuContainer.visible) {
+          debugButtonBg.setFillStyle(0xdd0000, 0.9); // Darker red on hover when menu is hidden
+        } else {
+          debugButtonBg.setFillStyle(0x00dd00, 0.9); // Darker green on hover when menu is visible
+        }
+      });
+
+      debugButtonBg.on("pointerout", () => {
+        if (!debugMenuContainer.visible) {
+          debugButtonBg.setFillStyle(0xff0000, 0.8); // Red when menu is hidden
+        } else {
+          debugButtonBg.setFillStyle(0x00ff00, 0.8); // Green when menu is visible
+        }
+      });
+
+      console.log("Debug menu created and button handler set up");
+    } else {
+      // In non-debug mode, show a message when clicked
+      debugButtonBg.on("pointerdown", () => {
+        console.log("Debug button clicked in non-debug mode");
+        const message = this.add.text(
+          this.scale.width / 2,
+          100,
+          "Debug mode is disabled.\nRun with 'npm run dev:debug' to enable.",
+          {
+            fontFamily: DEFAULT_FONT,
+            fontSize: "20px",
+            color: "#FF0000",
+            backgroundColor: "#000000",
+            padding: { x: 12, y: 8 },
+            align: "center",
+          }
+        );
+        message.setOrigin(0.5, 0);
+        message.setScrollFactor(0);
+        message.setDepth(DEPTH.UI + 100);
+
+        // Make the message disappear after 3 seconds
+        this.time.delayedCall(3000, () => {
+          message.destroy();
+        });
+      });
+
+      // Add hover effects
+      debugButtonBg.on("pointerover", () => {
+        debugButtonBg.setFillStyle(0x333333, 0.9);
+      });
+
+      debugButtonBg.on("pointerout", () => {
+        debugButtonBg.setFillStyle(0x000000, 0.8);
+      });
+
+      console.log("Debug button created in non-debug mode");
+    }
 
     // Add resize handler
     this.scale.on("resize", this.handleResize, this);
@@ -471,6 +840,20 @@ export class MainScene extends Phaser.Scene {
 
     // Listen for building destroyed events
     this.events.on("buildingDestroyed", this.onBuildingDestroyed, this);
+
+    // Initialize EnergyManager
+    EnergyManager.initialize();
+
+    // Enable world bounds events for bullets
+    this.physics.world.setBoundsCollision(true, true, true, true);
+    this.physics.world.on("worldbounds", (body: Phaser.Physics.Arcade.Body) => {
+      // Check if the body belongs to a bullet
+      const gameObject = body.gameObject as Phaser.Physics.Arcade.Sprite;
+      if (gameObject && gameObject.texture?.key === "bullet") {
+        // Destroy the bullet when it hits world bounds
+        gameObject.destroy();
+      }
+    });
   }
 
   update(time: number, delta: number) {
@@ -492,7 +875,7 @@ export class MainScene extends Phaser.Scene {
     );
 
     // Update UI elements
-    this.actionMenu.update();
+    this.actionMenu.update(time, delta);
 
     // Update the robots list if the panel is open
     if (this.actionMenu.isRobotsPanelOpen) {
@@ -612,6 +995,9 @@ export class MainScene extends Phaser.Scene {
     if (this.moneyDisplay) {
       this.moneyDisplay.update();
     }
+
+    // Update EnergyManager
+    EnergyManager.update(time);
   }
 
   private handleItemPlaced(itemName: string, x: number, y: number) {
@@ -1016,6 +1402,32 @@ export class MainScene extends Phaser.Scene {
       this.toolInventoryDisplay.resize();
     }
 
+    // Update debug button position
+    const debugButtonGroup = this.children.getByName(
+      "debugButtonGroup"
+    ) as Phaser.GameObjects.Container;
+    if (debugButtonGroup) {
+      const debugButtonBg = debugButtonGroup.getAt(
+        0
+      ) as Phaser.GameObjects.Rectangle;
+      const debugButtonText = debugButtonGroup.getAt(
+        1
+      ) as Phaser.GameObjects.Text;
+
+      if (debugButtonBg && debugButtonText) {
+        debugButtonBg.setPosition(gameSize.width - 120, 50);
+        debugButtonText.setPosition(gameSize.width - 120, 50);
+      }
+    }
+
+    // Update debug menu position
+    const debugMenuContainer = this.children.getByName(
+      "debugMenuContainer"
+    ) as Phaser.GameObjects.Container;
+    if (debugMenuContainer) {
+      debugMenuContainer.setPosition(gameSize.width - 310, 10);
+    }
+
     // Log resize event for debugging
     console.log("Game resized to:", gameSize.width, gameSize.height);
   }
@@ -1084,5 +1496,46 @@ export class MainScene extends Phaser.Scene {
 
       this.raidManager.adjustRaidDifficulty(defensiveBuildings);
     }
+  }
+
+  private addDebugButton(
+    container: Phaser.GameObjects.Container,
+    text: string,
+    yPos: number,
+    callback: () => void
+  ): void {
+    // Create button background
+    const buttonBg = this.add.rectangle(10, yPos, 280, 40, 0x333333, 1);
+    buttonBg.setOrigin(0, 0);
+    buttonBg.setInteractive({ useHandCursor: true });
+
+    // Create button text
+    const buttonText = this.add.text(20, yPos + 10, text, {
+      fontFamily: DEFAULT_FONT,
+      fontSize: "16px",
+      color: "#FFFFFF",
+    });
+
+    // Add to container
+    container.add(buttonBg);
+    container.add(buttonText);
+
+    // Add click handler
+    buttonBg.on("pointerdown", () => {
+      callback();
+    });
+
+    // Add hover effects
+    buttonBg.on("pointerover", () => {
+      buttonBg.setFillStyle(0x555555);
+    });
+
+    buttonBg.on("pointerout", () => {
+      buttonBg.setFillStyle(0x333333);
+    });
+  }
+
+  private capitalizeFirstLetter(string: string): string {
+    return string.charAt(0).toUpperCase() + string.slice(1);
   }
 }

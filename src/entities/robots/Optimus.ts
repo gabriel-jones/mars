@@ -9,6 +9,14 @@ import { HealthBarRenderer } from "../../interfaces/Health";
 import { GrowZone } from "../buildings/GrowZone";
 import { InventoryZone } from "../buildings/InventoryZone";
 import { DEPTH } from "../../depth";
+import { Tool } from "../tools";
+import { Enemy } from "../enemies/Enemy";
+import {
+  OPTIMUS_DETECTION_RANGE,
+  OPTIMUS_ATTACK_RANGE,
+  OPTIMUS_MAX_SHOOTING_RANGE,
+  OPTIMUS_IMPRECISION_FACTOR,
+} from "../../constants";
 
 // Optimus class - can perform tasks like a player
 export class Optimus extends Robot {
@@ -36,12 +44,12 @@ export class Optimus extends Robot {
   private mergeCheckInterval: number = 15000; // Check for merge opportunities every 15 seconds (reduced from 30 seconds)
 
   // Set larger detection and attack ranges for Optimus robots
-  protected detectionRange: number = 450; // Increased from 300
-  protected attackRange: number = 350; // Increased from 250
-  protected maxShootingRange: number = 700; // Maximum shooting range for Optimus robots
+  protected detectionRange: number = OPTIMUS_DETECTION_RANGE;
+  protected attackRange: number = OPTIMUS_ATTACK_RANGE;
+  protected maxShootingRange: number = OPTIMUS_MAX_SHOOTING_RANGE;
 
   // Optimus robots are more accurate than other robots
-  protected imprecisionFactor: number = 15; // Reduced from 20
+  protected imprecisionFactor: number = OPTIMUS_IMPRECISION_FACTOR;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, "optimus", 150); // Using the optimus sprite
@@ -906,8 +914,9 @@ export class Optimus extends Robot {
     // Skip update if robot is dead
     if (!this.isAlive()) return;
 
-    // Update shield position
+    // Update shield position and effect
     this.updateShieldPosition();
+    this.updateShieldEffect(time);
 
     // Check if it's time to repair shield (if not at full shield and not damaged recently)
     const timeSinceLastDamage = time - this.lastDamageTime;
@@ -993,6 +1002,12 @@ export class Optimus extends Robot {
 
     // Update dust effects
     this.updateDustEffects(time);
+
+    // Update health bar position
+    this.updateHealthBarPosition();
+
+    // Update shadow effects
+    this.updateShadowEffects();
 
     // Update state text
     this.updateStateText();

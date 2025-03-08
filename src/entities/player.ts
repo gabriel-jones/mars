@@ -115,8 +115,9 @@ export class Player extends Agent {
     // Update health bar position
     this.updateHealthBarPosition();
 
-    // Update shield position
+    // Update shield position and visibility
     this.updateShieldPosition();
+    this.updateShieldEffect(time);
 
     // Update cursor based on what's under the mouse
     this.updateCursor();

@@ -13,6 +13,7 @@ import { ResourceType } from "./resources";
 import { TerrainFeatureType } from "../entities/TerrainFeature";
 import { gameState } from "../state";
 import { TILE_SIZE } from "../constants";
+import { EnergyManager } from "../mechanics/EnergyManager";
 
 // Define placement types
 export enum PlacementType {
@@ -211,6 +212,9 @@ export class BuildingManager {
           : ""
       }${building.tiles ? ` with ${building.tiles.length} tiles` : ""}`
     );
+
+    // Recalculate energy values when a building is added
+    EnergyManager.recalculateEnergyValues();
   }
 
   static getBuildings(): Building[] {
@@ -301,6 +305,9 @@ export class BuildingManager {
     // Check if this expansion connects with any other habitats
     // If so, merge them
     this.checkAndMergeHabitats(habitat);
+
+    // Recalculate energy values when a habitat is expanded
+    EnergyManager.recalculateEnergyValues();
 
     console.log(
       `Habitat ${habitatId} expanded with ${newTiles.length} new tiles. Total: ${habitat.tiles.length} tiles`
@@ -478,6 +485,9 @@ export class BuildingManager {
         `Building removed: ${building.type} at (${building.position.x}, ${building.position.y})`
       );
 
+      // Recalculate energy values when a building is removed
+      EnergyManager.recalculateEnergyValues();
+
       return building;
     }
 
@@ -513,6 +523,9 @@ export class BuildingManager {
       this.removeBuilding(habitat.position.x, habitat.position.y);
       return undefined;
     }
+
+    // Recalculate energy values when a habitat tile is removed
+    EnergyManager.recalculateEnergyValues();
 
     // Check if removing this tile has split the habitat into disconnected parts
     const connectedGroups = this.findConnectedTileGroups(habitat.tiles);

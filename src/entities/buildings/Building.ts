@@ -3,6 +3,7 @@ import { BuildingType } from "../../data/buildings";
 import { TILE_SIZE, DEFAULT_FONT } from "../../constants";
 import { ResourceType } from "../../data/resources";
 import { HasHealth } from "../../interfaces/Health";
+import { ENERGY_CONSUMPTION_RATES } from "../../mechanics/EnergyManager";
 
 // Base Building class
 export class Building
@@ -19,6 +20,7 @@ export class Building
   protected maxHealth: number = 100;
   protected currentHealth: number = 100;
   protected healthBar: Phaser.GameObjects.Container | null = null;
+  protected energyConsumption: number = 0;
 
   constructor(
     scene: Phaser.Scene,
@@ -38,6 +40,9 @@ export class Building
     this.hasInventory = hasInventory;
     this.maxHealth = maxHealth;
     this.currentHealth = maxHealth;
+
+    // Calculate energy consumption based on building type and size
+    this.calculateEnergyConsumption();
 
     // Create the building sprite at the origin (0,0) of the container
     this.sprite = scene.add.sprite(0, 0, buildingType);
@@ -282,5 +287,23 @@ export class Building
    */
   public getTileDimensions(): { width: number; height: number } {
     return { width: this.tileWidth, height: this.tileHeight };
+  }
+
+  /**
+   * Calculate energy consumption for this building
+   */
+  protected calculateEnergyConsumption(): void {
+    // Get base consumption rate for this building type
+    const baseConsumption = ENERGY_CONSUMPTION_RATES[this.buildingType] || 0;
+
+    // Scale by building size
+    this.energyConsumption = baseConsumption * this.tileWidth * this.tileHeight;
+  }
+
+  /**
+   * Get energy consumption for this building
+   */
+  public getEnergyConsumption(): number {
+    return this.energyConsumption;
   }
 }

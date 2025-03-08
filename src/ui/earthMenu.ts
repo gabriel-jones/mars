@@ -1,13 +1,8 @@
 import Phaser from "phaser";
-import {
-  ResourceType,
-  RESOURCE_DEFINITIONS,
-  ResourceManager,
-} from "../data/resources";
+import { ResourceType, ResourceManager } from "../data/resources";
 import { DEFAULT_FONT } from "../constants";
 import { CloseButton } from "./closeButton";
 import { DEPTH } from "../depth";
-import { gameState } from "../state";
 
 // Define the transfer item interface
 export interface TransferItem {
@@ -15,6 +10,7 @@ export interface TransferItem {
   amount: number;
   cost: number;
   isRobot?: boolean;
+  isStarlink?: boolean;
 }
 
 // Define the Earth menu class
@@ -36,6 +32,7 @@ export class EarthMenu {
     cost: number;
     emoji: string;
     isRobot?: boolean;
+    isStarlink?: boolean;
   }[] = [
     {
       name: "Optimus Robot",
@@ -48,6 +45,13 @@ export class EarthMenu {
     { name: "Aluminium", resourceType: "aluminium", cost: 1_000, emoji: "🔩" },
     { name: "Silicon", resourceType: "silicon", cost: 1_000, emoji: "🧱" },
     { name: "Potato", resourceType: "potatoes", cost: 1_000, emoji: "🥔" },
+    {
+      name: "Starlink Satellite",
+      resourceType: "silicon",
+      cost: 50_000,
+      emoji: "🛰️",
+      isStarlink: true,
+    },
   ];
 
   constructor(scene: Phaser.Scene) {
@@ -238,7 +242,13 @@ export class EarthMenu {
           // Only Buy (1) button for robots
           const button = this.createButton(0, 25, "Buy (1)", () => {
             console.log("Buying robot:", item.name, "isRobot =", item.isRobot);
-            this.addToQueue(item.resourceType, 1, item.cost, item.isRobot);
+            this.addToQueue(
+              item.resourceType,
+              1,
+              item.cost,
+              item.isRobot,
+              item.isStarlink
+            );
           });
           itemContainer.add(button);
         } else {
@@ -250,7 +260,13 @@ export class EarthMenu {
               "isRobot =",
               item.isRobot
             );
-            this.addToQueue(item.resourceType, 1, item.cost, false);
+            this.addToQueue(
+              item.resourceType,
+              1,
+              item.cost,
+              false,
+              item.isStarlink
+            );
           });
 
           const button64 = this.createButton(0, 45, "Buy (64)", () => {
@@ -260,7 +276,13 @@ export class EarthMenu {
               "isRobot =",
               item.isRobot
             );
-            this.addToQueue(item.resourceType, 64, item.cost, false);
+            this.addToQueue(
+              item.resourceType,
+              64,
+              item.cost,
+              false,
+              item.isStarlink
+            );
           });
 
           itemContainer.add([button1, button64]);
@@ -356,15 +378,83 @@ export class EarthMenu {
     }
   }
 
-  private addToQueue(
+  private createQueueItemContainer(
+    item: TransferItem,
+    index: number
+  ): Phaser.GameObjects.Container {
+    // Create a container for this queue item
+    const container = this.scene.add.container(0, index * 40);
+
+    // Create background
+    const bg = this.scene.add.rectangle(0, 0, 560, 35, 0x444444);
+    bg.setStrokeStyle(1, 0x666666);
+    container.add(bg);
+
+    // Get item definition
+    const itemDef = this.availableItems.find(
+      (def) =>
+        def.resourceType === item.resourceType && def.isRobot === item.isRobot
+    );
+
+    if (!itemDef) {
+      console.error(`Item definition not found for ${item.resourceType}`);
+      return container;
+    }
+
+    // Add emoji
+    const emoji = this.scene.add.text(-260, 0, itemDef.emoji, {
+      fontSize: "20px",
+      fontFamily: DEFAULT_FONT,
+    });
+    emoji.setOrigin(0, 0.5);
+    container.add(emoji);
+
+    // Add name
+    const name = this.scene.add.text(-220, 0, itemDef.name, {
+      fontSize: "16px",
+      color: "#ffffff",
+      fontFamily: DEFAULT_FONT,
+    });
+    name.setOrigin(0, 0.5);
+    container.add(name);
+
+    // Add quantity
+    const quantity = this.scene.add.text(50, 0, `x${item.amount}`, {
+      fontSize: "16px",
+      color: "#ffffff",
+      fontFamily: DEFAULT_FONT,
+    });
+    quantity.setOrigin(0, 0.5);
+    container.add(quantity);
+
+    // Add cost
+    const cost = this.scene.add.text(150, 0, `$${item.cost * item.amount}`, {
+      fontSize: "16px",
+      color: "#ffffff",
+      fontFamily: DEFAULT_FONT,
+    });
+    cost.setOrigin(0, 0.5);
+    container.add(cost);
+
+    // Add remove button
+    const removeButton = this.createButton(250, 0, "Remove", () => {
+      this.removeFromQueue(index);
+    });
+    container.add(removeButton);
+
+    return container;
+  }
+
+  public addToQueue(
     resourceType: ResourceType,
     amount: number,
     costPerUnit: number,
-    isRobot: boolean = false
+    isRobot: boolean = false,
+    isStarlink: boolean = false
   ): void {
     console.log(
-      `Adding to queue: ${amount} ${resourceType}${
-        isRobot ? " (robot)" : ""
+      `Adding to queue: ${amount} ${resourceType}${isRobot ? " (robot)" : ""}${
+        isStarlink ? " (starlink)" : ""
       } at ${costPerUnit} each`
     );
 
@@ -386,6 +476,7 @@ export class EarthMenu {
       amount,
       cost: costPerUnit,
       isRobot: isRobot || false,
+      isStarlink: isStarlink || false,
     });
 
     console.log(
@@ -465,7 +556,7 @@ export class EarthMenu {
     const messageText = this.scene.add.text(
       this.container.x,
       this.container.y - 100,
-      "Not enough credits!",
+      "Not enough money!",
       {
         fontSize: "24px",
         fontFamily: DEFAULT_FONT,
@@ -477,7 +568,7 @@ export class EarthMenu {
     );
     messageText.setOrigin(0.5);
     messageText.setScrollFactor(0);
-    messageText.setDepth(DEPTH.UI + 1);
+    messageText.setDepth(DEPTH.UI - 1);
 
     // Animate it
     this.scene.tweens.add({
@@ -515,6 +606,7 @@ export class EarthMenu {
           cost: number;
           resourceType: ResourceType;
           isRobot?: boolean;
+          isStarlink?: boolean;
           name: string;
         }
       >();
@@ -522,14 +614,19 @@ export class EarthMenu {
       this.transferQueue.forEach((item) => {
         // Get item definition from our available items
         const itemDef = this.availableItems.find((def) => {
-          // For non-robot items, both def.isRobot and item.isRobot should be falsy
-          if (!item.isRobot) {
-            return def.resourceType === item.resourceType && !def.isRobot;
+          // For Starlink satellites
+          if (item.isStarlink) {
+            return def.resourceType === item.resourceType && def.isStarlink;
           }
-          // For robot items, both should be truthy
+          // For robots
+          if (item.isRobot) {
+            return def.resourceType === item.resourceType && def.isRobot;
+          }
+          // For regular resources
           return (
             def.resourceType === item.resourceType &&
-            def.isRobot === item.isRobot
+            !def.isRobot &&
+            !def.isStarlink
           );
         });
 
@@ -541,11 +638,12 @@ export class EarthMenu {
 
         if (!itemDef) return;
 
-        // Ensure isRobot is a boolean for consistent key generation
+        // Ensure isRobot and isStarlink are booleans for consistent key generation
         const isRobotBool = item.isRobot === true;
+        const isStarlinkBool = item.isStarlink === true;
 
         const key = `${item.resourceType}-${
-          isRobotBool ? "robot" : "resource"
+          isRobotBool ? "robot" : isStarlinkBool ? "starlink" : "resource"
         }`;
 
         if (groupedItems.has(key)) {
@@ -558,6 +656,7 @@ export class EarthMenu {
             cost: item.cost,
             resourceType: item.resourceType,
             isRobot: item.isRobot,
+            isStarlink: item.isStarlink,
             name: itemDef.name,
           });
         }
@@ -636,7 +735,11 @@ export class EarthMenu {
 
         // Remove button
         const removeButton = this.createButton(0, 45, "Remove", () => {
-          this.removeItemsOfType(item.resourceType, item.isRobot);
+          this.removeItemsOfType(
+            item.resourceType,
+            item.isRobot,
+            item.isStarlink
+          );
         });
         itemContainer.add(removeButton);
 
@@ -652,7 +755,8 @@ export class EarthMenu {
 
   private removeItemsOfType(
     resourceType: ResourceType,
-    isRobot?: boolean
+    isRobot?: boolean,
+    isStarlink?: boolean
   ): void {
     // Find all items of this type
     const indices = [];
@@ -660,7 +764,8 @@ export class EarthMenu {
       const queueItem = this.transferQueue[i];
       if (
         queueItem.resourceType === resourceType &&
-        queueItem.isRobot === isRobot
+        queueItem.isRobot === isRobot &&
+        queueItem.isStarlink === isStarlink
       ) {
         indices.push(i);
       }

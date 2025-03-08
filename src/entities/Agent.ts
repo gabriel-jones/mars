@@ -231,17 +231,24 @@ export abstract class Agent implements HasHealth {
 
   // Take damage - renamed to match HasHealth interface
   public damage(amount: number): void {
+    console.log(
+      `Agent taking ${amount} damage. Current health: ${this.health}, shield: ${this.shield}`
+    );
+
     // If shield is active, damage shield first
     if (this.shieldActive && this.shield > 0) {
+      console.log(`Shield active, damaging shield first`);
       this.damageShield(amount);
       return;
     }
 
     // Otherwise damage health
     this.health = Math.max(0, this.health - amount);
+    console.log(`Health reduced to ${this.health}`);
 
     // Check if agent is dead
     if (this.health <= 0) {
+      console.log(`Agent died from damage`);
       this.onDeath();
     }
 
@@ -291,19 +298,33 @@ export abstract class Agent implements HasHealth {
 
     const previousShield = this.shield;
     this.shield = Math.max(0, this.shield - amount);
+    console.log(`Shield reduced from ${previousShield} to ${this.shield}`);
 
     // Show shield effect when taking damage
     this.shieldVisibilityTimer =
       this.scene.time.now + this.shieldVisibilityDuration;
 
+    // Make shield visible
+    if (this.shieldEffect) {
+      this.shieldEffect.setVisible(true);
+
+      // Update shield position
+      this.updateShieldPosition();
+    }
+
     // If shield is depleted, apply remaining damage to health
     if (previousShield > 0 && this.shield === 0) {
       const remainingDamage = amount - previousShield;
       if (remainingDamage > 0) {
+        console.log(
+          `Shield depleted, applying ${remainingDamage} damage to health`
+        );
         this.health = Math.max(0, this.health - remainingDamage);
+        console.log(`Health reduced to ${this.health}`);
 
         // Check if agent is dead
         if (this.health <= 0) {
+          console.log(`Agent died from shield overflow damage`);
           this.onDeath();
         }
       }
@@ -523,4 +544,21 @@ export abstract class Agent implements HasHealth {
 
   // Abstract method for updating the agent
   public abstract update(time: number, delta: number): void;
+
+  // Update shield effect
+  protected updateShieldEffect(time: number): void {
+    // Only update if shield effect exists
+    if (!this.shieldEffect) return;
+
+    // Update shield position
+    this.updateShieldPosition();
+
+    // Show shield when taking damage
+    if (time < this.shieldVisibilityTimer) {
+      this.shieldEffect.setVisible(true);
+    } else {
+      // Hide shield when not taking damage
+      this.shieldEffect.setVisible(false);
+    }
+  }
 }

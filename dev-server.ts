@@ -5,6 +5,7 @@ import { readFileSync, existsSync } from "fs";
 const PORT = 8080;
 const PROJECT_ROOT = import.meta.dir;
 const PUBLIC_DIR = join(PROJECT_ROOT, "public");
+const DEBUG_MODE = process.env.DEBUG_MODE === "true";
 
 // MIME types for different file extensions
 const MIME_TYPES = {
@@ -30,6 +31,7 @@ const MIME_TYPES = {
 };
 
 console.log(`Starting development server on http://localhost:${PORT}`);
+console.log(`Debug mode: ${DEBUG_MODE ? "enabled" : "disabled"}`);
 
 // Serve the application
 serve({
@@ -41,6 +43,31 @@ serve({
     // Default to index.html for root path
     if (path === "/") {
       path = "/index.html";
+    }
+
+    // Inject DEBUG_MODE into the client
+    if (path === "/index.html") {
+      try {
+        const filePath = join(PROJECT_ROOT, path);
+        if (existsSync(filePath)) {
+          let content = readFileSync(filePath, "utf-8");
+
+          // Inject DEBUG_MODE before the closing </head> tag
+          const debugScript = `<script>
+            window.DEBUG_MODE = ${DEBUG_MODE};
+            console.log("DEBUG_MODE set to: ${DEBUG_MODE}");
+          </script>`;
+          content = content.replace("</head>", `${debugScript}</head>`);
+
+          console.log(`Injected DEBUG_MODE=${DEBUG_MODE} into index.html`);
+
+          return new Response(content, {
+            headers: { "Content-Type": "text/html" },
+          });
+        }
+      } catch (error) {
+        console.error(`Error injecting DEBUG_MODE into index.html:`, error);
+      }
     }
 
     // Handle source files with Bun's transpiler

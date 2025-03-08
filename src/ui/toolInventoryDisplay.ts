@@ -16,7 +16,7 @@ export class ToolInventoryDisplay {
   // Theme colors to match the BUILD button
   private readonly COLORS = {
     border: 0x777777, // Green border
-    slotBg: 0x444444, // Darker gray for slots
+    slotBg: 0xaaaaaa, // Darker gray for slots
     slotBorder: 0xffffff, // White border for slots
     selectedBorder: 0x4caf50, // Green border for selected slot
     text: 0xffffff, // White text

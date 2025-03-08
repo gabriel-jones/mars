@@ -4,6 +4,12 @@ import {
   ROBOT_VELOCITY,
   DUST_COLOR,
   DEFAULT_FONT,
+  ROBOT_DETECTION_RANGE,
+  ROBOT_ATTACK_RANGE,
+  ROBOT_MAX_SHOOTING_RANGE,
+  ROBOT_IMPRECISION_FACTOR,
+  ROBOT_SCAN_INTERVAL,
+  ROBOT_FIRE_RATE,
 } from "../../constants";
 import { ResourceNode } from "../resourceNode";
 import { DustEffects } from "../../effects/DustEffects";
@@ -40,14 +46,14 @@ export abstract class Robot extends Agent {
   protected container: Phaser.GameObjects.Container;
   protected assaultRifle: Tool | null = null;
   protected enemyTarget: Enemy | null = null;
-  protected detectionRange: number = 300; // Range to detect enemies
-  protected attackRange: number = 250; // Range to attack enemies (should be larger than enemy's preferred shooting distance)
-  protected maxShootingRange: number = 600; // Maximum distance at which the robot can shoot
-  protected imprecisionFactor: number = 20; // Less imprecision than aliens
+  protected detectionRange: number = ROBOT_DETECTION_RANGE;
+  protected attackRange: number = ROBOT_ATTACK_RANGE;
+  protected maxShootingRange: number = ROBOT_MAX_SHOOTING_RANGE;
+  protected imprecisionFactor: number = ROBOT_IMPRECISION_FACTOR;
   protected lastScanTime: number = 0;
-  protected scanInterval: number = 500; // ms between enemy scans
-  protected lastRobotFireTime: number = 0; // Track the last time the robot fired
-  protected robotFireRate: number = 800; // Robots fire more slowly than players (800ms vs 150ms for players)
+  protected scanInterval: number = ROBOT_SCAN_INTERVAL;
+  protected lastRobotFireTime: number = 0;
+  protected robotFireRate: number = ROBOT_FIRE_RATE;
   protected healthBar: Phaser.GameObjects.Container | null = null;
 
   constructor(
@@ -866,6 +872,36 @@ export abstract class Robot extends Agent {
       this.updateHealthBarPosition();
 
       // No need to update appearance here as it's already done in updateHealthBarPosition
+    }
+  }
+
+  // Override the abstract update method from Agent
+  public update(time: number, delta: number): void {
+    // Update dust and shadow effects
+    this.updateDustEffects(time);
+    this.updateShadowEffects();
+
+    // Update shield position and visibility
+    this.updateShieldPosition();
+    this.updateShieldEffect(time);
+
+    // Update health bar position
+    this.updateHealthBarPosition();
+
+    // Scan for enemies periodically
+    if (time - this.lastScanTime >= this.scanInterval) {
+      this.scanForEnemies(time);
+      this.lastScanTime = time;
+    }
+
+    // If in defending state, attack enemy if we have one
+    if (this.robotState === RobotState.DEFENDING && this.enemyTarget) {
+      this.attackEnemyTarget(time);
+    }
+
+    // Slowly recharge shield over time (0.5 points per second) if shield is equipped
+    if (this.hasShield() && this.getCurrentShield() < this.getMaxShield()) {
+      this.rechargeShield(delta / 2000); // Half the rate of player
     }
   }
 }

@@ -9,6 +9,7 @@
   "author": "Gabriel Jones <gdev.bm@icloud.com> (https://gdev.bm/)",
   "scripts": {
     "dev": "bun --watch run dev-server.ts",
+    "dev:debug": "DEBUG_MODE=true bun --watch run dev-server.ts",
     "build": "bun build ./src/main.ts ./public/**/*.png ./index.html --outdir ./dist --asset-naming assets/[name].[ext]"
   },
   "devDependencies": {

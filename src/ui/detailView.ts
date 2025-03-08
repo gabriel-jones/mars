@@ -18,6 +18,11 @@ import { RangeSelectionBuilding } from "../entities/buildings/RangeSelectionBuil
 import { DEFAULT_FONT } from "../constants";
 import { DEPTH } from "../depth";
 import { InventoryZone } from "../entities/buildings/InventoryZone";
+import { BuildingType } from "../data/buildings";
+import {
+  ENERGY_CONSUMPTION_RATES,
+  EnergyManager,
+} from "../mechanics/EnergyManager";
 
 // Define a type for selectable entities
 export type SelectableEntity =
@@ -755,10 +760,47 @@ export class DetailView {
     if (!this.selectedEntity) return;
 
     // Get properties based on entity type
-    let properties: { label: string; value: string }[] = [];
+    let properties: { label: string; value: string; valueColor?: string }[] =
+      [];
 
     if (this.selectedEntity instanceof Building) {
       properties = this.getBuildingProperties(this.selectedEntity);
+
+      // Add colony energy balance information
+      properties.push({
+        label: "─────────────────",
+        value: "",
+      });
+
+      properties.push({
+        label: "Colony Energy",
+        value: "",
+      });
+
+      // Add total energy production
+      const totalProduction = EnergyManager.getEnergyProduction();
+      properties.push({
+        label: "Total Production",
+        value: `${totalProduction.toFixed(1)} units/sec`,
+        valueColor: "#00FF00", // Green for production
+      });
+
+      // Add total energy consumption
+      const totalConsumption = EnergyManager.getEnergyConsumption();
+      properties.push({
+        label: "Total Consumption",
+        value: `${totalConsumption.toFixed(1)} units/sec`,
+        valueColor: "#FF6666", // Red for consumption
+      });
+
+      // Add energy balance
+      const energyBalance = EnergyManager.getEnergyBalance();
+      const balanceColor = energyBalance >= 0 ? "#00FF00" : "#FF6666";
+      properties.push({
+        label: "Energy Balance",
+        value: `${energyBalance.toFixed(1)} units/sec`,
+        valueColor: balanceColor,
+      });
     } else if (this.selectedEntity instanceof Robot) {
       properties = this.getRobotProperties(this.selectedEntity);
     } else if (this.selectedEntity instanceof Starship) {
@@ -767,8 +809,6 @@ export class DetailView {
       properties = this.getResourceNodeProperties(this.selectedEntity);
     } else if (this.selectedEntity instanceof Blueprint) {
       properties = this.getBlueprintProperties(this.selectedEntity);
-    } else if (this.selectedEntity instanceof Tool) {
-      properties = this.getToolProperties(this.selectedEntity);
     }
 
     // Add properties to the container
@@ -785,7 +825,8 @@ export class DetailView {
       // Create value text
       const valueText = this.scene.add.text(150, yOffset, property.value, {
         fontSize: "16px",
-        color: `#${this.COLORS.propertyValue.toString(16)}`,
+        color:
+          property.valueColor || `#${this.COLORS.propertyValue.toString(16)}`,
         fontFamily: DEFAULT_FONT,
       });
 
@@ -813,8 +854,9 @@ export class DetailView {
 
   private getBuildingProperties(
     building: Building
-  ): { label: string; value: string }[] {
-    const properties: { label: string; value: string }[] = [];
+  ): { label: string; value: string; valueColor?: string }[] {
+    const properties: { label: string; value: string; valueColor?: string }[] =
+      [];
 
     try {
       // Add building type
@@ -829,6 +871,97 @@ export class DetailView {
           label: "Health",
           value: `${building.getHealth()} / ${building.getMaxHealth()}`,
         });
+      }
+
+      // Add energy consumption or production information
+      if (
+        "getEnergyConsumption" in building &&
+        typeof building.getEnergyConsumption === "function"
+      ) {
+        const energyConsumption = building.getEnergyConsumption();
+        const tileCount =
+          (building.tileWidth || 1) * (building.tileHeight || 1);
+
+        if (energyConsumption < 0) {
+          // Negative value means it produces energy
+          properties.push({
+            label: "Energy Production",
+            value: `${Math.abs(energyConsumption).toFixed(1)} units/sec`,
+            valueColor: "#00FF00", // Green for production
+          });
+
+          // Add efficiency (production per tile)
+          if (tileCount > 1) {
+            properties.push({
+              label: "Production Efficiency",
+              value: `${(Math.abs(energyConsumption) / tileCount).toFixed(
+                1
+              )} units/tile`,
+              valueColor: "#00DD00", // Slightly darker green
+            });
+          }
+        } else if (energyConsumption > 0) {
+          // Positive value means it consumes energy
+          properties.push({
+            label: "Energy Consumption",
+            value: `${energyConsumption.toFixed(1)} units/sec`,
+            valueColor: "#FF6666", // Red for consumption
+          });
+
+          // Add efficiency (consumption per tile)
+          if (tileCount > 1) {
+            properties.push({
+              label: "Consumption Efficiency",
+              value: `${(energyConsumption / tileCount).toFixed(1)} units/tile`,
+              valueColor: "#FF8888", // Slightly lighter red
+            });
+          }
+        }
+      } else {
+        // Fallback to using ENERGY_CONSUMPTION_RATES if getEnergyConsumption is not available
+        const buildingType = building.getBuildingType() as BuildingType;
+        const energyRate = ENERGY_CONSUMPTION_RATES[buildingType];
+
+        if (energyRate !== undefined) {
+          // Calculate energy based on building size if applicable
+          const tileCount =
+            (building.tileWidth || 1) * (building.tileHeight || 1);
+          let totalEnergy = energyRate * tileCount;
+
+          if (totalEnergy < 0) {
+            // Negative value means it produces energy
+            properties.push({
+              label: "Energy Production",
+              value: `${Math.abs(totalEnergy).toFixed(1)} units/sec`,
+              valueColor: "#00FF00", // Green for production
+            });
+
+            // Add efficiency (production per tile)
+            if (tileCount > 1) {
+              properties.push({
+                label: "Production Efficiency",
+                value: `${Math.abs(energyRate).toFixed(1)} units/tile`,
+                valueColor: "#00DD00", // Slightly darker green
+              });
+            }
+          } else if (totalEnergy > 0) {
+            // Positive value means it consumes energy
+            properties.push({
+              label: "Energy Consumption",
+              value: `${totalEnergy.toFixed(1)} units/sec`,
+              valueColor: "#FF6666", // Red for consumption
+            });
+
+            // Add efficiency (consumption per tile)
+            if (tileCount > 1) {
+              properties.push({
+                label: "Consumption Efficiency",
+                value: `${energyRate.toFixed(1)} units/tile`,
+                valueColor: "#FF8888", // Slightly lighter red
+              });
+            }
+          }
+        }
       }
 
       // Add inventory zone specific information
@@ -1198,7 +1331,16 @@ export class DetailView {
 
     // Update properties if needed (for dynamic values)
     if (this.selectedEntity && this.container.visible) {
-      this.updatePanelContent();
+      // For buildings, update every second to keep energy values current
+      if (this.selectedEntity instanceof Building) {
+        // Only update every 1 second to avoid performance issues
+        if (time % 1000 < delta) {
+          this.updatePanelContent();
+        }
+      } else {
+        // For other entities, update as normal
+        this.updatePanelContent();
+      }
     }
   }
 
@@ -1254,32 +1396,6 @@ export class DetailView {
   // Getter for the container
   public getContainer(): Phaser.GameObjects.Container {
     return this.container;
-  }
-
-  // Handle tool selection event
-  private handleToolSelected(tool: Tool): void {
-    console.log("Tool selected event received:", tool);
-    this.selectEntity(tool);
-  }
-
-  // Get properties for a tool
-  private getToolProperties(tool: Tool): { label: string; value: string }[] {
-    return [
-      { label: "Type", value: tool.type },
-      { label: "Name", value: tool.name },
-      { label: "Description", value: this.getToolDescription(tool) },
-      { label: "Controls", value: "Left-click or Space to fire" },
-    ];
-  }
-
-  // Get description for a tool
-  private getToolDescription(tool: Tool): string {
-    switch (tool.type) {
-      case "assault-rifle":
-        return "Standard issue assault rifle. Effective against aliens.";
-      default:
-        return "A useful tool for Mars colonization.";
-    }
   }
 
   // Create an action button
@@ -1592,10 +1708,6 @@ export class DetailView {
 
   // Initialize event listeners
   private initEventListeners(): void {
-    // Listen for tool selection events
-    this.scene.events.on("tool:selected", this.handleToolSelected, this);
-    this.scene.events.on("tool:deselected", this.clearSelection, this);
-
     // Listen for window resize events
     this.scene.scale.on("resize", this.handleResize, this);
   }
