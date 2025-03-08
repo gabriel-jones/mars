@@ -36,6 +36,7 @@ export abstract class Enemy extends Agent implements HasHealth {
   protected preferredShootingDistance: number; // Distance at which enemies prefer to stop and shoot
   public isEnemy: boolean = true; // Flag to identify this as an enemy for collision detection
   protected currentTile: { x: number; y: number } = { x: 0, y: 0 };
+  protected maxShootingRange: number; // Maximum distance at which the enemy can shoot
 
   // Static map to track occupied tiles
   private static occupiedTiles: Map<string, Enemy> = new Map();
@@ -53,7 +54,8 @@ export abstract class Enemy extends Agent implements HasHealth {
     attackRange: number = 100,
     attackDamage: number = 10,
     attackCooldown: number = 1000,
-    preferredShootingDistance: number = 75 // Default preferred shooting distance - reduced from 150 to make enemies get closer
+    preferredShootingDistance: number = 75, // Default preferred shooting distance - reduced from 150 to make enemies get closer
+    maxShootingRange: number = 500 // Default maximum shooting range
   ) {
     // Call the parent constructor with the sprite and maxHealth
     super(
@@ -94,6 +96,7 @@ export abstract class Enemy extends Agent implements HasHealth {
     this.attackDamage = attackDamage;
     this.attackCooldown = attackCooldown;
     this.preferredShootingDistance = preferredShootingDistance;
+    this.maxShootingRange = maxShootingRange;
 
     // Initialize current tile position
     this.currentTile = {
@@ -221,8 +224,33 @@ export abstract class Enemy extends Agent implements HasHealth {
       return;
     }
 
-    // Move towards the target
-    this.moveTowardsTarget(delta);
+    // Calculate distance to target
+    const distance = Phaser.Math.Distance.Between(
+      (this.sprite as Phaser.Physics.Arcade.Sprite).x,
+      (this.sprite as Phaser.Physics.Arcade.Sprite).y,
+      this.target.x,
+      this.target.y
+    );
+
+    // If beyond maximum shooting range, always move closer
+    if (distance > this.maxShootingRange) {
+      this.moveTowardsTarget(delta);
+    }
+    // If within maximum shooting range but beyond preferred shooting distance, move closer
+    else if (distance > this.preferredShootingDistance) {
+      this.moveTowardsTarget(delta);
+    }
+    // If closer than preferred shooting distance, don't move (stay at optimal range)
+    else {
+      // Stop movement if we're too close
+      (this.sprite as Phaser.Physics.Arcade.Sprite).setVelocity(0, 0);
+
+      // Stop dust effects when not moving
+      if (this.dustEffects) {
+        this.dustEffects.stop();
+        this.dustEffects.stopMovementDust();
+      }
+    }
 
     // Check if in attack range
     if (this.isInAttackRange()) {
@@ -437,7 +465,8 @@ export abstract class Enemy extends Agent implements HasHealth {
       this.target.y
     );
 
-    return distance <= this.attackRange;
+    // Check if the target is within both the attack range and the maximum shooting range
+    return distance <= this.attackRange && distance <= this.maxShootingRange;
   }
 
   // Update state text (now just updates the health bar)

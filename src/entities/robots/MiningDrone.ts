@@ -49,6 +49,12 @@ export class MiningDrone extends Robot {
     // Set the robot's depth to ensure it renders above dust particles
     this.container.setDepth(DEPTH.AGENT);
 
+    // Set mining drone specific properties
+    this.detectionRange = 350; // Shorter detection range than Optimus
+    this.attackRange = 250; // Shorter attack range than Optimus
+    this.maxShootingRange = 500; // Maximum shooting range for mining drones
+    this.imprecisionFactor = 25; // Less accurate than Optimus
+
     // Configure Mars-appropriate dust effects
     this.configureDustEffects(scene);
   }

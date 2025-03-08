@@ -37,7 +37,9 @@ export class Alien extends Enemy {
       speed,
       attackRange,
       attackDamage,
-      attackCooldown
+      attackCooldown,
+      300, // preferredShootingDistance - aliens will try to stay at this distance
+      600 // maxShootingRange - aliens cannot shoot beyond this distance
     );
 
     // Create the physics body for the alien
@@ -205,6 +207,27 @@ export class Alien extends Enemy {
   private tryToFireAtTarget(time: number): void {
     // Only fire if we have a raygun and a target
     if (!this.raygun || !this.target) return;
+
+    // Calculate distance to target
+    const distance = Phaser.Math.Distance.Between(
+      this.sprite.x,
+      this.sprite.y,
+      this.target.x,
+      this.target.y
+    );
+
+    // Only fire if within maximum shooting range
+    if (distance > this.maxShootingRange) {
+      // Log occasionally for debugging
+      if (Math.random() < 0.01) {
+        console.log(
+          `Alien not firing: target beyond maximum shooting range (${distance.toFixed(
+            2
+          )}/${this.maxShootingRange})`
+        );
+      }
+      return;
+    }
 
     // Check if cooldown has passed
     if (time - this.lastAttackTime >= this.attackCooldown) {

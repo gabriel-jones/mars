@@ -17,6 +17,7 @@ import {
 import { RangeSelectionBuilding } from "../entities/buildings/RangeSelectionBuilding";
 import { DEFAULT_FONT } from "../constants";
 import { DEPTH } from "../depth";
+import { InventoryZone } from "../entities/buildings/InventoryZone";
 
 // Define a type for selectable entities
 export type SelectableEntity =
@@ -828,6 +829,59 @@ export class DetailView {
           label: "Health",
           value: `${building.getHealth()} / ${building.getMaxHealth()}`,
         });
+      }
+
+      // Add inventory zone specific information
+      if (building.getBuildingType() === "inventory-zone") {
+        // Check if the building is actually an InventoryZone instance
+        if (building instanceof InventoryZone) {
+          const inventoryZone = building as InventoryZone;
+
+          // Add inventory contents section header
+          properties.push({
+            label: "Inventory Contents",
+            value: "",
+          });
+
+          // Get resource totals
+          const resourceTotals = inventoryZone.getResourceTotals();
+
+          // If there are no resources, show "Empty"
+          if (resourceTotals.size === 0) {
+            properties.push({
+              label: "  Status",
+              value: "Empty",
+            });
+          } else {
+            // Sort resources by name for consistent display
+            const sortedResources = Array.from(resourceTotals.entries()).sort(
+              (a, b) => a[0].localeCompare(b[0])
+            );
+
+            // Add each resource with amount > 0
+            for (const [resourceType, amount] of sortedResources) {
+              if (amount > 0) {
+                // Get resource definition for emoji
+                const resourceDef = this.getResourceDefinition(resourceType);
+                const emoji = resourceDef ? resourceDef.emoji : "📦";
+                const name = resourceDef ? resourceDef.name : resourceType;
+
+                properties.push({
+                  label: `  ${emoji} ${name}`,
+                  value: amount.toString(),
+                });
+              }
+            }
+          }
+
+          // Add capacity information
+          const totalResources = inventoryZone.getResourceNodes().length;
+          const capacity = inventoryZone.tileWidth * inventoryZone.tileHeight;
+          properties.push({
+            label: "Capacity",
+            value: `${totalResources} / ${capacity} tiles`,
+          });
+        }
       }
 
       // Add grow zone specific information

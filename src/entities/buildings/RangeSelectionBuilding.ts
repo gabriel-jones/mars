@@ -210,12 +210,16 @@ export abstract class RangeSelectionBuilding extends Building {
     // If offsets weren't provided, calculate them
     if (offsetX === undefined || offsetY === undefined) {
       // Calculate the tile grid position of the building center
-      const tileGridX = Math.floor(this.x / TILE_SIZE);
-      const tileGridY = Math.floor(this.y / TILE_SIZE);
+      const tileGridX = Math.round(this.x / TILE_SIZE);
+      const tileGridY = Math.round(this.y / TILE_SIZE);
 
       // Calculate the top-left corner of the building in world coordinates
       const alignedTopLeftX = tileGridX * TILE_SIZE;
       const alignedTopLeftY = tileGridY * TILE_SIZE;
+
+      console.log(
+        `Building aligned top-left: (${alignedTopLeftX}, ${alignedTopLeftY}) for building at (${this.x}, ${this.y})`
+      );
 
       // Calculate the offset from the building center to the aligned top-left corner
       offsetX = alignedTopLeftX - this.x;

@@ -91,8 +91,8 @@ export class GrowZone extends RangeSelectionBuilding {
     this.tiles = [];
 
     // Calculate the tile grid position of the grow zone center
-    const tileGridX = Math.floor(this.x / TILE_SIZE);
-    const tileGridY = Math.floor(this.y / TILE_SIZE);
+    const tileGridX = Math.round(this.x / TILE_SIZE);
+    const tileGridY = Math.round(this.y / TILE_SIZE);
 
     // Calculate the top-left corner of the grow zone in world coordinates
     const alignedTopLeftX = tileGridX * TILE_SIZE;

@@ -551,13 +551,13 @@ export class JobManager {
    * Scan for resources not in inventory zones and create delivery jobs for them
    * @param resourceNodes All resource nodes in the game
    * @param inventoryZones All inventory zones in the game
-   * @param maxJobs Maximum number of jobs to create at once (default: 2)
+   * @param maxJobs Maximum number of jobs to create at once (default: 30)
    * @returns Number of jobs created
    */
   public createInventoryDeliveryJobsForLooseResources(
     resourceNodes: ResourceNode[],
     inventoryZones: InventoryZone[],
-    maxJobs: number = 2
+    maxJobs: number = 30
   ): number {
     // Check if there are any pending blueprint deliveries first
     // If so, don't create inventory delivery jobs to avoid competition
@@ -577,15 +577,24 @@ export class JobManager {
       return 0;
     }
 
+    // Get existing inventory delivery jobs
+    const existingInventoryJobs = this.findInventoryDeliveryJobs();
+
+    // If we already have a lot of inventory delivery jobs, don't create more
+    if (existingInventoryJobs.length >= 20) {
+      console.log(
+        `Already have ${existingInventoryJobs.length} inventory delivery jobs, not creating more`
+      );
+      return 0;
+    }
+
     let jobsCreated = 0;
 
-    // Find resources not in inventory zones
-    for (const resourceNode of resourceNodes) {
-      // Stop if we've reached the maximum number of jobs
-      if (jobsCreated >= maxJobs) {
-        break;
-      }
+    // Sort resources by distance to inventory zones (closest first)
+    const resourcesWithDistance: { node: ResourceNode; distance: number }[] =
+      [];
 
+    for (const resourceNode of resourceNodes) {
       // Skip if the node is already part of a job
       if (this.isNodeInJob(resourceNode)) {
         continue;
@@ -602,19 +611,62 @@ export class JobManager {
         inventoryZones
       );
 
-      // If not in an inventory zone, create a job to deliver it
+      // If not in an inventory zone, add to our list with distance
       if (!isInInventoryZone) {
-        // Find the best inventory zone for this resource type
-        const resourceType = resourceNode.getResource().type;
-        const bestZone = InventoryZone.findBestZoneForResource(
-          resourceType,
-          availableInventoryZones
-        );
+        // Find the closest inventory zone
+        let closestZone: InventoryZone | null = null;
+        let closestDistance = Number.MAX_VALUE;
 
-        if (bestZone) {
-          this.createDeliverToInventoryJob(resourceNode, bestZone);
-          jobsCreated++;
+        for (const zone of availableInventoryZones) {
+          const distance = Phaser.Math.Distance.Between(
+            resourceNode.x,
+            resourceNode.y,
+            zone.x,
+            zone.y
+          );
+
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            closestZone = zone;
+          }
         }
+
+        if (closestZone) {
+          resourcesWithDistance.push({
+            node: resourceNode,
+            distance: closestDistance,
+          });
+        }
+      }
+    }
+
+    // Sort by distance (closest first)
+    resourcesWithDistance.sort((a, b) => a.distance - b.distance);
+
+    // Create jobs for the closest resources first
+    for (const { node } of resourcesWithDistance) {
+      // Stop if we've reached the maximum number of jobs
+      if (jobsCreated >= maxJobs) {
+        break;
+      }
+
+      // Find the best inventory zone for this resource type
+      const resourceType = node.getResource().type;
+      const bestZone = InventoryZone.findBestZoneForResource(
+        resourceType,
+        availableInventoryZones
+      );
+
+      if (bestZone) {
+        this.createDeliverToInventoryJob(node, bestZone);
+        jobsCreated++;
+
+        // Log the job creation
+        console.log(
+          `Created inventory delivery job for ${node.getAmount()} ${resourceType} at (${
+            node.x
+          }, ${node.y})`
+        );
       }
     }
 
@@ -625,12 +677,12 @@ export class JobManager {
    * Create jobs for merging resource stacks within inventory zones
    * This helps keep inventory zones organized by merging stacks of the same resource type
    * @param inventoryZones Array of inventory zones to check
-   * @param maxJobs Maximum number of jobs to create at once (default: 1)
+   * @param maxJobs Maximum number of jobs to create at once (default: 3)
    * @returns Number of jobs created
    */
   public createInventoryMergeJobs(
     inventoryZones: InventoryZone[],
-    maxJobs: number = 1
+    maxJobs: number = 3
   ): number {
     // Check if there are any pending blueprint deliveries first
     // If so, don't create merge jobs to avoid competition

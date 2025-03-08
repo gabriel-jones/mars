@@ -42,6 +42,7 @@ export abstract class Robot extends Agent {
   protected enemyTarget: Enemy | null = null;
   protected detectionRange: number = 300; // Range to detect enemies
   protected attackRange: number = 250; // Range to attack enemies (should be larger than enemy's preferred shooting distance)
+  protected maxShootingRange: number = 600; // Maximum distance at which the robot can shoot
   protected imprecisionFactor: number = 20; // Less imprecision than aliens
   protected lastScanTime: number = 0;
   protected scanInterval: number = 500; // ms between enemy scans
@@ -396,13 +397,15 @@ export abstract class Robot extends Agent {
       enemyY
     );
 
-    // Only attack if within attack range
-    if (distance > this.attackRange) {
+    // Only attack if within attack range AND maximum shooting range
+    if (distance > this.attackRange || distance > this.maxShootingRange) {
       // Log occasionally for debugging
       if (Math.random() < 0.01) {
         console.log(
           `Robot not in attack range (${distance.toFixed(2)}/${
             this.attackRange
+          }) or beyond max shooting range (${
+            this.maxShootingRange
           }), not firing`
         );
       }

@@ -31,16 +31,17 @@ export class Optimus extends Robot {
   private shieldRepairInterval: number = 10000; // 10 seconds in ms
   private shieldRepairAmount: number = 5; // Amount to repair per update when eligible
   private resourceCheckTimer: number = 0;
-  private resourceCheckInterval: number = 15000; // Check for loose resources every 15 seconds (increased from 5 seconds)
+  private resourceCheckInterval: number = 5000; // Check for loose resources every 5 seconds (reduced from 15 seconds)
   private mergeCheckTimer: number = 0;
-  private mergeCheckInterval: number = 30000; // Check for merge opportunities every 30 seconds (increased from 8 seconds)
+  private mergeCheckInterval: number = 15000; // Check for merge opportunities every 15 seconds (reduced from 30 seconds)
 
   // Set larger detection and attack ranges for Optimus robots
-  // private detectionRange: number = 450; // Increased from 300
-  // private attackRange: number = 350; // Increased from 250
+  protected detectionRange: number = 450; // Increased from 300
+  protected attackRange: number = 350; // Increased from 250
+  protected maxShootingRange: number = 700; // Maximum shooting range for Optimus robots
 
   // Optimus robots are more accurate than other robots
-  // private imprecisionFactor: number = 15; // Reduced from 20
+  protected imprecisionFactor: number = 15; // Reduced from 20
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, "optimus", 150); // Using the optimus sprite
@@ -56,13 +57,6 @@ export class Optimus extends Robot {
       scene.time.now + Math.random() * this.mergeCheckInterval;
     // Initialize last damage time
     this.lastDamageTime = scene.time.now;
-
-    // Set larger detection and attack ranges for Optimus robots
-    this.detectionRange = 450; // Increased from 300
-    this.attackRange = 350; // Increased from 250
-
-    // Optimus robots are more accurate than other robots
-    this.imprecisionFactor = 15; // Reduced from 20
 
     // Initialize shield for Optimus robots with custom implementation
     this.initCustomShield(75, 0x0088ff);
@@ -300,9 +294,19 @@ export class Optimus extends Robot {
       );
       this.moveToTarget(tilePosition);
 
-      // Set state to MOVING
-      this.robotState = RobotState.MOVING;
+      // Set state to MOVING if we're not already carrying
+      if (this.robotState !== RobotState.CARRYING) {
+        this.robotState = RobotState.MOVING;
+      }
       this.updateStateText();
+
+      // Store the inventory zone in the job for delivery
+      if (
+        this.currentJob &&
+        this.currentJob.type === JobType.DELIVER_TO_INVENTORY
+      ) {
+        this.currentJob.inventoryZone = inventoryZone;
+      }
     });
 
     // We don't need to add a separate task for delivery
@@ -331,6 +335,11 @@ export class Optimus extends Robot {
       );
       return;
     }
+
+    // Log the delivery attempt
+    console.log(
+      `Robot ${this.robotId} attempting to deliver ${this.resourceAmount} ${this.resourceType} to inventory zone at (${this.container.x}, ${this.container.y})`
+    );
 
     // Create a temporary resource node to represent the carried resource
     const tempNode = new ResourceNode(
@@ -382,10 +391,28 @@ export class Optimus extends Robot {
         JobManager.getInstance().completeJob(this.currentJob.id);
         this.currentJob = null;
       }
+
+      // Check if there are more resources to deliver in the inventory zone
+      this.checkForLooseResources();
     } else {
       console.log(
         `Robot ${this.robotId} failed to deliver ${this.resourceAmount} ${this.resourceType} to inventory zone - no space`
       );
+
+      // Try to find another available tile in the inventory zone
+      const tilePosition = inventoryZone.findAvailableTilePosition(
+        this.resourceType
+      );
+
+      if (tilePosition) {
+        console.log(
+          `Robot ${this.robotId} found another tile at (${tilePosition.x}, ${tilePosition.y}), moving there`
+        );
+
+        // Move to the new tile
+        this.moveToTarget(tilePosition);
+        return;
+      }
 
       // The temporary node will be destroyed automatically if it couldn't be added
       // Drop the resource at the robot's current position
@@ -673,6 +700,15 @@ export class Optimus extends Robot {
     // Set state to CARRYING
     this.robotState = RobotState.CARRYING;
     this.updateStateText();
+
+    // If this is for an inventory delivery job, make sure the job has the resource info
+    if (
+      this.currentJob &&
+      this.currentJob.type === JobType.DELIVER_TO_INVENTORY
+    ) {
+      this.currentJob.resourceType = resource.type;
+      this.currentJob.resourceAmount = amountToPickup;
+    }
   }
 
   // Drop the currently carried resource back to the ground
@@ -1373,6 +1409,10 @@ export class Optimus extends Robot {
     // Call the parent method
     super.onReachTarget();
 
+    console.log(
+      `Robot ${this.robotId} reached target in state ${this.robotState}`
+    );
+
     // Handle based on current state
     switch (this.robotState) {
       case RobotState.MOVING:
@@ -1384,6 +1424,7 @@ export class Optimus extends Robot {
 
         // If we have a target resource node and we're not carrying anything, pick it up
         if (this.targetResourceNode && !this.carriedResource) {
+          console.log(`Robot ${this.robotId} picking up resource from node`);
           this.pickupResource(this.targetResourceNode);
           this.targetResourceNode = null;
 
@@ -1400,6 +1441,7 @@ export class Optimus extends Robot {
         }
         // If we're carrying a resource and have reached the target, deliver it
         else if (this.carriedResource && this.targetResourceNode) {
+          console.log(`Robot ${this.robotId} delivering resource to node`);
           this.deliverResource(this.targetResourceNode);
           this.targetResourceNode = null;
           this.robotState = RobotState.IDLE;
@@ -1484,6 +1526,17 @@ export class Optimus extends Robot {
 
           this.robotState = RobotState.IDLE;
           this.updateStateText();
+        }
+        // If we're at an inventory zone and have a delivery job, deliver the resource
+        else if (
+          this.currentJob &&
+          this.currentJob.type === JobType.DELIVER_TO_INVENTORY &&
+          this.currentJob.inventoryZone
+        ) {
+          console.log(
+            `Robot ${this.robotId} reached inventory zone, delivering resource`
+          );
+          this.deliverResourceToInventory(this.currentJob.inventoryZone);
         }
         // Otherwise, check if we need to work on this job
         else if (this.currentJob && this.currentJob.workDuration > 0) {
