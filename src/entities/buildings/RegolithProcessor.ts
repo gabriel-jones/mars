@@ -15,6 +15,7 @@ export class RegolithProcessor extends Building {
   private processingRate: number = 5; // Process 5 regolith at a time
   private lastProcessTime: number = 0;
   private processingInterval: number = 2500; // Process every 2.5 seconds
+  private maxRegolithCapacity: number = 100; // Maximum regolith capacity
 
   // Resource nodes spawned by the processor
   private spawnedResources: Map<ResourceType, ResourceNode> = new Map();
@@ -68,7 +69,7 @@ export class RegolithProcessor extends Building {
   }
 
   getLabelText(): string {
-    return `Regolith: ${this.regolithAmount}`;
+    return `Regolith: ${this.regolithAmount}/${this.maxRegolithCapacity}`;
   }
 
   // Create smoke particle effect
@@ -115,7 +116,11 @@ export class RegolithProcessor extends Building {
 
   // Add regolith to the processor
   public addRegolith(amount: number): void {
-    this.regolithAmount += amount;
+    // Limit the amount to the maximum capacity
+    const spaceAvailable = this.maxRegolithCapacity - this.regolithAmount;
+    const amountToAdd = Math.min(amount, spaceAvailable);
+
+    this.regolithAmount += amountToAdd;
     this.updateProcessingText();
 
     // Start smoke effect if we have regolith
@@ -135,7 +140,17 @@ export class RegolithProcessor extends Building {
 
   // Check if the processor can accept more regolith
   public canAcceptRegolith(): boolean {
-    return true; // For now, always accept regolith
+    return this.regolithAmount < this.maxRegolithCapacity;
+  }
+
+  // Get the maximum regolith capacity
+  public getMaxRegolithCapacity(): number {
+    return this.maxRegolithCapacity;
+  }
+
+  // Get the available space for regolith
+  public getAvailableSpace(): number {
+    return this.maxRegolithCapacity - this.regolithAmount;
   }
 
   private updateProcessingText(): void {

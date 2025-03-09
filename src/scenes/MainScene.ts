@@ -223,6 +223,7 @@ export class MainScene extends Phaser.Scene {
     this.load.image("earth-mini", "assets/earth-mini.png");
     this.load.image("mars-mini", "assets/mars-mini.png");
     this.load.image("sun-mini", "assets/sun-mini.png");
+    this.load.image("starlink-mini", "assets/starlink-mini.png");
 
     // Moon textures for Mars menu
     this.load.image("phobos-mini", "assets/phobos-mini.png");

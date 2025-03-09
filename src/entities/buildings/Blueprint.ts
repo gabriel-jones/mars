@@ -166,6 +166,12 @@ export class Blueprint extends Building implements HasHealth {
       return 0; // Already have enough
     }
 
+    // Deduct the resources from the global inventory
+    if (!ResourceManager.useResource(type, amountToAdd)) {
+      // If we don't have enough resources in the global inventory, return 0
+      return 0;
+    }
+
     // Add the resource to the requirement
     resourceReq.current += amountToAdd;
 
@@ -424,22 +430,13 @@ export class Blueprint extends Building implements HasHealth {
     // Create a set of all tile positions for quick lookup
     const tileSet = new Set(this.habitatTiles.map((t) => `${t.x},${t.y}`));
 
-    // Render floor tiles
+    // We're removing the floor tiles rendering and only keeping the wall edges
+    // This will only render the blue square outline
+
+    // Render wall edges only
     for (const tile of this.habitatTiles) {
       const relX = (tile.x - centerX) * TILE_SIZE;
       const relY = (tile.y - centerY) * TILE_SIZE;
-
-      // Create floor tile with blueprint tint
-      const floorTile = this.scene.add.rectangle(
-        relX,
-        relY,
-        TILE_SIZE,
-        TILE_SIZE,
-        0x0088ff, // Blue color for blueprint
-        0.5 // Semi-transparent
-      );
-      floorTile.setOrigin(0.5);
-      this.floorContainer.add(floorTile);
 
       // Check if this tile needs walls (edges)
       const needsWallNorth = !tileSet.has(`${tile.x},${tile.y - 1}`);

@@ -76,7 +76,7 @@ export class MarsMenu {
         allocatedStarships: 0,
       },
       {
-        resourceType: "regolith",
+        resourceType: "titanium",
         baseYield: 9,
         currentYield: 0,
         allocatedStarships: 0,
@@ -187,11 +187,14 @@ export class MarsMenu {
   }
 
   private createStarlinkStatus(width: number, height: number): void {
-    // Create Starlink status section - adjusted position
-    const statusContainer = this.scene.add.container(-230, -height / 2 + 70); // Adjusted from -250 to -230
+    // Create Starlink status section - moved to top left
+    const statusContainer = this.scene.add.container(
+      -width / 2 + 20,
+      -height / 2 + 20
+    );
 
     // Create status label
-    this.starlinkStatusText = this.scene.add.text(0, 0, "STARLINK:", {
+    this.starlinkStatusText = this.scene.add.text(0, 0, "STARLINK", {
       fontSize: "18px",
       color: "#ffffff",
       fontFamily: DEFAULT_FONT,
@@ -200,8 +203,8 @@ export class MarsMenu {
     this.starlinkStatusText.setOrigin(0, 0.5);
     statusContainer.add(this.starlinkStatusText);
 
-    // Create status value
-    this.starlinkStatusValue = this.scene.add.text(100, 0, "OFFLINE", {
+    // Create status value - moved below the label
+    this.starlinkStatusValue = this.scene.add.text(0, 25, "OFFLINE", {
       fontSize: "18px",
       color: "#ff4444", // Red color for offline
       fontFamily: DEFAULT_FONT,
@@ -229,21 +232,32 @@ export class MarsMenu {
     this.marsSprite.setDisplaySize(80, 80); // Increased size from 64 to 80
     marsContainer.add(this.marsSprite);
 
-    // Removed the rotation animation for Mars
+    // Create a container for the satellite count display
+    // Increased vertical position from 50 to 70 to add more spacing
+    const satelliteCountContainer = this.scene.add.container(0, 70);
+
+    // Add satellite icon
+    // Centered the icon (changed from -40 to 0)
+    const satelliteIcon = this.scene.add.image(0, 0, "starlink-mini");
+    // Doubled the display size from 16x16 to 32x32
+    satelliteIcon.setDisplaySize(32, 32);
+    satelliteCountContainer.add(satelliteIcon);
 
     // Add satellite count text
     this.satelliteCountText = this.scene.add.text(
+      35, // Adjusted position to account for centered and larger icon
       0,
-      50, // Moved down to accommodate larger Mars sprite
-      `Satellites: ${this.starlinkCount}`,
+      `${this.starlinkCount}`,
       {
         fontSize: "14px",
         color: "#ffffff",
         fontFamily: DEFAULT_FONT,
       }
     );
-    this.satelliteCountText.setOrigin(0.5);
-    marsContainer.add(this.satelliteCountText);
+    this.satelliteCountText.setOrigin(0, 0.5);
+    satelliteCountContainer.add(this.satelliteCountText);
+
+    marsContainer.add(satelliteCountContainer);
 
     // Add satellite visualization if there are any
     if (this.starlinkCount > 0) {
@@ -275,14 +289,15 @@ export class MarsMenu {
       const x = Math.cos(angle) * radius;
       const y = Math.sin(angle) * radius;
 
-      // Create a small rectangle for the satellite
-      const satellite = this.scene.add.rectangle(x, y, 5, 5, 0xffffff); // Increased from 4x4 to 5x5
+      // Create a satellite sprite using the starlink-mini texture
+      const satellite = this.scene.add.image(x, y, "starlink-mini");
       satellite.setName(`satellite-${i}`);
+      satellite.setDisplaySize(12, 12); // Increased size from 8x8 to 12x12
 
       // Add a small glow
       const satGlow = this.scene.add.graphics();
       satGlow.fillStyle(0x44ff44, 0.3);
-      satGlow.fillCircle(x, y, 4); // Increased from 3 to 4
+      satGlow.fillCircle(x, y, 6); // Increased from 4 to 6
       satGlow.setName(`satellite-glow-${i}`);
 
       container.add(satGlow);
@@ -616,7 +631,7 @@ export class MarsMenu {
     this.starlinkCount = count;
 
     // Update satellite count text
-    this.satelliteCountText.setText(`Satellites: ${count}`);
+    this.satelliteCountText.setText(`${count}`);
 
     // Update status based on count
     if (count >= 3) {

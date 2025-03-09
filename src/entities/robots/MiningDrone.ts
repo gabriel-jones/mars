@@ -145,7 +145,7 @@ export class MiningDrone extends Robot {
       // Check for processors every 3 seconds
       if (time % 3000 < delta) {
         console.log("Idle with full capacity, checking for processors again");
-        const processor = this.findNearestRegolithProcessor();
+        const processor = this.findNearestRegolithProcessor(true);
         if (processor) {
           console.log(
             `Found processor at (${processor.x}, ${processor.y}), moving to it`
@@ -192,8 +192,8 @@ export class MiningDrone extends Robot {
         console.log("Reached capacity, looking for a processor");
         this.resourceAmount = this.maxResourceCapacity; // Cap at max
 
-        // Find the nearest regolith processor
-        const processor = this.findNearestRegolithProcessor();
+        // Find the nearest regolith processor with available capacity
+        const processor = this.findNearestRegolithProcessor(true);
         if (processor) {
           console.log(
             `Found processor at (${processor.x}, ${processor.y}), moving to it`
@@ -202,7 +202,9 @@ export class MiningDrone extends Robot {
           this.moveToTarget(new Phaser.Math.Vector2(processor.x, processor.y));
           this.robotState = RobotState.RETURNING;
         } else {
-          console.warn("No processor found, showing warning");
+          console.warn(
+            "No processor with available capacity found, showing warning"
+          );
           this.showWarning();
 
           // Don't return to station, just continue mining from current position
@@ -364,7 +366,9 @@ export class MiningDrone extends Robot {
   }
 
   // Find the nearest regolith processor
-  private findNearestRegolithProcessor(): Phaser.GameObjects.Container | null {
+  private findNearestRegolithProcessor(
+    excludeFullProcessors: boolean = true
+  ): Phaser.GameObjects.Container | null {
     // Get all buildings from the BuildingManager
     const buildings = (window as any).gameState?.buildings || [];
 
@@ -411,8 +415,11 @@ export class MiningDrone extends Robot {
     let shortestDistance = Infinity;
 
     for (const container of processorContainers) {
-      // Skip containers that can't accept regolith
-      if (!(container as any).canAcceptRegolith()) {
+      // Skip containers that can't accept regolith if excludeFullProcessors is true
+      if (excludeFullProcessors && !(container as any).canAcceptRegolith()) {
+        console.log(
+          `Skipping full processor at (${container.x}, ${container.y})`
+        );
         continue;
       }
 
@@ -434,6 +441,13 @@ export class MiningDrone extends Robot {
         `Found nearest processor at (${nearestProcessor.x}, ${nearestProcessor.y}), distance: ${shortestDistance}`
       );
     } else {
+      // If we excluded full processors and found nothing, try again including full processors
+      if (excludeFullProcessors) {
+        console.log(
+          "No processors with available capacity found, checking for any processor"
+        );
+        return this.findNearestRegolithProcessor(false);
+      }
       console.log("No suitable regolith processor found");
     }
 
@@ -634,9 +648,32 @@ export class MiningDrone extends Robot {
               this.moveToNextPatternPoint();
             }
           } else {
-            console.error(
-              "Processor cannot accept regolith or missing required methods"
+            console.log(
+              "Current processor is full, looking for another processor"
             );
+
+            // Try to find another processor with available capacity
+            const alternateProcessor = this.findNearestRegolithProcessor(true);
+
+            if (alternateProcessor && alternateProcessor !== processor) {
+              console.log(
+                `Found alternate processor at (${alternateProcessor.x}, ${alternateProcessor.y}), moving to it`
+              );
+
+              // Move to the alternate processor
+              this.moveToTarget(
+                new Phaser.Math.Vector2(
+                  alternateProcessor.x,
+                  alternateProcessor.y
+                )
+              );
+              this.robotState = RobotState.RETURNING;
+              this.updateStateText();
+              this.clearWarning();
+              return;
+            }
+
+            console.error("No processors with available capacity found");
             this.showWarning();
 
             // Set state to MOVING to prevent going idle
@@ -692,6 +729,9 @@ export class MiningDrone extends Robot {
           this.moveToNextPatternPoint();
         }
       }
+    } else {
+      // For other states, let the parent class handle it
+      super.onReachTarget();
     }
   }
 

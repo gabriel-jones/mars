@@ -13,7 +13,7 @@ export const DUST_COLOR = 0xc2b280;
 // Start conditions
 export const NUM_INITIAL_ENEMIES = 5;
 export const NUM_INITIAL_OPTIMUS = 4;
-export const INITIAL_MONEY = 1_000_000;
+export const INITIAL_MONEY = 1_000_000_000;
 
 // Weapon constants
 export const RAYGUN_ATTACK_DAMAGE = 8;
