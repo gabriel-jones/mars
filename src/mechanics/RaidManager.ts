@@ -241,8 +241,18 @@ export class RaidManager {
     // Create the raid enemies
     this.enemyManager.createEnemies(raidSize);
 
-    // Show a visual indicator for the raid direction
-    this.showRaidDirectionIndicator(cornerIndex);
+    // // Force an update on all enemies to ensure they're properly initialized
+    // const gameState = (window as any).gameState;
+    // if (gameState && gameState.enemies) {
+    //   gameState.enemies.forEach((enemy: any) => {
+    //     if (enemy && typeof enemy.update === "function") {
+    //       // Call update multiple times to ensure proper initialization
+    //       for (let i = 0; i < 3; i++) {
+    //         enemy.update(this.scene.time.now + i * 100, 16);
+    //       }
+    //     }
+    //   });
+    // }
 
     // Increment the raid counter
     this.raidCounter++;
@@ -253,76 +263,6 @@ export class RaidManager {
     console.log(
       `Raid #${this.raidCounter} spawned with ${raidSize} aliens at corner ${cornerIndex}`
     );
-  }
-
-  /**
-   * Show a visual indicator pointing to the raid direction
-   */
-  private showRaidDirectionIndicator(cornerIndex: number): void {
-    // Get the center of the screen
-    const centerX = this.scene.cameras.main.width / 2;
-    const centerY = this.scene.cameras.main.height / 2;
-
-    // Calculate the angle based on the corner index
-    // 0: top-left (northwest), 1: top-right (northeast), 2: bottom-left (southwest), 3: bottom-right (southeast)
-    const angles = [225, 315, 135, 45]; // in degrees
-    const angle = angles[cornerIndex] * (Math.PI / 180); // convert to radians
-
-    // Create an arrow pointing in the direction of the raid
-    const arrowLength = 100;
-    const arrowWidth = 30;
-
-    // Calculate the end point of the arrow
-    const endX = centerX + Math.cos(angle) * arrowLength;
-    const endY = centerY + Math.sin(angle) * arrowLength;
-
-    // Create a graphics object for the arrow
-    const graphics = this.scene.add.graphics();
-    graphics.setDepth(DEPTH.UI);
-
-    // Set style for the arrow
-    graphics.lineStyle(5, 0xff0000, 1);
-    graphics.fillStyle(0xff0000, 1);
-
-    // Draw the line
-    graphics.beginPath();
-    graphics.moveTo(centerX, centerY);
-    graphics.lineTo(endX, endY);
-    graphics.strokePath();
-
-    // Draw the arrowhead
-    const arrowheadAngle = 30 * (Math.PI / 180); // 30 degrees in radians
-    const arrowheadLength = 20;
-
-    const arrowhead1X =
-      endX - Math.cos(angle - arrowheadAngle) * arrowheadLength;
-    const arrowhead1Y =
-      endY - Math.sin(angle - arrowheadAngle) * arrowheadLength;
-
-    const arrowhead2X =
-      endX - Math.cos(angle + arrowheadAngle) * arrowheadLength;
-    const arrowhead2Y =
-      endY - Math.sin(angle + arrowheadAngle) * arrowheadLength;
-
-    graphics.beginPath();
-    graphics.moveTo(endX, endY);
-    graphics.lineTo(arrowhead1X, arrowhead1Y);
-    graphics.lineTo(arrowhead2X, arrowhead2Y);
-    graphics.closePath();
-    graphics.fillPath();
-
-    // Add a pulsing effect to the arrow
-    this.scene.tweens.add({
-      targets: graphics,
-      alpha: 0,
-      duration: 2000,
-      ease: "Sine.easeInOut",
-      repeat: 3,
-      yoyo: true,
-      onComplete: () => {
-        graphics.destroy();
-      },
-    });
   }
 
   /**
@@ -369,8 +309,7 @@ export class RaidManager {
    */
   public adjustRaidDifficulty(defensesCount: number): void {
     // Adjust raid interval based on defenses (more defenses = more frequent raids)
-    const minInterval = 90000; // Minimum 1.5 minutes between raids
-    this.raidInterval = Math.max(minInterval, 180000 - defensesCount * 3000);
+    this.raidInterval = INITIAL_RAID_INTERVAL; // 10 seconds between raids
 
     // Adjust raid size multiplier based on defenses (more gradual scaling)
     this.raidSizeMultiplier = 1.3 + defensesCount * 0.02;

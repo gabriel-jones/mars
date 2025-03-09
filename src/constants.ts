@@ -51,6 +51,12 @@ export const ENEMY_PREFERRED_SHOOTING_DISTANCE = 300; // Increased from 150 - Di
 export const ENEMY_MAX_SHOOTING_RANGE = 600; // Increased from 500 - Maximum distance at which enemies can shoot
 export const ENEMY_IMPRECISION_FACTOR = 40; // Reduced from 50 - Accuracy factor for enemies (higher is less accurate)
 
+// Aliens
+export const ALIEN_HEALTH = 80;
+export const ALIEN_SPEED = 125;
+export const ALIEN_ATTACK_DAMAGE = 15;
+export const ALIEN_ATTACK_COOLDOWN = 350;
+
 // Default font stack that uses Apple system font with appropriate fallbacks
 export const DEFAULT_FONT =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"';

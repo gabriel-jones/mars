@@ -7,6 +7,7 @@ import { RobotsMenu, RobotInfo } from "./robotsMenu";
 import { ShipsMenu, StarshipInfo } from "./shipsMenu";
 import { EarthMenu } from "./earthMenu";
 import { MarsMenu } from "./marsMenu";
+import { DEPTH } from "../depth";
 
 interface ButtonConfig {
   text: string;
@@ -172,7 +173,9 @@ export class ActionMenu {
 
   // Create a button with text and optional icon
   private createButton(config: ButtonConfig): Phaser.GameObjects.Container {
-    const button = this.scene.add.container(config.x, config.y);
+    const button = this.scene.add
+      .container(config.x, config.y)
+      .setDepth(DEPTH.UI);
 
     // Button width based on text length
     const buttonWidth = config.text.length * 15 + (config.icon ? 40 : 0);

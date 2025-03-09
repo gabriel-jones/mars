@@ -194,7 +194,6 @@ export abstract class Robot extends Agent {
 
   // Abstract methods to be implemented by subclasses
   protected abstract getRobotNameInternal(): string;
-  public abstract update(time: number, delta: number): void;
 
   // Scan for nearby enemies
   protected scanForEnemies(time: number): void {

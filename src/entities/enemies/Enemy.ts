@@ -164,8 +164,16 @@ export abstract class Enemy extends Agent implements HasHealth {
   // Update the enemy
   public update(time: number, delta: number): void {
     if (!this.isAlive() || !this.sprite) {
+      console.warn(
+        "Enemy is not alive or sprite is not set",
+        this.isAlive(),
+        this.sprite
+      );
       return;
     }
+
+    // Ensure physics body is enabled and properly set up
+    this.ensurePhysicsBodyEnabled();
 
     // Update shadow effects
     this.updateShadowEffects();
@@ -204,6 +212,40 @@ export abstract class Enemy extends Agent implements HasHealth {
       case EnemyState.DEAD:
         // Do nothing when dead
         break;
+    }
+  }
+
+  // Ensure physics body is enabled and properly set up
+  private ensurePhysicsBodyEnabled(): void {
+    if (!this.sprite) {
+      return;
+    }
+
+    // Ensure the sprite has a physics body
+    if (this.sprite instanceof Phaser.Physics.Arcade.Sprite) {
+      const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+
+      // If the body exists, make sure it's enabled
+      if (body) {
+        body.enable = true;
+
+        // Ensure the isEnemy property is set on the sprite for collision detection
+        (this.sprite as any).isEnemy = true;
+        (this.sprite as any).enemyInstance = this;
+
+        // Make sure the body size is properly set
+        body.setSize(this.sprite.width * 0.8, this.sprite.height * 0.8);
+        body.setOffset(this.sprite.width * 0.1, this.sprite.height * 0.1);
+
+        // Make sure the body is set to collide with world bounds
+        body.setCollideWorldBounds(true);
+
+        // Make sure the body has no bounce
+        body.setBounce(0);
+
+        // Make sure the body is not immovable
+        body.setImmovable(false);
+      }
     }
   }
 
@@ -258,13 +300,6 @@ export abstract class Enemy extends Agent implements HasHealth {
       // Call the abstract attackTarget method that subclasses will implement
       this.attackTarget();
       this.lastAttackTime = time;
-
-      // Log attack
-      console.log(
-        `Enemy attacking target at (${this.target.x}, ${
-          this.target.y
-        }), distance: ${distance.toFixed(2)}`
-      );
     }
 
     // Always move towards target if beyond preferred shooting distance
@@ -275,6 +310,7 @@ export abstract class Enemy extends Agent implements HasHealth {
         this.dustEffects.startMovementDust();
       }
 
+      // Move towards the target
       this.moveTowardsTarget(delta);
     }
     // If closer than preferred shooting distance but not too close, stop and shoot
@@ -324,7 +360,8 @@ export abstract class Enemy extends Agent implements HasHealth {
     }
 
     // Periodically re-evaluate targets to ensure we're pursuing the best target
-    if (time % 3000 < delta) {
+    if (time % 500 < delta) {
+      // Even more frequent target updates
       this.findClosestTarget();
     }
   }
@@ -336,21 +373,13 @@ export abstract class Enemy extends Agent implements HasHealth {
     const player = gameState.player;
     const robots = gameState.robots || [];
     const buildings = gameState.buildings || [];
+    const base = gameState.base;
 
     let closestTarget: TargetObject | null = null;
     let closestDistance = Number.MAX_VALUE;
     let targetType = "none";
 
-    // Occasionally log available targets for debugging
-    if (Math.random() < 0.005) {
-      console.log(
-        `Enemy searching for targets. Player: ${
-          player ? "available" : "not available"
-        }, Robots: ${robots.length}`
-      );
-    }
-
-    // Check player with higher priority
+    // Check player with high priority
     if (player && player.active) {
       const distance = Phaser.Math.Distance.Between(
         (this.sprite as Phaser.Physics.Arcade.Sprite).x,
@@ -360,19 +389,12 @@ export abstract class Enemy extends Agent implements HasHealth {
       );
 
       // Prioritize player significantly by applying a distance reduction factor
-      const adjustedDistance = distance * 0.7; // 30% reduction to prioritize player
+      const adjustedDistance = distance * 0.6; // 40% reduction to prioritize player
 
       if (adjustedDistance < closestDistance) {
         closestDistance = adjustedDistance;
         closestTarget = player as unknown as TargetObject;
         targetType = "player";
-
-        // Log when targeting player
-        if (Math.random() < 0.01) {
-          console.log(
-            `Enemy targeting player at distance ${distance.toFixed(2)}`
-          );
-        }
       }
     }
 
@@ -427,7 +449,7 @@ export abstract class Enemy extends Agent implements HasHealth {
         );
 
         // Apply a slight priority to robots
-        const adjustedDistance = distance * 0.85; // 15% reduction to prioritize robots
+        const adjustedDistance = distance * 0.8; // 20% reduction to prioritize robots
 
         if (adjustedDistance < closestDistance) {
           closestDistance = adjustedDistance;
@@ -438,20 +460,39 @@ export abstract class Enemy extends Agent implements HasHealth {
             robotInstance: robot,
           } as unknown as TargetObject;
           targetType = "robot";
-
-          // Log when targeting robot
-          if (Math.random() < 0.01) {
-            console.log(
-              `Enemy targeting robot at distance ${distance.toFixed(2)}`
-            );
-          }
         }
+      }
+    }
+
+    // Check base as a target
+    if (base && base.position) {
+      // Convert tile position to pixel position
+      const baseX = base.position.x * TILE_SIZE + TILE_SIZE / 2;
+      const baseY = base.position.y * TILE_SIZE + TILE_SIZE / 2;
+
+      const distance = Phaser.Math.Distance.Between(
+        (this.sprite as Phaser.Physics.Arcade.Sprite).x,
+        (this.sprite as Phaser.Physics.Arcade.Sprite).y,
+        baseX,
+        baseY
+      );
+
+      const adjustedDistance = distance * 0.75;
+
+      if (adjustedDistance < closestDistance) {
+        closestDistance = adjustedDistance;
+        closestTarget = {
+          x: baseX,
+          y: baseY,
+          active: true,
+        } as unknown as TargetObject;
+        targetType = "base";
       }
     }
 
     // Check buildings as fallback targets
     if (
-      (!closestTarget || closestDistance > 1000) &&
+      (!closestTarget || closestDistance > 800) && // Reduced from 1000 to make buildings more attractive targets
       buildings &&
       buildings.length > 0
     ) {
@@ -481,7 +522,7 @@ export abstract class Enemy extends Agent implements HasHealth {
         );
 
         // Buildings are lower priority than players and robots
-        const adjustedDistance = distance * 1.2; // 20% increase to deprioritize buildings
+        const adjustedDistance = distance * 1.1; // 10% increase to deprioritize buildings
 
         if (adjustedDistance < closestDistance) {
           closestDistance = adjustedDistance;
@@ -497,37 +538,14 @@ export abstract class Enemy extends Agent implements HasHealth {
 
     // Only change target if we found something or we already had a target that's now invalid
     if (closestTarget || !this.target || !this.isTargetValid()) {
-      // Log target change
-      if (this.target && closestTarget && Math.random() < 0.01) {
-        console.log(
-          `Enemy changing target from ${this.target.x.toFixed(
-            0
-          )},${this.target.y.toFixed(0)} to ${closestTarget.x.toFixed(
-            0
-          )},${closestTarget.y.toFixed(0)} (${targetType})`
-        );
-      }
-
       this.target = closestTarget;
 
       // If we found a target, switch to attacking state
       if (closestTarget && this.enemyState !== EnemyState.ATTACKING) {
         this.enemyState = EnemyState.ATTACKING;
-
-        // Log state change
-        if (Math.random() < 0.05) {
-          console.log(
-            `Enemy switching to ATTACKING state, targeting ${targetType}`
-          );
-        }
       } else if (!closestTarget && this.enemyState === EnemyState.ATTACKING) {
         // If we lost our target, switch back to idle
         this.enemyState = EnemyState.IDLE;
-
-        // Log state change
-        if (Math.random() < 0.05) {
-          console.log(`Enemy switching to IDLE state, no target found`);
-        }
       }
     }
 
@@ -546,11 +564,6 @@ export abstract class Enemy extends Agent implements HasHealth {
 
       // Set to attacking state to ensure movement towards center
       this.enemyState = EnemyState.ATTACKING;
-
-      // Log fallback to map center
-      if (Math.random() < 0.05) {
-        console.log(`Enemy has no targets, moving to map center`);
-      }
     }
   }
 
@@ -609,87 +622,19 @@ export abstract class Enemy extends Agent implements HasHealth {
 
     // Check if sprite and body exist
     if (!sprite || !sprite.body) {
-      console.warn("Cannot move enemy: sprite or body is undefined");
       return;
     }
 
-    // Only move if we're further than the preferred shooting distance
-    if (distance > this.preferredShootingDistance) {
-      // Calculate direction to target
-      const angle = Phaser.Math.Angle.Between(enemyX, enemyY, targetX, targetY);
+    // Calculate direction to target
+    const angle = Phaser.Math.Angle.Between(enemyX, enemyY, targetX, targetY);
 
-      // Calculate the next position
-      const nextX = enemyX + Math.cos(angle) * this.speed * (delta / 1000);
-      const nextY = enemyY + Math.sin(angle) * this.speed * (delta / 1000);
+    sprite.setVelocity(
+      Math.cos(angle) * this.speed,
+      Math.sin(angle) * this.speed
+    );
 
-      // Calculate the next tile
-      const nextTileX = Math.floor(nextX / Enemy.TILE_SIZE);
-      const nextTileY = Math.floor(nextY / Enemy.TILE_SIZE);
-
-      // Check if the next tile is different from the current tile and is occupied
-      if (
-        (nextTileX !== this.currentTile.x ||
-          nextTileY !== this.currentTile.y) &&
-        Enemy.isTileOccupied(nextTileX, nextTileY, this)
-      ) {
-        // The next tile is occupied, try to find an alternative path
-        // Instead of stopping, try to move around the obstacle
-
-        // Try 8 different directions to find an unoccupied tile
-        const possibleAngles = [
-          angle + Math.PI / 4, // 45 degrees clockwise
-          angle - Math.PI / 4, // 45 degrees counter-clockwise
-          angle + Math.PI / 2, // 90 degrees clockwise
-          angle - Math.PI / 2, // 90 degrees counter-clockwise
-          angle + Math.PI * 0.75, // 135 degrees clockwise
-          angle - Math.PI * 0.75, // 135 degrees counter-clockwise
-          angle + Math.PI, // 180 degrees (opposite direction)
-          angle - Math.PI, // 180 degrees (opposite direction)
-        ];
-
-        // Try each angle until we find an unoccupied tile
-        let foundPath = false;
-        for (const newAngle of possibleAngles) {
-          const testX =
-            enemyX + Math.cos(newAngle) * this.speed * (delta / 1000);
-          const testY =
-            enemyY + Math.sin(newAngle) * this.speed * (delta / 1000);
-          const testTileX = Math.floor(testX / Enemy.TILE_SIZE);
-          const testTileY = Math.floor(testY / Enemy.TILE_SIZE);
-
-          if (!Enemy.isTileOccupied(testTileX, testTileY, this)) {
-            // Found an unoccupied tile, move in this direction
-            sprite.setVelocity(
-              Math.cos(newAngle) * this.speed,
-              Math.sin(newAngle) * this.speed
-            );
-
-            // Update sprite direction based on movement
-            sprite.setFlipX(Math.cos(newAngle) < 0);
-
-            foundPath = true;
-            break;
-          }
-        }
-
-        // If we couldn't find a path, just stop
-        if (!foundPath) {
-          sprite.setVelocity(0, 0);
-        }
-      } else {
-        // No obstacle, move directly towards the target
-        sprite.setVelocity(
-          Math.cos(angle) * this.speed,
-          Math.sin(angle) * this.speed
-        );
-
-        // Update sprite direction based on movement
-        sprite.setFlipX(Math.cos(angle) < 0);
-      }
-    } else {
-      // We're close enough to the target, stop moving
-      sprite.setVelocity(0, 0);
-    }
+    // Update sprite direction based on movement
+    sprite.setFlipX(Math.cos(angle) < 0);
   }
 
   // Check if in attack range
@@ -725,8 +670,10 @@ export abstract class Enemy extends Agent implements HasHealth {
       this.dustEffects.stopMovementDust();
     }
 
-    // Stop movement
-    (this.sprite as Phaser.Physics.Arcade.Sprite).setVelocity(0, 0);
+    // Stop movement - but check if sprite and body exist first
+    if (this.sprite && (this.sprite as Phaser.Physics.Arcade.Sprite).body) {
+      (this.sprite as Phaser.Physics.Arcade.Sprite).setVelocity(0, 0);
+    }
 
     // Create explosion effect
     this.showDestructionEffect();
@@ -745,6 +692,11 @@ export abstract class Enemy extends Agent implements HasHealth {
 
   // Create explosion effect
   private showDestructionEffect(): void {
+    // Check if sprite exists before accessing its properties
+    if (!this.sprite) {
+      return;
+    }
+
     const x = (this.sprite as Phaser.Physics.Arcade.Sprite).x;
     const y = (this.sprite as Phaser.Physics.Arcade.Sprite).y;
 
@@ -802,9 +754,14 @@ export abstract class Enemy extends Agent implements HasHealth {
       this.healthBar = null;
     }
 
-    // Remove the sprite
+    // Destroy the sprite if it exists
     if (this.sprite) {
-      this.sprite.destroy();
+      // Check if the sprite is already being destroyed
+      if (!this.sprite.scene) {
+        console.log("Sprite already destroyed or removed from scene");
+      } else {
+        this.sprite.destroy();
+      }
     }
   }
 
@@ -858,13 +815,23 @@ export abstract class Enemy extends Agent implements HasHealth {
 
   // Override updateHealthBarPosition to ensure health bars are properly updated
   protected updateHealthBarPosition(): void {
-    if (this.healthBar && this.sprite) {
-      const pos = this.getPosition();
-      this.healthBar.setPosition(pos.x, pos.y - 30); // Position above the enemy
-
-      // Update health bar visibility based on health status
-      const healthBarRenderer = new HealthBarRenderer(this.scene);
-      healthBarRenderer.updateHealthBar(this.healthBar, this);
+    if (!this.healthBar || !this.sprite) {
+      return;
     }
+
+    // Get the sprite position
+    const spriteX = this.sprite.x;
+    const spriteY = this.sprite.y;
+
+    // Position the health bar above the sprite
+    this.healthBar.x = spriteX;
+    this.healthBar.y = spriteY - 30; // Position above the sprite
+
+    // Ensure the health bar is visible
+    this.healthBar.setVisible(true);
+
+    // Update health bar to reflect current health
+    const healthBarRenderer = new HealthBarRenderer(this.scene);
+    healthBarRenderer.updateHealthBar(this.healthBar, this);
   }
 }

@@ -1,8 +1,14 @@
 import Phaser from "phaser";
 import { Enemy } from "../entities/enemies/Enemy";
-import { Alien } from "../entities/enemies/Alien";
 import { HealthBarRenderer } from "../interfaces/Health";
-import { NUM_INITIAL_ENEMIES } from "../constants";
+import {
+  ALIEN_ATTACK_COOLDOWN,
+  ALIEN_ATTACK_DAMAGE,
+  ALIEN_HEALTH,
+  ALIEN_SPEED,
+  NUM_INITIAL_ENEMIES,
+} from "../constants";
+import { Alien } from "../entities/enemies/Alien";
 
 /**
  * EnemyManager handles all enemy-related functionality
@@ -63,7 +69,7 @@ export class EnemyManager {
         `Creating ${count} aliens at spawn point (${spawnX}, ${spawnY})`
       );
 
-      // Create aliens for the raid
+      // Create aliens
       for (let i = 0; i < count; i++) {
         // Add randomness to alien positions instead of a perfect circle
         const angle = (i / count) * Math.PI * 2 + (Math.random() * 0.5 - 0.25); // Add random angle variation
@@ -75,13 +81,16 @@ export class EnemyManager {
         const x = spawnX + Math.cos(angle) * distance;
         const y = spawnY + Math.sin(angle) * distance;
 
-        // Create alien with increased speed for raids
+        // Create alien with appropriate parameters - use SimpleAlien instead of Alien
         const alien = new Alien(
           this.scene,
           x,
           y,
-          80, // health
-          120 + Math.random() * 30 // randomized speed between 120-150
+          ALIEN_HEALTH,
+          ALIEN_SPEED,
+          450, // Same attack range
+          ALIEN_ATTACK_DAMAGE,
+          ALIEN_ATTACK_COOLDOWN
         );
 
         // Add health bar to the alien
@@ -91,11 +100,46 @@ export class EnemyManager {
         );
         alien.setHealthBar(healthBar);
 
-        // Force the alien to immediately look for targets
-        if (typeof alien.update === "function") {
-          alien.update(this.scene.time.now, 16); // Call update once to initialize
+        // Make sure the alien is properly added to the scene
+        const sprite = alien.getSprite();
+        if (sprite) {
+          // Ensure the sprite is visible and active
+          sprite.setVisible(true);
+          sprite.setActive(true);
+
+          // Make sure the physics body is enabled
+          if (sprite.body) {
+            (sprite.body as Phaser.Physics.Arcade.Body).enable = true;
+
+            // Set collision properties
+            (sprite.body as Phaser.Physics.Arcade.Body).setCollideWorldBounds(
+              true
+            );
+            (sprite.body as Phaser.Physics.Arcade.Body).setBounce(0);
+
+            // Make sure the body is the right size
+            (sprite.body as Phaser.Physics.Arcade.Body).setSize(
+              sprite.width * 0.8,
+              sprite.height * 0.8
+            );
+            (sprite.body as Phaser.Physics.Arcade.Body).setOffset(
+              sprite.width * 0.1,
+              sprite.height * 0.1
+            );
+          }
+
+          // Make sure the sprite has the isEnemy flag for collision detection
+          (sprite as any).isEnemy = true;
+          (sprite as any).enemyInstance = alien;
         }
 
+        // Force the alien to immediately look for targets
+        if (typeof alien.update === "function") {
+          // Call update to initialize
+          alien.update(this.scene.time.now, 16);
+        }
+
+        // Add the alien to our list
         this.enemies.push(alien);
       }
 
@@ -115,20 +159,20 @@ export class EnemyManager {
     if (!this.initialized) return;
 
     // Filter out any destroyed enemies
-    this.enemies = this.enemies.filter((enemy) => {
-      // Check if the enemy is valid (has a sprite and is alive)
-      const isValid =
-        enemy &&
-        typeof enemy.getSprite === "function" &&
-        typeof enemy.isAlive === "function" &&
-        enemy.isAlive();
+    // this.enemies = this.enemies.filter((enemy) => {
+    //   // Check if the enemy is valid (has a sprite and is alive)
+    //   const isValid =
+    //     enemy &&
+    //     typeof enemy.getSprite === "function" &&
+    //     typeof enemy.isAlive === "function" &&
+    //     enemy.isAlive();
 
-      if (!isValid) {
-        console.log("Removing invalid enemy from update loop");
-      }
+    //   if (!isValid) {
+    //     console.warn("Removing invalid enemy from update loop");
+    //   }
 
-      return isValid;
-    });
+    //   return isValid;
+    // });
 
     // Update remaining valid enemies
     this.enemies.forEach((enemy) => {

@@ -8,39 +8,38 @@ import { DEPTH } from "../../depth";
 import { ENEMY_IMPRECISION_FACTOR } from "../../constants";
 
 export class Alien extends Enemy {
-  private hoverOffset: number = 0;
-  private hoverSpeed: number = 0.05;
-  private hoverAmplitude: number = 10;
   private raygun: Tool | null = null;
   private burstCount: number = 0;
   private maxBurstCount: number = 3;
   private burstDelay: number = 200; // ms between shots in a burst
-  private burstCooldown: number = 3000; // ms between bursts
+  private burstCooldown: number = 2000; // Reduced cooldown between bursts for more aggression
   private lastBurstTime: number = 0;
   private imprecisionFactor: number = ENEMY_IMPRECISION_FACTOR; // pixels of random deviation
   private hasShieldEquipped: boolean = false;
+  private targetUpdateInterval: number = 500; // Update target more frequently
+  private lastTargetUpdateTime: number = 0;
 
   constructor(
     scene: Phaser.Scene,
     x: number,
     y: number,
     maxHealth: number = 80,
-    speed: number = 120, // Increased speed to make aliens more aggressive
+    speed: number = 150, // Increased speed to make aliens more aggressive
     attackRange: number = 450,
     attackDamage: number = 15,
-    attackCooldown: number = 500
+    attackCooldown: number = 400 // Reduced cooldown for more frequent attacks
   ) {
     super(
       scene,
       x,
       y,
       "alien",
-      maxHealth,
       speed,
+      maxHealth,
       attackRange,
       attackDamage,
       attackCooldown,
-      200, // Reduced preferredShootingDistance to make aliens get closer
+      250, // Preferred shooting distance - closer to targets
       600 // maxShootingRange - aliens cannot shoot beyond this distance
     );
 
@@ -87,12 +86,6 @@ export class Alien extends Enemy {
       this.raygun.show(handPosition.x, handPosition.y, false);
     }
 
-    // Create hover effect using a tween
-    this.createHoverEffect();
-
-    // Set a random starting point for the hover effect
-    this.hoverOffset = Math.random() * Math.PI * 2;
-
     // Set a random initial burst time
     this.lastBurstTime = scene.time.now - Math.random() * this.burstCooldown;
 
@@ -104,57 +97,115 @@ export class Alien extends Enemy {
       this.initShield(40, 0xff0088); // Red shield for aliens
     }
 
-    // Immediately start looking for targets
+    // Make sure the sprite has the isEnemy flag for collision detection
+    if (this.sprite) {
+      (this.sprite as any).isEnemy = true;
+      (this.sprite as any).enemyInstance = this;
+    }
+
+    // Find the closest target
     this.findClosestTarget();
 
     // Force into attacking state to make aliens more aggressive
     this.enemyState = EnemyState.ATTACKING;
-  }
 
-  private createHoverEffect(): void {
-    if (this.sprite) {
-      // Store the initial position
-      const initialY = this.sprite.y;
-
-      // Create a tween that moves the sprite up and down
-      this.scene.tweens.add({
-        targets: this.sprite,
-        y: {
-          value: initialY + this.hoverAmplitude,
-          ease: "Sine.easeInOut",
-        },
-        duration: 1500,
-        yoyo: true,
-        repeat: -1,
-      });
-    }
+    // Set initial target update time
+    this.lastTargetUpdateTime = scene.time.now;
   }
 
   public update(time: number, delta: number): void {
+    // First check if we're alive and have a sprite
+    if (!this.isAlive() || !this.sprite) {
+      return;
+    }
+
     // Call the parent update method
     super.update(time, delta);
 
-    // Update hover effect
-    this.updateHoverEffect();
+    // Get the current sprite position
+    const spriteX = this.sprite.x;
+    const spriteY = this.sprite.y;
 
-    // Update tool position
-    this.updateToolPosition();
+    // CRITICAL: Update the label position
+    if (this.label) {
+      this.label.setPosition(spriteX, spriteY + 40);
+      this.label.setVisible(true);
+    }
 
-    // Try to find a target if we don't have one
-    if (!this.target) {
+    // CRITICAL: Update the state text position
+    if (this.stateText) {
+      this.stateText.setPosition(spriteX, spriteY + 55);
+    }
+
+    // CRITICAL: Update the health bar position
+    if (this.healthBar) {
+      this.healthBar.x = spriteX;
+      this.healthBar.y = spriteY - 30;
+      this.healthBar.setVisible(true);
+
+      // Update health bar to reflect current health
+      const healthBarRenderer = new HealthBarRenderer(this.scene);
+      healthBarRenderer.updateHealthBar(this.healthBar, this);
+    }
+
+    // CRITICAL: Update the raygun position
+    if (this.raygun) {
+      // If we have a target, position the raygun correctly
+      if (this.target) {
+        // Calculate angle to target
+        const angle = Phaser.Math.Angle.Between(
+          spriteX,
+          spriteY,
+          this.target.x,
+          this.target.y
+        );
+
+        // Get the hand position
+        const handPosition = this.calculateHandPosition(angle);
+
+        // Update the raygun position
+        this.raygun.updatePosition(handPosition.x, handPosition.y);
+        this.raygun.setRotation(angle);
+
+        // Flip the raygun if facing left
+        const shouldFlip = Math.abs(angle) > Math.PI / 2;
+        this.raygun.setFlipX(shouldFlip);
+
+        // Make sure the raygun is visible
+        this.raygun.show(handPosition.x, handPosition.y, false);
+
+        // Update the laser pointer
+        this.raygun.updateLaserPointer(
+          handPosition.x,
+          handPosition.y,
+          this.target.x,
+          this.target.y,
+          false
+        );
+      } else {
+        // No target, hide the raygun
+        this.raygun.hide();
+      }
+    }
+
+    // Update shield position if we have one
+    if (this.hasShield()) {
+      this.updateShieldPosition();
+    }
+
+    // Regularly update target to ensure aliens are always pursuing the closest target
+    if (time - this.lastTargetUpdateTime > this.targetUpdateInterval) {
       this.findClosestTarget();
-      console.log("Alien looking for target");
+      this.lastTargetUpdateTime = time;
     }
 
     // Always try to fire at target if we have one
     if (this.target) {
       // Ensure we're always trying to fire if we have a target
       this.tryToFireAtTarget(time);
-
-      // Log target information for debugging
-      console.log(
-        `Alien targeting: (${this.target.x}, ${this.target.y}), state: ${this.enemyState}`
-      );
+    } else {
+      // Always try to find a target if we don't have one
+      this.findClosestTarget();
     }
 
     // If we're stuck in the same position for too long, try to move randomly
@@ -166,12 +217,11 @@ export class Alien extends Enemy {
     // Slowly recharge shield over time (0.25 points per second) if shield is equipped
     if (this.hasShield() && this.getCurrentShield() < this.getMaxShield()) {
       this.rechargeShield(delta / 4000); // Quarter the rate of player
+    }
 
-      // Update health bar to reflect shield changes
-      if (this.healthBar) {
-        const healthBarRenderer = new HealthBarRenderer(this.scene);
-        healthBarRenderer.updateHealthBar(this.healthBar, this);
-      }
+    // Ensure we're always in attacking state when we have a target
+    if (this.target && this.enemyState !== EnemyState.ATTACKING) {
+      this.enemyState = EnemyState.ATTACKING;
     }
   }
 
@@ -179,9 +229,6 @@ export class Alien extends Enemy {
     // Aliens attack by firing their raygun
     // Directly call tryToFireAtTarget to ensure aliens shoot
     this.tryToFireAtTarget(this.scene.time.now);
-
-    // Log that we're attempting to attack
-    console.log(`Alien attackTarget called, attempting to fire raygun`);
   }
 
   // Calculate the position of the alien's hand based on the angle to target
@@ -196,7 +243,7 @@ export class Alien extends Enemy {
       normalizedAngle > Math.PI * 0.5 && normalizedAngle < Math.PI * 1.5;
 
     // Offset from center (distance from alien center to hand)
-    const handOffset = 30;
+    const handOffset = 20; // Reduced offset to keep raygun closer to alien
 
     // Calculate the hand position based on which side the weapon should be on
     let handX, handY;
@@ -266,7 +313,6 @@ export class Alien extends Enemy {
   private tryToFireAtTarget(time: number): void {
     // Only fire if we have a raygun and a target
     if (!this.raygun || !this.target || !this.sprite) {
-      console.log("Alien not firing: no raygun or target");
       return;
     }
 
@@ -280,31 +326,14 @@ export class Alien extends Enemy {
 
     // Only fire if within maximum shooting range
     if (distance > this.maxShootingRange) {
-      console.log(
-        `Alien not firing: target beyond maximum shooting range (${distance.toFixed(
-          2
-        )}/${this.maxShootingRange})`
-      );
       return;
     }
 
     // Check if cooldown has passed
     const cooldownPassed = time - this.lastAttackTime >= this.attackCooldown;
     if (!cooldownPassed) {
-      console.log(
-        `Alien waiting for cooldown: ${time - this.lastAttackTime}/${
-          this.attackCooldown
-        }`
-      );
       return;
     }
-
-    // We're ready to fire!
-    console.log(
-      `Alien firing at target at (${this.target.x}, ${
-        this.target.y
-      }), distance: ${distance.toFixed(2)}`
-    );
 
     // Calculate angle to target
     const angle = Phaser.Math.Angle.Between(
@@ -333,6 +362,35 @@ export class Alien extends Enemy {
     if (this.burstCount >= this.maxBurstCount) {
       this.lastAttackTime = time + this.burstCooldown - this.attackCooldown;
       this.burstCount = 0;
+    }
+  }
+
+  // Override findClosestTarget to prioritize the base and player
+  protected findClosestTarget(): void {
+    // Call the parent method to find initial targets
+    super.findClosestTarget();
+
+    // If we still don't have a target, force targeting the base
+    if (!this.target) {
+      // Get the base position from game state
+      const gameState = (window as any).gameState;
+      const base = gameState.base;
+
+      if (base && base.position) {
+        // Convert tile position to pixel position
+        const baseX = base.position.x * TILE_SIZE + TILE_SIZE / 2;
+        const baseY = base.position.y * TILE_SIZE + TILE_SIZE / 2;
+
+        // Set the base as our target
+        this.target = {
+          x: baseX,
+          y: baseY,
+          active: true,
+        } as any;
+
+        // Ensure we're in attacking state
+        this.enemyState = EnemyState.ATTACKING;
+      }
     }
   }
 
@@ -365,7 +423,7 @@ export class Alien extends Enemy {
   // Track position to detect if stuck
   private lastPosition = { x: 0, y: 0 };
   private stuckTime = 0;
-  private stuckThreshold = 2000; // 2 seconds
+  private stuckThreshold = 1000; // Reduced threshold to detect stuck aliens faster
 
   // Check if the alien is stuck in the same position
   private checkIfStuck(delta: number): void {
@@ -391,23 +449,38 @@ export class Alien extends Enemy {
 
       // If stuck for too long, apply a random movement
       if (this.stuckTime > this.stuckThreshold) {
-        const randomAngle = Math.random() * Math.PI * 2;
-        const velocityX = Math.cos(randomAngle) * this.speed;
-        const velocityY = Math.sin(randomAngle) * this.speed;
-
-        // Get the sprite with proper type
-        const sprite = this.sprite as Phaser.Physics.Arcade.Sprite;
-
-        // Check if sprite and body exist before setting velocity
-        if (sprite && sprite.body) {
-          sprite.setVelocity(velocityX, velocityY);
-          console.log(
-            "Unstuck alien by applying random velocity:",
-            velocityX,
-            velocityY
+        // If we have a target, try to move directly towards it with increased speed
+        if (this.target) {
+          const angle = Phaser.Math.Angle.Between(
+            currentX,
+            currentY,
+            this.target.x,
+            this.target.y
           );
+
+          const velocityX = Math.cos(angle) * (this.speed * 2);
+          const velocityY = Math.sin(angle) * (this.speed * 2);
+
+          // Get the sprite with proper type
+          const sprite = this.sprite as Phaser.Physics.Arcade.Sprite;
+
+          // Check if sprite and body exist before setting velocity
+          if (sprite && sprite.body) {
+            sprite.setVelocity(velocityX, velocityY);
+          }
         } else {
-          console.warn("Cannot set velocity: sprite or body is undefined");
+          // No target, use random movement
+          const randomAngle = Math.random() * Math.PI * 2;
+          const velocityX = Math.cos(randomAngle) * this.speed;
+          const velocityY = Math.sin(randomAngle) * this.speed;
+
+          // Get the sprite with proper type
+          const sprite = this.sprite as Phaser.Physics.Arcade.Sprite;
+
+          // Check if sprite and body exist before setting velocity
+          if (sprite && sprite.body) {
+            sprite.setVelocity(velocityX, velocityY);
+          }
         }
 
         // Reset stuck time
@@ -422,15 +495,27 @@ export class Alien extends Enemy {
     this.lastPosition = { x: currentX, y: currentY };
   }
 
-  // Update the hover effect each frame
-  private updateHoverEffect(): void {
-    // Update hover offset
-    this.hoverOffset += this.hoverSpeed;
+  // Ensure the raygun is properly initialized and visible
+  private ensureRaygunInitialized(): void {
+    if (!this.raygun || !this.sprite) {
+      return;
+    }
 
-    // Apply hover effect to sprite
-    if (this.sprite) {
-      const hoverY = Math.sin(this.hoverOffset) * this.hoverAmplitude;
-      this.sprite.setY(this.sprite.y + hoverY - this.sprite.displayHeight / 2);
+    // If we're in attacking state and have a target, make sure the raygun is visible
+    if (this.enemyState === EnemyState.ATTACKING && this.target) {
+      // Calculate angle to target
+      const angle = Phaser.Math.Angle.Between(
+        this.sprite.x,
+        this.sprite.y,
+        this.target.x,
+        this.target.y
+      );
+
+      // Get the hand position
+      const handPosition = this.calculateHandPosition(angle);
+
+      // Make sure the raygun is visible
+      this.raygun.show(handPosition.x, handPosition.y, false);
     }
   }
 }

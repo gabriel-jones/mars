@@ -128,7 +128,7 @@ export class ResourceDisplay {
 
     // Debug: Check specifically for energy
     const energyResource = inventory.find((item) => item.type === "energy");
-    console.log("Energy resource:", energyResource);
+    // console.log("Energy resource:", energyResource);
 
     // Clear the container except for the background panel
     while (this.container.length > 1) {
@@ -182,9 +182,6 @@ export class ResourceDisplay {
       if (item.type === "energy") return;
 
       if (item.amount > 0) {
-        console.log(
-          `Adding resource to display: ${item.type} - ${item.amount}`
-        );
         const resourceContainer = this.resourceDisplays.get(item.type);
         if (resourceContainer) {
           // Position the container
