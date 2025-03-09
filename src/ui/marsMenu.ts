@@ -280,8 +280,8 @@ export class MarsMenu {
       }
     });
 
-    // Calculate coverage percentage (max at 10 Starlinks)
-    const maxStarlinks = 10;
+    // Calculate coverage percentage (10,000 satellites = 100% coverage)
+    const maxStarlinks = 10_000;
     const coveragePercent = Math.min(this.starlinkCount / maxStarlinks, 1);
 
     // Create graphics for the coverage indicator
