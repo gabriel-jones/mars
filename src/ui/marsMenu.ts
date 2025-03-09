@@ -259,59 +259,83 @@ export class MarsMenu {
 
     marsContainer.add(satelliteCountContainer);
 
-    // Add satellite visualization if there are any
-    if (this.starlinkCount > 0) {
-      this.renderSatellites(marsContainer);
-    }
+    // Add radial coverage indicator based on Starlink count
+    this.drawCoverageIndicator(marsContainer);
 
     this.contentContainer.add(marsContainer);
   }
 
-  private renderSatellites(container: Phaser.GameObjects.Container): void {
-    // Clear any existing satellite sprites
+  /**
+   * Draws a radial percentage indicator showing Starlink coverage
+   */
+  private drawCoverageIndicator(container: Phaser.GameObjects.Container): void {
+    // Remove any existing coverage indicators
     container.getAll().forEach((child) => {
       if (
         child.name &&
-        (child.name.startsWith("satellite-") ||
-          child.name.startsWith("satellite-glow-"))
+        (child.name === "coverage-indicator" ||
+          child.name === "coverage-percent-text")
       ) {
         container.remove(child, true);
       }
     });
 
-    // Add satellite sprites in orbit around Mars
-    const count = Math.min(this.starlinkCount, 8); // Limit visual satellites to 8
-    const radius = 55; // Increased orbit radius from 45 to 55 to match larger Mars
+    // Calculate coverage percentage (max at 10 Starlinks)
+    const maxStarlinks = 10;
+    const coveragePercent = Math.min(this.starlinkCount / maxStarlinks, 1);
 
-    for (let i = 0; i < count; i++) {
-      // Calculate position in orbit
-      const angle = (i / count) * Math.PI * 2;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
+    // Create graphics for the coverage indicator
+    const coverageGraphics = this.scene.add.graphics();
+    coverageGraphics.setName("coverage-indicator");
 
-      // Create a satellite sprite using the starlink-mini texture
-      const satellite = this.scene.add.image(x, y, "starlink-mini");
-      satellite.setName(`satellite-${i}`);
-      satellite.setDisplaySize(12, 12); // Increased size from 8x8 to 12x12
+    // Draw background circle (full circle in darker color)
+    coverageGraphics.fillStyle(0x444444, 0.3);
+    coverageGraphics.fillCircle(0, 0, 55);
 
-      // Add a small glow
-      const satGlow = this.scene.add.graphics();
-      satGlow.fillStyle(0x44ff44, 0.3);
-      satGlow.fillCircle(x, y, 6); // Increased from 4 to 6
-      satGlow.setName(`satellite-glow-${i}`);
+    // Draw foreground arc (percentage of coverage in brighter color)
+    if (coveragePercent > 0) {
+      coverageGraphics.fillStyle(0x44ff44, 0.3);
 
-      container.add(satGlow);
-      container.add(satellite);
+      // Draw the arc as a series of triangles to create a pie chart effect
+      const segments = 36; // Number of segments to make the arc smooth
+      const radius = 55;
+      const segmentsToFill = Math.ceil(segments * coveragePercent);
 
-      // Add orbit animation
-      this.scene.tweens.add({
-        targets: [satellite, satGlow],
-        angle: 360,
-        duration: 20000 + i * 2000, // Different speeds for each satellite
-        repeat: -1,
-        ease: "Linear",
-      });
+      for (let i = 0; i < segmentsToFill; i++) {
+        const startAngle = (i / segments) * Math.PI * 2 - Math.PI / 2;
+        const endAngle = ((i + 1) / segments) * Math.PI * 2 - Math.PI / 2;
+
+        coverageGraphics.beginPath();
+        coverageGraphics.moveTo(0, 0);
+        coverageGraphics.lineTo(
+          Math.cos(startAngle) * radius,
+          Math.sin(startAngle) * radius
+        );
+        coverageGraphics.lineTo(
+          Math.cos(endAngle) * radius,
+          Math.sin(endAngle) * radius
+        );
+        coverageGraphics.closePath();
+        coverageGraphics.fillPath();
+      }
     }
+
+    // Add percentage text in the center
+    const percentText = this.scene.add.text(
+      0,
+      0,
+      `${Math.round(coveragePercent * 100)}%`,
+      {
+        fontSize: "14px",
+        color: "#ffffff",
+        fontFamily: DEFAULT_FONT,
+      }
+    );
+    percentText.setOrigin(0.5, 0.5);
+    percentText.setName("coverage-percent-text");
+
+    container.add(coverageGraphics);
+    container.add(percentText);
   }
 
   private createMoonSections(width: number): void {
@@ -647,7 +671,7 @@ export class MarsMenu {
       "mars-container"
     ) as Phaser.GameObjects.Container;
     if (marsContainer) {
-      this.renderSatellites(marsContainer);
+      this.drawCoverageIndicator(marsContainer);
     }
   }
 
@@ -671,42 +695,7 @@ export class MarsMenu {
       this.hide();
     }
 
-    // Animate satellites orbiting Mars if the menu is visible
-    if (this.isVisible() && this.starlinkCount > 0) {
-      const marsContainer = this.contentContainer.getByName(
-        "mars-container"
-      ) as Phaser.GameObjects.Container;
-      if (marsContainer) {
-        // Update satellite positions
-        marsContainer.getAll().forEach((child) => {
-          if (
-            child.name &&
-            child.name.startsWith("satellite-") &&
-            !child.name.startsWith("satellite-glow-")
-          ) {
-            // Get the satellite index
-            const index = parseInt(child.name.split("-")[1]);
-            // Calculate new position in orbit
-            const speed = 0.0005 * (1 + index * 0.2); // Different speeds for each satellite
-            const angle =
-              time * speed + (index / this.starlinkCount) * Math.PI * 2;
-            const radius = 55; // Increased from 45 to 55 to match larger Mars
-            const x = Math.cos(angle) * radius;
-            const y = Math.sin(angle) * radius;
-
-            // Update satellite position - cast to proper type
-            (child as Phaser.GameObjects.Rectangle).setPosition(x, y);
-
-            // Update glow position
-            const glowName = `satellite-glow-${index}`;
-            const glow = marsContainer.getByName(glowName);
-            if (glow) {
-              (glow as Phaser.GameObjects.Graphics).setPosition(x, y);
-            }
-          }
-        });
-      }
-    }
+    // No need to animate satellites anymore as we've replaced them with a static coverage indicator
   }
 
   public destroy(): void {
