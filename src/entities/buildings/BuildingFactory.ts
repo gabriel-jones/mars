@@ -212,6 +212,8 @@ export class BuildingFactory {
       const tileGridY = Math.floor(y / TILE_SIZE);
 
       // Calculate the top-left corner of the building in world coordinates
+      // For range select buildings, we want to align with the top-left corner
+      // instead of centering the building on the cursor position
       const alignedTopLeftX = tileGridX * TILE_SIZE;
       const alignedTopLeftY = tileGridY * TILE_SIZE;
 
@@ -253,8 +255,8 @@ export class BuildingFactory {
       const graphics = scene.add.graphics();
       graphics.lineStyle(2, 0x0088ff, 0.7);
       graphics.strokeRect(
-        containerX,
-        containerY,
+        0, // Start at 0,0 relative to the container
+        0,
         tileWidth * TILE_SIZE,
         tileHeight * TILE_SIZE
       );
@@ -266,27 +268,24 @@ export class BuildingFactory {
 
       // Draw vertical grid lines
       for (let col = 0; col <= tileWidth; col++) {
-        const x = containerX + col * TILE_SIZE;
-        gridGraphics.lineBetween(
-          x,
-          containerY,
-          x,
-          containerY + tileHeight * TILE_SIZE
-        );
+        const x = col * TILE_SIZE;
+        gridGraphics.lineBetween(x, 0, x, tileHeight * TILE_SIZE);
       }
 
       // Draw horizontal grid lines
       for (let row = 0; row <= tileHeight; row++) {
-        const y = containerY + row * TILE_SIZE;
-        gridGraphics.lineBetween(
-          containerX,
-          y,
-          containerX + tileWidth * TILE_SIZE,
-          y
-        );
+        const y = row * TILE_SIZE;
+        gridGraphics.lineBetween(0, y, tileWidth * TILE_SIZE, y);
       }
 
       blueprint.add(gridGraphics);
+
+      // Move the building name label to the top of the building
+      // instead of being centered
+      const label = blueprint.getLabel();
+      if (label) {
+        label.setPosition((tileWidth * TILE_SIZE) / 2, -10);
+      }
     }
 
     return blueprint;

@@ -478,6 +478,7 @@ export class BuildingPlacer {
           this.rangePreview.setPosition(worldX, worldY);
           this.rangePreview.width = width * TILE_SIZE;
           this.rangePreview.height = height * TILE_SIZE;
+          this.rangePreview.setOrigin(0, 0); // Ensure origin is set to top-left
         }
 
         // Check if the entire range is valid
@@ -809,14 +810,24 @@ export class BuildingPlacer {
     const tileTopLeft = this.map.tileToWorldXY(tileX, tileY);
     if (!tileTopLeft) return;
 
-    // For multi-tile buildings, we need to position the sprite so that its center
-    // is at the center of the area covered by the building, but the mouse is at the top-left tile
-    const offsetX = ((tileWidth - 1) * TILE_SIZE) / 2;
-    const offsetY = ((tileHeight - 1) * TILE_SIZE) / 2;
+    let exactX, exactY;
 
-    // Calculate the exact position where the preview is shown
-    const exactX = tileTopLeft.x + TILE_SIZE / 2 + offsetX;
-    const exactY = tileTopLeft.y + TILE_SIZE / 2 + offsetY;
+    // For range selection buildings, position at the top-left corner
+    if (buildingDef.placementType === PlacementType.RangeSelect) {
+      // For range selection buildings, we want to position the building
+      // so that its center is at the center of the top-left tile
+      exactX = tileTopLeft.x + TILE_SIZE / 2;
+      exactY = tileTopLeft.y + TILE_SIZE / 2;
+    } else {
+      // For multi-tile buildings, we need to position the sprite so that its center
+      // is at the center of the area covered by the building, but the mouse is at the top-left tile
+      const offsetX = ((tileWidth - 1) * TILE_SIZE) / 2;
+      const offsetY = ((tileHeight - 1) * TILE_SIZE) / 2;
+
+      // Calculate the exact position where the preview is shown
+      exactX = tileTopLeft.x + TILE_SIZE / 2 + offsetX;
+      exactY = tileTopLeft.y + TILE_SIZE / 2 + offsetY;
+    }
 
     // Call the callback to create a blueprint at the exact position of the preview
     // We pass 'blueprint-' + this.selectedItem to indicate this is a blueprint

@@ -54,6 +54,18 @@ export class Blueprint extends Building implements HasHealth {
     // Store the building type
     this.buildingType = buildingType;
 
+    // Get building definition to check if this is a range selection building
+    const buildingDef = BUILDING_DEFINITIONS.find(
+      (def) => def.buildingType === buildingType
+    );
+    const isRangeSelection =
+      buildingDef?.placementType === PlacementType.RangeSelect;
+
+    // For range selection buildings, position the label at the top of the building
+    if (isRangeSelection) {
+      this.label.setPosition(0, -10);
+    }
+
     // Create resource text display
     this.resourceText = scene.add.text(
       0,
@@ -105,10 +117,6 @@ export class Blueprint extends Building implements HasHealth {
     }
 
     // Get building definition to determine resource requirements
-    const buildingDef = BUILDING_DEFINITIONS.find(
-      (def) => def.buildingType === buildingType
-    );
-
     if (buildingDef) {
       // For range buildings, multiply the resource cost by the area
       const isRangeBuilding =
@@ -368,6 +376,13 @@ export class Blueprint extends Building implements HasHealth {
    */
   public getSprite(): Phaser.GameObjects.Sprite {
     return this.sprite;
+  }
+
+  /**
+   * Get the label for this blueprint
+   */
+  public getLabel(): Phaser.GameObjects.Text {
+    return this.label;
   }
 
   /**
