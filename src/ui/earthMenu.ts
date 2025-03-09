@@ -134,8 +134,8 @@ export class EarthMenu {
       // Create available items
       this.createAvailableItems();
 
-      // Create queue container - position it higher up
-      this.queueContainer = this.scene.add.container(0, -30); // Moved up from -20 to fit in the smaller container
+      // Create queue container - position it at the bottom of the panel
+      this.queueContainer = this.scene.add.container(0, height / 2 - 50); // Position near the bottom of the panel
       this.container.add(this.queueContainer);
       this.updateQueueDisplay();
 
@@ -295,30 +295,6 @@ export class EarthMenu {
       const totalRows = Math.ceil(this.availableItems.length / itemsPerRow);
       const gridHeight = totalRows * (itemHeight + itemPadding);
 
-      // Create queue header (positioned right after the grid)
-      const queueHeaderY = startY + gridHeight + 32; // Adjusted to fit better
-      const queueHeaderBg = this.scene.add.rectangle(
-        0,
-        queueHeaderY,
-        width,
-        30,
-        0x555555
-      );
-      this.contentContainer.add(queueHeaderBg);
-
-      const queueHeaderText = this.scene.add.text(
-        0,
-        queueHeaderY,
-        "Transfer Queue",
-        {
-          fontSize: "16px",
-          color: "#ffffff",
-          fontFamily: DEFAULT_FONT,
-        }
-      );
-      queueHeaderText.setOrigin(0.5);
-      this.contentContainer.add(queueHeaderText);
-
       console.log("Available items created successfully");
     } catch (error) {
       console.error("Error creating available items:", error);
@@ -376,73 +352,6 @@ export class EarthMenu {
       // Return a minimal container to avoid errors
       return this.scene.add.container(x, y);
     }
-  }
-
-  private createQueueItemContainer(
-    item: TransferItem,
-    index: number
-  ): Phaser.GameObjects.Container {
-    // Create a container for this queue item
-    const container = this.scene.add.container(0, index * 40);
-
-    // Create background
-    const bg = this.scene.add.rectangle(0, 0, 560, 35, 0x444444);
-    bg.setStrokeStyle(1, 0x666666);
-    container.add(bg);
-
-    // Get item definition
-    const itemDef = this.availableItems.find(
-      (def) =>
-        def.resourceType === item.resourceType && def.isRobot === item.isRobot
-    );
-
-    if (!itemDef) {
-      console.error(`Item definition not found for ${item.resourceType}`);
-      return container;
-    }
-
-    // Add emoji
-    const emoji = this.scene.add.text(-260, 0, itemDef.emoji, {
-      fontSize: "20px",
-      fontFamily: DEFAULT_FONT,
-    });
-    emoji.setOrigin(0, 0.5);
-    container.add(emoji);
-
-    // Add name
-    const name = this.scene.add.text(-220, 0, itemDef.name, {
-      fontSize: "16px",
-      color: "#ffffff",
-      fontFamily: DEFAULT_FONT,
-    });
-    name.setOrigin(0, 0.5);
-    container.add(name);
-
-    // Add quantity
-    const quantity = this.scene.add.text(50, 0, `x${item.amount}`, {
-      fontSize: "16px",
-      color: "#ffffff",
-      fontFamily: DEFAULT_FONT,
-    });
-    quantity.setOrigin(0, 0.5);
-    container.add(quantity);
-
-    // Add cost
-    const cost = this.scene.add.text(150, 0, `$${item.cost * item.amount}`, {
-      fontSize: "16px",
-      color: "#ffffff",
-      fontFamily: DEFAULT_FONT,
-    });
-    cost.setOrigin(0, 0.5);
-    container.add(cost);
-
-    // Add remove button
-    const removeButton = this.createButton(250, 0, "Remove", () => {
-      this.removeFromQueue(index);
-    });
-    container.add(removeButton);
-
-    return container;
   }
 
   public addToQueue(
@@ -593,9 +502,15 @@ export class EarthMenu {
       // Clear existing queue display
       this.queueContainer.removeAll(true);
 
-      const width = 560;
-      const itemHeight = 40;
-      const startY = 10; // Moved up from 30 to fit in the smaller container
+      // Add a header for the transfer queue
+      const queueHeaderText = this.scene.add.text(0, -30, "TRANSFER QUEUE", {
+        fontSize: "16px",
+        color: "#ffffff",
+        fontStyle: "bold",
+        fontFamily: DEFAULT_FONT,
+      });
+      queueHeaderText.setOrigin(0.5);
+      this.queueContainer.add(queueHeaderText);
 
       // Group items by type
       const groupedItems = new Map<
@@ -603,11 +518,9 @@ export class EarthMenu {
         {
           emoji: string;
           amount: number;
-          cost: number;
           resourceType: ResourceType;
           isRobot?: boolean;
           isStarlink?: boolean;
-          name: string;
         }
       >();
 
@@ -653,95 +566,56 @@ export class EarthMenu {
           groupedItems.set(key, {
             emoji: itemDef.emoji,
             amount: item.amount,
-            cost: item.cost,
             resourceType: item.resourceType,
             isRobot: item.isRobot,
             isStarlink: item.isStarlink,
-            name: itemDef.name,
           });
         }
       });
 
       console.log("Grouped items:", Array.from(groupedItems.entries()));
 
+      // Display items in a horizontal row underneath the queue header
+      const itemsPerRow = 8;
+      const itemSize = 60;
+      const itemPadding = 10;
+      const startY = 0; // Position relative to queueContainer, just below the header
+
       // Create a container for the items
       const itemsContainer = this.scene.add.container(0, startY);
       this.queueContainer.add(itemsContainer);
 
-      // Display grouped items in a grid
-      const startItemY = 44;
-      const itemsPerRow = 4;
-      const itemSize = 120;
-      const itemPadding = 10;
-      const gridWidth =
-        itemsPerRow * itemSize + (itemsPerRow - 1) * itemPadding;
-
       let index = 0;
-
       groupedItems.forEach((item) => {
         const row = Math.floor(index / itemsPerRow);
         const col = index % itemsPerRow;
 
-        // Center the grid horizontally
+        // Calculate position in the grid
         const x =
-          -gridWidth / 2 + col * (itemSize + itemPadding) + itemSize / 2;
-        const y = startItemY + (row * (itemSize + itemPadding) + itemSize / 2);
+          -((itemsPerRow * (itemSize + itemPadding)) / 2) +
+          col * (itemSize + itemPadding) +
+          itemSize / 2;
+        const y = row * (itemSize + itemPadding);
 
         // Create item container
         const itemContainer = this.scene.add.container(x, y);
 
-        // Item background
-        const itemBg = this.scene.add.rectangle(
-          0,
-          0,
-          itemSize,
-          itemSize,
-          0x444444
-        );
-        itemBg.setStrokeStyle(1, 0x666666);
-        itemContainer.add(itemBg);
-
         // Item emoji
-        const emojiText = this.scene.add.text(0, -30, item.emoji, {
-          fontSize: "32px",
-          fontFamily: "Arial",
+        const emojiText = this.scene.add.text(0, 0, item.emoji, {
+          fontSize: "24px",
+          fontFamily: DEFAULT_FONT,
         });
         emojiText.setOrigin(0.5);
         itemContainer.add(emojiText);
 
-        // Item name
-        const nameText = this.scene.add.text(0, 0, item.name, {
+        // Item count
+        const countText = this.scene.add.text(0, 20, `x${item.amount}`, {
           fontSize: "14px",
           color: "#ffffff",
-          fontFamily: "Arial",
-          fontStyle: "bold",
+          fontFamily: DEFAULT_FONT,
         });
-        nameText.setOrigin(0.5);
-        itemContainer.add(nameText);
-
-        // Item amount
-        const amountText = this.scene.add.text(
-          0,
-          20,
-          `Quantity: ${item.amount}`,
-          {
-            fontSize: "12px",
-            color: "#ffffff",
-            fontFamily: "Arial",
-          }
-        );
-        amountText.setOrigin(0.5);
-        itemContainer.add(amountText);
-
-        // Remove button
-        const removeButton = this.createButton(0, 45, "Remove", () => {
-          this.removeItemsOfType(
-            item.resourceType,
-            item.isRobot,
-            item.isStarlink
-          );
-        });
-        itemContainer.add(removeButton);
+        countText.setOrigin(0.5);
+        itemContainer.add(countText);
 
         itemsContainer.add(itemContainer);
         index++;
@@ -758,38 +632,15 @@ export class EarthMenu {
     isRobot?: boolean,
     isStarlink?: boolean
   ): void {
-    // Find all items of this type
-    const indices = [];
-    for (let i = this.transferQueue.length - 1; i >= 0; i--) {
-      const queueItem = this.transferQueue[i];
-      if (
-        queueItem.resourceType === resourceType &&
-        queueItem.isRobot === isRobot &&
-        queueItem.isStarlink === isStarlink
-      ) {
-        indices.push(i);
-      }
-    }
-
-    // Remove items and refund credits
-    indices.forEach((idx) => this.removeFromQueue(idx));
-
-    // No need to update display or notify here as removeFromQueue already does that
+    // This method is now a no-op as we've removed the remove functionality
+    console.log("removeItemsOfType is now disabled");
+    return;
   }
 
   private removeFromQueue(index: number): void {
-    if (index < 0 || index >= this.transferQueue.length) return;
-
-    // Refund credits
-    const item = this.transferQueue[index];
-    ResourceManager.addMoney(item.cost * item.amount);
-
-    // Remove from queue
-    this.transferQueue.splice(index, 1);
-
-    // Update the display and notify starships
-    this.updateQueueDisplay();
-    this.notifyStarshipsOfQueueUpdate();
+    // This method is now a no-op as we've removed the remove functionality
+    console.log("removeFromQueue is now disabled");
+    return;
   }
 
   private formatMoney(amount: number): string {

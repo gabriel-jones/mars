@@ -9,5 +9,6 @@ export { LandingPad } from "./LandingPad";
 export { GrowZone, GrowthStage } from "./GrowZone";
 export { BuildingFactory } from "./BuildingFactory";
 export { RangeSelectionBuilding } from "./RangeSelectionBuilding";
+export { Turret } from "./Turret";
 
 // Add more building exports as they are created

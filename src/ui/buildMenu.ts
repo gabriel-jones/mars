@@ -437,7 +437,7 @@ export class BuildMenu {
     const padding = 10;
     const lineHeight = 20;
     const tooltipWidth = 200;
-    const tooltipHeight = 30 + missingResources.length * lineHeight;
+    const tooltipHeight = 50 + missingResources.length * lineHeight;
 
     const tooltipBg = this.scene.add.rectangle(
       0,

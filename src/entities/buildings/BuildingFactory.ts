@@ -15,6 +15,7 @@ import { Blueprint } from "./Blueprint";
 import { TILE_SIZE } from "../../constants";
 import { SolarPanel } from "./SolarPanel";
 import { InventoryZone } from "./InventoryZone";
+import { Turret } from "./Turret";
 
 export class BuildingFactory {
   /**
@@ -123,6 +124,9 @@ export class BuildingFactory {
           panelHeight,
           hasInventory
         );
+
+      case "turret":
+        return new Turret(scene, x, y, tileWidth, tileHeight);
 
       case "inventory-zone":
         const inventoryWidth = options.width || tileWidth;

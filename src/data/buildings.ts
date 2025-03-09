@@ -7,7 +7,8 @@ export type BuildingType =
   | "regolith-processor"
   | "landing-pad"
   | "grow-zone"
-  | "inventory-zone";
+  | "inventory-zone"
+  | "turret";
 
 import { ResourceType } from "./resources";
 import { TerrainFeatureType } from "../entities/TerrainFeature";
@@ -155,6 +156,19 @@ export const BUILDING_DEFINITIONS: BuildMenuItem[] = [
     locationType: LocationType.Both, // Can be placed anywhere
     buildEffort: 5000, // 5 seconds to build
     hasInventory: true, // Inventory zones are specifically for storing resources
+  },
+  {
+    buildingType: "turret",
+    name: "Defense Turret",
+    cost: [
+      { type: "iron", amount: 32 },
+      { type: "sulphur", amount: 16 },
+      { type: "magnesium", amount: 8 },
+    ],
+    placementType: PlacementType.SingleTile,
+    locationType: LocationType.Outside,
+    buildEffort: 5000, // 5 seconds to build
+    hasInventory: false,
   },
 ];
 

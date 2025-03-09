@@ -123,12 +123,8 @@ export class ResourceDisplay {
     // Get current inventory
     const inventory = ResourceManager.getInventory();
 
-    // Debug: Log all resources in inventory
-    console.log("Resource inventory:", inventory);
-
     // Debug: Check specifically for energy
     const energyResource = inventory.find((item) => item.type === "energy");
-    // console.log("Energy resource:", energyResource);
 
     // Clear the container except for the background panel
     while (this.container.length > 1) {

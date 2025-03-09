@@ -150,6 +150,7 @@ export class MainScene extends Phaser.Scene {
     this.load.image("landing-pad", "assets/landing-pad.png");
     this.load.image("grow-zone", "assets/farm-dry.png");
     this.load.image("inventory-zone", "assets/inventory-zone.png");
+    this.load.image("turret", "assets/turret.png");
 
     // Grow Zone Textures
     this.load.image("farm-dry", "assets/farm-dry.png");
